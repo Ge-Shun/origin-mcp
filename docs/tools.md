@@ -123,8 +123,9 @@ Text shown on graphs is normalized for Origin rich text automatically. Axis
 titles, graph titles, graph labels, reference-line labels, and column label rows
 convert common notation such as `CO_2`, `x_{max}`, `m^2`, `E^{1/2}`, `H₂O`,
 `m⁻²`, `<sub>2</sub>`, and `<sup>-1</sup>` to Origin escape sequences for
-subscript and superscript rendering. Plain identifier underscores such as
-`signal_a` are left unchanged unless braces are used.
+subscript and superscript rendering. Single-letter suffixes such as `signal_a`
+also render as subscripts, while multi-letter identifiers such as `sample_id`
+are left unchanged unless braces are used.
 
 ## Analysis Tools
 

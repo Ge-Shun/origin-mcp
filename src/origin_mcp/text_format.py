@@ -67,6 +67,7 @@ BRACED_SUB_PATTERN = re.compile(r"_\{([^{}]+)\}")
 BRACED_SUP_PATTERN = re.compile(r"\^\{([^{}]+)\}")
 NUMERIC_SUB_PATTERN = re.compile(r"_(?!\{)([+-]?\d+(?:\.\d+)?)")
 NUMERIC_SUP_PATTERN = re.compile(r"\^(?!\{)([+-]?\d+(?:\.\d+)?)")
+SINGLE_LETTER_SUB_PATTERN = re.compile(r"_(?!\{)([A-Za-z])(?![A-Za-z0-9_])")
 
 
 def origin_rich_text(text: str) -> str:
@@ -80,6 +81,7 @@ def origin_rich_text(text: str) -> str:
     formatted = HTML_SUP_PATTERN.sub(lambda match: _origin_super(match.group(1)), formatted)
     formatted = BRACED_SUB_PATTERN.sub(lambda match: _origin_sub(match.group(1)), formatted)
     formatted = BRACED_SUP_PATTERN.sub(lambda match: _origin_super(match.group(1)), formatted)
+    formatted = SINGLE_LETTER_SUB_PATTERN.sub(lambda match: _origin_sub(match.group(1)), formatted)
     formatted = NUMERIC_SUB_PATTERN.sub(lambda match: _origin_sub(match.group(1)), formatted)
     formatted = NUMERIC_SUP_PATTERN.sub(lambda match: _origin_super(match.group(1)), formatted)
     formatted = SUBSCRIPT_PATTERN.sub(
