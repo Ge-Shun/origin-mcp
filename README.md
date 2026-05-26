@@ -8,11 +8,13 @@ The first version focuses on a practical plotting loop:
 - connect to a local Origin/OriginPro instance
 - create or save projects
 - import CSV, TSV, TXT, DAT, XLS, and XLSX data into worksheets
+- import files through Origin's official Data Connector path
 - append data into existing worksheets
 - create line, scatter, line+symbol, error bar, column, contour, and template plots
 - set graph title, axis labels, legends, and templates
 - set plot color, line width, symbol style, axis scale, and axis limits
 - run common analysis X-Functions such as fitting, smoothing, integration, and peak finding
+- run linear fitting through `originpro.LinearFit` when X/Y columns are provided
 - export graphs to image/PDF files
 - export all graphs in a project
 - run LabTalk commands directly when a higher-level tool is not enough
@@ -80,6 +82,7 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_import_csv`: import a CSV file into a worksheet
 - `origin_import_table`: import CSV, TSV, TXT, DAT, XLS, or XLSX into a worksheet
 - `origin_import_excel`: import an Excel sheet into a worksheet
+- `origin_import_file`: import through Origin's Data Connector / `WSheet.from_file`
 - `origin_append_table`: append table data to an existing worksheet
 - `origin_plot_line`: import table data and create a line plot
 - `origin_plot_scatter`: import table data and create a scatter plot
@@ -92,6 +95,9 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_format_graph`: set graph title, axis labels, legend visibility, and rescale
 - `origin_set_axis`: set axis scale, limits, tick step, and title
 - `origin_set_plot_style`: set color, line width, line style, symbol, and transparency
+- `origin_set_column_labels`: set worksheet Long Name, Units, Comments, or custom labels
+- `origin_set_column_designations`: set worksheet plotting designations such as `XYY`
+- `origin_format_legend`: set legend text, font size, frame, and position
 - `origin_export_graph`: export the active or named graph
 - `origin_export_all_graphs`: export every graph in the project
 - `origin_list_project`: list workbooks, worksheets, graphs, and images
@@ -141,6 +147,21 @@ The named analysis tools are wrappers around Origin LabTalk/X-Function commands.
 They return the generated script and whether Origin accepted execution. For
 advanced analysis settings, pass an `options` object whose keys map to X-Function
 option names.
+
+`origin_linear_fit` is more structured when both `x_col` and `y_col` are provided:
+it uses Origin's `originpro.LinearFit` API and returns either a result tree or a
+report sheet reference. Use `options={"report": true, "band": 1}` to create a
+report with confidence bands.
+
+## Official Origin APIs Used
+
+The implementation follows OriginLab's documented `originpro` patterns:
+
+- `WSheet.from_file` / Data Connector for native Origin imports
+- `WSheet.from_df`, `set_labels`, and `cols_axis` for worksheet data and metadata
+- `new_graph`, `GLayer.add_plot`, `axis(...).title`, `label("Legend")`, and
+  `GPage.save_fig` for graph creation, formatting, and export
+- `originpro.LinearFit` for structured linear regression results
 
 ## Safety Notes
 

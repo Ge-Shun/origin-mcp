@@ -83,3 +83,9 @@ def test_analysis_script_linear_fit() -> None:
     assert "fitlr [Book1]Sheet1!(time,force)" in script
     assert 'oy:="FitOut"' in script
     assert "intercept:=0" in script
+
+
+def test_origin_name_matches_truncated_short_name() -> None:
+    assert OriginClient._origin_name_matches("OfficialImport", {"OfficialImpor"})
+    assert OriginClient._origin_name_matches("Book1", {"Book1"})
+    assert not OriginClient._origin_name_matches("OtherBook", {"Book1"})

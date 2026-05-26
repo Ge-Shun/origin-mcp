@@ -173,12 +173,31 @@ class OriginClient:
                 "The worksheet object does not support from_df(); update the originpro package."
             )
 
-        return WorksheetRef(
-            book_name=self._object_name(getattr(wks, "book", None), default=book_name or ""),
-            sheet_name=self._object_name(wks, default=sheet_name or ""),
-            columns=[str(col) for col in df.columns],
-            rows=len(df),
-        )
+        return self._worksheet_ref(wks, columns=[str(col) for col in df.columns], rows=len(df))
+
+    def import_file_connector(
+        self,
+        path: Path,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        keep_dc: bool = True,
+        dctype: str = "",
+        sel: str = "",
+        sparks: bool = False,
+    ) -> WorksheetRef:
+        path = path.expanduser().resolve()
+        self._validate_file(path)
+        wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+        from_file = getattr(wks, "from_file", None)
+        if not callable(from_file):
+            raise OriginOperationError("The worksheet object does not support from_file().")
+        from_file(str(path), keep_dc, dctype, sel, sparks)
+        if book_name:
+            try:
+                wks.get_book().lname = book_name
+            except Exception:
+                pass
+        return self._worksheet_ref(wks)
 
     def append_table(
         self,
@@ -211,12 +230,7 @@ class OriginClient:
 
         wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
         wks.from_df(df, c1=start_col)
-        return WorksheetRef(
-            book_name=self._object_name(wks.get_book(), default=book_name or ""),
-            sheet_name=self._object_name(wks, default=sheet_name or ""),
-            columns=[str(col) for col in df.columns],
-            rows=len(df),
-        )
+        return self._worksheet_ref(wks, columns=[str(col) for col in df.columns], rows=len(df))
 
     def plot_csv(
         self,
@@ -334,12 +348,7 @@ class OriginClient:
         if export_path is not None:
             exported = self.export_graph(export_path, graph=graph)["path"]
 
-        worksheet = WorksheetRef(
-            book_name=self._object_name(getattr(wks, "book", None), default=book_name or ""),
-            sheet_name=self._object_name(wks, default=sheet_name or ""),
-            columns=columns,
-            rows=len(df),
-        )
+        worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
         return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
 
     def list_project(self) -> dict[str, Any]:
@@ -450,6 +459,85 @@ class OriginClient:
             "graph_name": self._object_name(graph, default=graph_name or ""),
             "styled_plots": len(selected),
         }
+
+    def set_column_labels(
+        self,
+        labels: list[str],
+        label_type: str = "L",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        wks.set_labels(labels, label_type, offset=offset)
+        return self._worksheet_ref(wks).as_dict()
+
+    def set_column_designations(
+        self,
+        spec: str,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        c1: int = 0,
+        c2: int = -1,
+        repeat: bool = True,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        wks.cols_axis(spec, c1=c1, c2=c2, repeat=repeat)
+        return self._worksheet_ref(wks).as_dict()
+
+    def format_legend(
+        self,
+        graph_name: str | None = None,
+        text: str | None = None,
+        font_size: int | None = None,
+        show_frame: bool | None = None,
+        left: int | None = None,
+        top: int | None = None,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        legend = layer.label("Legend")
+        if legend is None:
+            self._set_legend(layer, show=True)
+            legend = layer.label("Legend")
+        if legend is None:
+            raise OriginOperationError("Legend object was not found or created.")
+        if text is not None:
+            legend.text = text
+        if font_size is not None:
+            legend.set_int("fsize", font_size)
+        if show_frame is not None:
+            legend.set_int("showframe", int(show_frame))
+        if left is not None:
+            legend.set_int("left", left)
+        if top is not None:
+            legend.set_int("top", top)
+        return {"graph_name": self._object_name(graph, default=graph_name or ""), "legend": True}
+
+    def linear_fit_result(
+        self,
+        worksheet: str | None,
+        x_col: str | int,
+        y_col: str | int,
+        y_error_col: str | int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        op = self.op
+        linear_fit_cls = getattr(op, "LinearFit", None)
+        if not callable(linear_fit_cls):
+            raise OriginOperationError("originpro.LinearFit is not available.")
+        wks = self._find_sheet_from_ref(worksheet)
+        fit = linear_fit_cls()
+        fit.set_data(wks, x_col, y_col, err=y_error_col or "")
+        options = options or {}
+        if "fix_intercept" in options:
+            fit.fix_intercept(options["fix_intercept"])
+        if "fix_slope" in options:
+            fit.fix_slope(options["fix_slope"])
+        if options.get("report"):
+            report, curves = fit.report(int(options.get("band", 0)))
+            return {"mode": "report", "report_sheet": report, "curve_sheet": curves}
+        return {"mode": "result", "result": fit.result()}
 
     def export_all_graphs(
         self,
@@ -620,6 +708,12 @@ class OriginClient:
             wks = new_sheet("w", book_name or "")
         except TypeError:
             wks = new_sheet()
+
+        if book_name:
+            try:
+                wks.get_book().lname = book_name
+            except Exception:
+                pass
 
         if sheet_name:
             try:
@@ -875,9 +969,85 @@ class OriginClient:
         else:
             ref = book_name or sheet_name or ""
         wks = find_sheet("w", ref)
+        if wks is not None:
+            return wks
+        if book_name:
+            wks = self._find_sheet_by_book_label(book_name, sheet_name)
+            if wks is not None:
+                return wks
+        raise OriginOperationError(f"Worksheet not found: {ref or '<active worksheet>'}")
+
+    def _find_sheet_from_ref(self, worksheet: str | None = None) -> Any:
+        op = self.op
+        find_sheet = getattr(op, "find_sheet", None)
+        if not callable(find_sheet):
+            raise OriginOperationError("originpro.find_sheet is not available.")
+        wks = find_sheet("w", worksheet or "")
+        if wks is None and worksheet:
+            clean = worksheet.strip()
+            if clean.startswith("[") and "]" in clean:
+                book_name, sheet_name = clean[1:].split("]", 1)
+                sheet_name = sheet_name.strip("! ") or None
+                wks = self._find_sheet_by_book_label(book_name, sheet_name)
         if wks is None:
-            raise OriginOperationError(f"Worksheet not found: {ref or '<active worksheet>'}")
+            raise OriginOperationError(f"Worksheet not found: {worksheet or '<active worksheet>'}")
         return wks
+
+    def _find_sheet_by_book_label(self, book_name: str, sheet_name: str | None) -> Any | None:
+        pages = getattr(self.op, "pages", None)
+        if not callable(pages):
+            return None
+        for page in pages("w"):
+            labels = {
+                self._object_name(page, default=""),
+                str(getattr(page, "lname", "")),
+            }
+            if not self._origin_name_matches(book_name, labels):
+                continue
+            if sheet_name:
+                for sheet in page:
+                    sheet_labels = {
+                        self._object_name(sheet, default=""),
+                        str(getattr(sheet, "lname", "")),
+                    }
+                    if sheet_name in sheet_labels:
+                        return sheet
+                return None
+            return page[0]
+        return None
+
+    @staticmethod
+    def _origin_name_matches(requested: str, labels: set[str]) -> bool:
+        requested_lower = requested.lower()
+        for label in labels:
+            label_lower = label.lower()
+            if not label_lower:
+                continue
+            if requested_lower == label_lower:
+                return True
+            if requested_lower.startswith(label_lower) or label_lower.startswith(requested_lower):
+                return True
+        return False
+
+    def _worksheet_ref(
+        self,
+        wks: Any,
+        columns: list[str] | None = None,
+        rows: int | None = None,
+    ) -> WorksheetRef:
+        if columns is None:
+            get_labels = getattr(wks, "get_labels", None)
+            if callable(get_labels):
+                labels = [label for label in get_labels("L") if label]
+                columns = labels or [f"Col{i + 1}" for i in range(getattr(wks, "cols", 0))]
+            else:
+                columns = []
+        return WorksheetRef(
+            book_name=self._object_name(wks.get_book(), default=""),
+            sheet_name=self._object_name(wks, default=""),
+            columns=columns,
+            rows=rows if rows is not None else int(getattr(wks, "rows", 0)),
+        )
 
     def _find_object(self, name: str, object_type: str) -> Any:
         object_type = object_type.lower()

@@ -156,6 +156,33 @@ def origin_import_excel(
 
 
 @mcp.tool()
+def origin_import_file(
+    path: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    keep_dc: bool = True,
+    dctype: str = "",
+    sel: str = "",
+    sparks: bool = False,
+) -> dict[str, Any]:
+    """Import a file using Origin's official Data Connector/from_file path."""
+
+    def run() -> dict[str, Any]:
+        worksheet = client.import_file_connector(
+            Path(path),
+            book_name=book_name,
+            sheet_name=sheet_name,
+            keep_dc=keep_dc,
+            dctype=dctype,
+            sel=sel,
+            sparks=sparks,
+        )
+        return _ok("Imported file with Origin Data Connector.", worksheet=worksheet.as_dict())
+
+    return _wrap(run)
+
+
+@mcp.tool()
 def origin_append_table(
     path: str,
     book_name: str | None = None,
@@ -693,6 +720,82 @@ def origin_set_plot_style(
 
 
 @mcp.tool()
+def origin_set_column_labels(
+    labels: list[str],
+    label_type: str = "L",
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Set Origin worksheet column label rows such as Long Name, Units, or Comments."""
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin worksheet column labels.",
+            worksheet=client.set_column_labels(
+                labels=labels,
+                label_type=label_type,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                offset=offset,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_set_column_designations(
+    spec: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    c1: int = 0,
+    c2: int = -1,
+    repeat: bool = True,
+) -> dict[str, Any]:
+    """Set worksheet column plot designations, for example XYY or XY."""
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin worksheet column designations.",
+            worksheet=client.set_column_designations(
+                spec=spec,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                c1=c1,
+                c2=c2,
+                repeat=repeat,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_format_legend(
+    graph_name: str | None = None,
+    text: str | None = None,
+    font_size: int | None = None,
+    show_frame: bool | None = None,
+    left: int | None = None,
+    top: int | None = None,
+) -> dict[str, Any]:
+    """Format the graph legend text, font size, frame, and position."""
+
+    return _wrap(
+        lambda: _ok(
+            "Formatted Origin graph legend.",
+            **client.format_legend(
+                graph_name=graph_name,
+                text=text,
+                font_size=font_size,
+                show_frame=show_frame,
+                left=left,
+                top=top,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_list_project() -> dict[str, Any]:
     """List workbooks, worksheets, matrix books, graphs, and images in the project."""
 
@@ -762,6 +865,19 @@ def origin_linear_fit(
 ) -> dict[str, Any]:
     """Run Origin linear fitting."""
 
+    if x_col is not None and y_col is not None:
+        return _wrap(
+            lambda: _ok(
+                "Ran Origin linear fitting.",
+                **client.linear_fit_result(
+                    worksheet=worksheet,
+                    x_col=x_col,
+                    y_col=y_col,
+                    y_error_col=(options or {}).get("y_error_col"),
+                    options=options,
+                ),
+            )
+        )
     return origin_run_analysis("linear_fit", worksheet, x_col, y_col, output_sheet, options)
 
 
