@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "origin-mcp"
 version = "0.1.0"
-description = "MCP server for controlling Origin/OriginPro on Windows."
+description = "Local MCP server that lets AI assistants automate Origin/OriginPro for data import, worksheet editing, plotting, analysis, and export on Windows."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
