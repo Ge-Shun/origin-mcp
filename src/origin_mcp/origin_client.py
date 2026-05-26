@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,24 @@ class OriginClient:
         self._call_first_available(op, ["new", "new_project"])
         return {"created": True}
 
+    def open_project(
+        self,
+        path: Path,
+        readonly: bool = False,
+        asksave: bool = False,
+    ) -> dict[str, Any]:
+        path = path.expanduser().resolve()
+        self._validate_file(path)
+        if path.suffix.lower() not in {".opju", ".opj"}:
+            raise OriginOperationError(f"Not an Origin project file: {path}")
+
+        op = self.op
+        open_project = getattr(op, "open", None)
+        if not callable(open_project):
+            raise OriginOperationError("originpro.open is not available.")
+        ok = open_project(str(path), readonly=readonly, asksave=asksave)
+        return {"path": str(path), "opened": bool(ok)}
+
     def save_project(self, path: Path) -> dict[str, Any]:
         path = path.expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -124,10 +143,25 @@ class OriginClient:
         book_name: str | None = None,
         sheet_name: str | None = None,
         excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
     ) -> WorksheetRef:
         path = path.expanduser().resolve()
         self._validate_file(path)
-        df = self._read_table(path, excel_sheet=excel_sheet)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
         if df.empty:
             raise OriginOperationError(f"Data file contains no rows: {path}")
 
@@ -146,6 +180,44 @@ class OriginClient:
             rows=len(df),
         )
 
+    def append_table(
+        self,
+        path: Path,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        start_col: str | int = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+    ) -> WorksheetRef:
+        path = path.expanduser().resolve()
+        self._validate_file(path)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        if df.empty:
+            raise OriginOperationError(f"Data file contains no rows: {path}")
+
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        wks.from_df(df, c1=start_col)
+        return WorksheetRef(
+            book_name=self._object_name(wks.get_book(), default=book_name or ""),
+            sheet_name=self._object_name(wks, default=sheet_name or ""),
+            columns=[str(col) for col in df.columns],
+            rows=len(df),
+        )
+
     def plot_csv(
         self,
         path: Path,
@@ -154,6 +226,7 @@ class OriginClient:
         y_cols: list[str | int] | None = None,
         book_name: str | None = None,
         sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
         graph_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
@@ -164,6 +237,7 @@ class OriginClient:
             y_cols=y_cols,
             book_name=book_name,
             sheet_name=sheet_name,
+            excel_sheet=excel_sheet,
             graph_name=graph_name,
             export_path=export_path,
         )
@@ -177,23 +251,56 @@ class OriginClient:
         book_name: str | None = None,
         sheet_name: str | None = None,
         excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
         graph_name: str | None = None,
         template: str | None = None,
         title: str | None = None,
         x_label: str | None = None,
         y_label: str | None = None,
+        z_col: str | int | None = None,
+        y_error_col: str | int | None = None,
+        x_error_col: str | int | None = None,
         show_legend: bool = True,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = path.expanduser().resolve()
         self._validate_file(path)
-        df = self._read_table(path, excel_sheet=excel_sheet)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
         if df.empty:
             raise OriginOperationError(f"Data file contains no rows: {path}")
 
         columns = [str(col) for col in df.columns]
         x_name = self._resolve_column(columns, x_col, default_index=0)
         y_names = self._resolve_y_columns(columns, x_name, y_cols)
+        z_name = (
+            self._resolve_column(columns, z_col, default_index=2)
+            if z_col is not None
+            else None
+        )
+        yerr_name = (
+            self._resolve_column(columns, y_error_col, default_index=2)
+            if y_error_col is not None
+            else None
+        )
+        xerr_name = (
+            self._resolve_column(columns, x_error_col, default_index=2)
+            if x_error_col is not None
+            else None
+        )
 
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         wks.from_df(df)
@@ -202,7 +309,16 @@ class OriginClient:
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
 
         for y_name in y_names:
-            self._add_plot(layer, wks, x_name=x_name, y_name=y_name, kind=kind)
+            self._add_plot(
+                layer,
+                wks,
+                x_name=x_name,
+                y_name=y_name,
+                kind=kind,
+                z_name=z_name,
+                y_error_name=yerr_name,
+                x_error_name=xerr_name,
+            )
 
         self.format_graph(
             graph=graph,
@@ -225,6 +341,221 @@ class OriginClient:
             rows=len(df),
         )
         return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
+
+    def list_project(self) -> dict[str, Any]:
+        op = self.op
+        pages = getattr(op, "pages", None)
+        if not callable(pages):
+            raise OriginOperationError("originpro.pages is not available.")
+
+        workbooks: list[dict[str, Any]] = []
+        matrixbooks: list[dict[str, Any]] = []
+        graphs: list[dict[str, Any]] = []
+        images: list[dict[str, Any]] = []
+        for page in pages():
+            item = {
+                "name": self._object_name(page, default=""),
+                "long_name": getattr(page, "lname", ""),
+                "layers": len(page) if hasattr(page, "__len__") else None,
+                "open": page.is_open() if hasattr(page, "is_open") else None,
+            }
+            cls_name = type(page).__name__.lower()
+            if cls_name == "wbook":
+                item["sheets"] = [
+                    {
+                        "name": self._object_name(sheet, default=""),
+                        "rows": getattr(sheet, "rows", None),
+                        "cols": getattr(sheet, "cols", None),
+                    }
+                    for sheet in page
+                ]
+                workbooks.append(item)
+            elif cls_name == "mbook":
+                matrixbooks.append(item)
+            elif cls_name == "gpage":
+                graphs.append(item)
+            else:
+                images.append(item)
+        return {
+            "workbooks": workbooks,
+            "matrixbooks": matrixbooks,
+            "graphs": graphs,
+            "images": images,
+        }
+
+    def rename_object(self, name: str, new_name: str, object_type: str = "graph") -> dict[str, Any]:
+        obj = self._find_object(name=name, object_type=object_type)
+        obj.name = new_name
+        return {"old_name": name, "new_name": self._object_name(obj, default=new_name)}
+
+    def delete_object(self, name: str, object_type: str = "graph") -> dict[str, Any]:
+        obj = self._find_object(name=name, object_type=object_type)
+        destroy = getattr(obj, "destroy", None)
+        if not callable(destroy):
+            raise OriginOperationError(f"Object does not support delete: {name}")
+        destroy()
+        return {"deleted": True, "name": name, "object_type": object_type}
+
+    def set_axis(
+        self,
+        graph_name: str | None = None,
+        axis: str = "x",
+        scale: str | int | None = None,
+        start: float | None = None,
+        end: float | None = None,
+        step: float | None = None,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        ax = layer.axis(axis)
+        if scale is not None:
+            ax.scale = scale
+        if start is not None or end is not None or step is not None:
+            ax.limits = (start, end, step)
+        if title:
+            ax.title = self._labtalk_text(title)
+        self._rescale(layer) if start is None and end is None else None
+        return {"graph_name": self._object_name(graph, default=graph_name or ""), "axis": axis}
+
+    def set_plot_style(
+        self,
+        graph_name: str | None = None,
+        plot_index: int | None = None,
+        color: str | tuple[int, int, int] | None = None,
+        line_width: float | None = None,
+        line_style: int | None = None,
+        symbol_kind: int | None = None,
+        symbol_size: float | None = None,
+        transparency: float | None = None,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        plots = layer.plot_list()
+        selected = plots if plot_index is None else [plots[plot_index]]
+        for plot in selected:
+            if color is not None:
+                plot.color = color
+            if line_width is not None:
+                plot.set_cmd(f"-w {line_width}")
+            if line_style is not None:
+                plot.set_cmd(f"-d {line_style}")
+            if symbol_kind is not None:
+                plot.symbol_kind = symbol_kind
+            if symbol_size is not None:
+                plot.symbol_size = symbol_size
+            if transparency is not None:
+                plot.transparency = transparency
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "styled_plots": len(selected),
+        }
+
+    def export_all_graphs(
+        self,
+        output_dir: Path,
+        file_type: str = "png",
+        overwrite: bool = True,
+        width: int = 0,
+    ) -> dict[str, Any]:
+        output_dir = output_dir.expanduser().resolve()
+        self._check_path_allowed(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        op = self.op
+        graph_list = getattr(op, "graph_list", None)
+        if not callable(graph_list):
+            raise OriginOperationError("originpro.graph_list is not available.")
+        exported = []
+        for graph in graph_list("p", True):
+            graph_name = self._object_name(graph, default="Graph")
+            path = output_dir / f"{self._safe_filename(graph_name)}.{file_type.lstrip('.')}"
+            if path.exists() and not overwrite:
+                continue
+            if hasattr(graph, "save_fig"):
+                graph.save_fig(str(path), type=file_type, replace=overwrite, width=width)
+            else:
+                self.export_graph(path, graph=graph, overwrite=overwrite)
+            exported.append(str(path))
+        return {"count": len(exported), "paths": exported}
+
+    def plot_range(
+        self,
+        data_range: str,
+        template: str = "line",
+        plot_type: str = "?",
+        graph_name: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        export_path: Path | None = None,
+    ) -> GraphRef:
+        if not data_range.strip():
+            raise OriginOperationError("Data range is empty.")
+        graph = self._new_graph(kind="line", graph_name=graph_name, template=template)
+        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        add_plot = getattr(layer, "add_plot", None)
+        if not callable(add_plot):
+            raise OriginOperationError("Graph layer does not support add_plot().")
+        add_plot(data_range, type=plot_type)
+        self.format_graph(
+            graph=graph,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            show_legend=True,
+            rescale=True,
+        )
+        exported: str | None = None
+        if export_path is not None:
+            exported = self.export_graph(export_path, graph=graph)["path"]
+        return GraphRef(
+            graph_name=self._object_name(graph, default=graph_name or "Graph"),
+            export_path=exported,
+        )
+
+    def batch_plot_from_template(
+        self,
+        data_ranges: list[str],
+        template: str,
+        output_dir: Path | None = None,
+        file_type: str = "png",
+        plot_type: str = "?",
+    ) -> dict[str, Any]:
+        graphs = []
+        for index, data_range in enumerate(data_ranges, start=1):
+            export_path = None
+            if output_dir is not None:
+                export_path = output_dir / f"template_plot_{index}.{file_type.lstrip('.')}"
+            graph = self.plot_range(
+                data_range=data_range,
+                template=template,
+                plot_type=plot_type,
+                graph_name=f"template_plot_{index}",
+                export_path=export_path,
+            )
+            graphs.append(graph.as_dict())
+        return {"count": len(graphs), "graphs": graphs}
+
+    def run_analysis(
+        self,
+        analysis: str,
+        worksheet: str | None = None,
+        x_col: str | int | None = None,
+        y_col: str | int | None = None,
+        output_sheet: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        script = self._analysis_script(
+            analysis=analysis,
+            worksheet=worksheet,
+            x_col=x_col,
+            y_col=y_col,
+            output_sheet=output_sheet,
+            options=options or {},
+        )
+        result = self.run_labtalk(script)
+        return {"script": script, **result}
 
     def format_graph(
         self,
@@ -264,6 +595,7 @@ class OriginClient:
         overwrite: bool = True,
     ) -> dict[str, Any]:
         path = path.expanduser().resolve()
+        self._check_path_allowed(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not overwrite:
             raise OriginOperationError(f"Export path already exists: {path}")
@@ -307,7 +639,14 @@ class OriginClient:
         if not callable(new_graph):
             raise OriginOperationError("originpro.new_graph is not available.")
 
-        graph_template = template or ("line" if kind == "line" else "scatter")
+        default_templates = {
+            "line": "line",
+            "scatter": "scatter",
+            "line_symbol": "linesymbol",
+            "column": "column",
+            "contour": "contour",
+        }
+        graph_template = template or default_templates.get(kind, "line")
         kwargs: dict[str, Any] = {"template": graph_template}
         if graph_name:
             kwargs["lname"] = graph_name
@@ -329,14 +668,38 @@ class OriginClient:
 
         raise OriginOperationError("No active graph found. Create or name a graph first.")
 
-    def _add_plot(self, layer: Any, wks: Any, x_name: str, y_name: str, kind: str) -> None:
+    def _add_plot(
+        self,
+        layer: Any,
+        wks: Any,
+        x_name: str,
+        y_name: str,
+        kind: str,
+        z_name: str | None = None,
+        y_error_name: str | None = None,
+        x_error_name: str | None = None,
+    ) -> None:
         add_plot = getattr(layer, "add_plot", None)
         if not callable(add_plot):
             raise OriginOperationError("Graph layer does not support add_plot().")
 
-        plot_type = "s" if kind == "scatter" else "l"
+        plot_types = {
+            "scatter": "s",
+            "line": "l",
+            "line_symbol": "y",
+            "column": "c",
+            "contour": "contour",
+        }
+        plot_type = plot_types.get(kind, "l")
         attempts = [
-            {"coly": y_name, "colx": x_name, "type": plot_type},
+            {
+                "coly": y_name,
+                "colx": x_name,
+                "colz": z_name or -1,
+                "colyerr": y_error_name or -1,
+                "colxerr": x_error_name or -1,
+                "type": plot_type,
+            },
             {"coly": y_name, "colx": x_name},
         ]
         for kwargs in attempts:
@@ -385,16 +748,40 @@ class OriginClient:
             label.text = title
 
     @staticmethod
-    def _read_table(path: Path, excel_sheet: str | int | None = 0) -> pd.DataFrame:
+    def _read_table(
+        path: Path,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+    ) -> pd.DataFrame:
         suffix = path.suffix.lower()
         if suffix in {".xls", ".xlsx", ".xlsm"}:
-            return pd.read_excel(path, sheet_name=excel_sheet if excel_sheet is not None else 0)
+            return pd.read_excel(
+                path,
+                sheet_name=excel_sheet if excel_sheet is not None else 0,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+            )
+        read_kwargs = {
+            "encoding": encoding,
+            "header": header,
+            "skiprows": skiprows,
+            "nrows": nrows,
+            "na_values": na_values,
+        }
+        read_kwargs = {key: value for key, value in read_kwargs.items() if value is not None}
         if suffix == ".tsv":
-            return pd.read_csv(path, sep="\t")
+            return pd.read_csv(path, sep=delimiter or "\t", **read_kwargs)
         if suffix in {".txt", ".dat"}:
-            return pd.read_csv(path, sep=None, engine="python")
+            return pd.read_csv(path, sep=delimiter, engine="python", **read_kwargs)
         if suffix == ".csv":
-            return pd.read_csv(path)
+            return pd.read_csv(path, sep=delimiter or ",", **read_kwargs)
         raise OriginOperationError(f"Unsupported data file extension: {path.suffix}")
 
     @staticmethod
@@ -413,10 +800,27 @@ class OriginClient:
 
     @staticmethod
     def _validate_file(path: Path) -> None:
+        OriginClient._check_path_allowed(path)
         if not path.exists():
             raise OriginOperationError(f"File does not exist: {path}")
         if not path.is_file():
             raise OriginOperationError(f"Path is not a file: {path}")
+
+    @staticmethod
+    def _check_path_allowed(path: Path) -> None:
+        raw_roots = os.environ.get("ORIGIN_MCP_ALLOWED_ROOTS", "").strip()
+        if not raw_roots:
+            return
+        resolved = path.expanduser().resolve()
+        roots = [
+            Path(root).expanduser().resolve()
+            for root in raw_roots.split(os.pathsep)
+            if root.strip()
+        ]
+        if not any(resolved == root or root in resolved.parents for root in roots):
+            raise OriginOperationError(
+                f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}"
+            )
 
     @staticmethod
     def _resolve_column(columns: list[str], value: str | int | None, default_index: int) -> str:
@@ -460,6 +864,99 @@ class OriginClient:
             if value:
                 return str(value)
         return default
+
+    def _find_sheet(self, book_name: str | None = None, sheet_name: str | None = None) -> Any:
+        op = self.op
+        find_sheet = getattr(op, "find_sheet", None)
+        if not callable(find_sheet):
+            raise OriginOperationError("originpro.find_sheet is not available.")
+        if book_name and sheet_name:
+            ref = f"[{book_name}]{sheet_name}"
+        else:
+            ref = book_name or sheet_name or ""
+        wks = find_sheet("w", ref)
+        if wks is None:
+            raise OriginOperationError(f"Worksheet not found: {ref or '<active worksheet>'}")
+        return wks
+
+    def _find_object(self, name: str, object_type: str) -> Any:
+        object_type = object_type.lower()
+        op = self.op
+        if object_type in {"graph", "g"}:
+            obj = op.find_graph(name)
+        elif object_type in {"workbook", "book", "w"}:
+            obj = op.find_book("w", name)
+        elif object_type in {"matrixbook", "matrix", "m"}:
+            obj = op.find_book("m", name)
+        elif object_type in {"worksheet", "sheet"}:
+            obj = op.find_sheet("w", name)
+        else:
+            raise OriginOperationError(f"Unsupported object type: {object_type}")
+        if obj is None:
+            raise OriginOperationError(f"{object_type} not found: {name}")
+        return obj
+
+    @staticmethod
+    def _safe_filename(name: str) -> str:
+        invalid = '<>:"/\\|?*'
+        cleaned = "".join("_" if ch in invalid else ch for ch in name).strip()
+        return cleaned or "graph"
+
+    def _analysis_script(
+        self,
+        analysis: str,
+        worksheet: str | None,
+        x_col: str | int | None,
+        y_col: str | int | None,
+        output_sheet: str | None,
+        options: dict[str, Any],
+    ) -> str:
+        analysis = analysis.lower().replace("-", "_")
+        range_expr = self._analysis_range(worksheet, x_col, y_col)
+        option_text = self._xf_options(options)
+        output_text = f' oy:="{output_sheet}"' if output_sheet else ""
+        commands = {
+            "linear_fit": f"fitlr {range_expr}{output_text} {option_text};",
+            "polynomial_fit": f"fitpoly {range_expr}{output_text} {option_text};",
+            "nonlinear_fit": f"nlfit {range_expr}{output_text} {option_text};",
+            "smooth": f"smooth {range_expr}{output_text} {option_text};",
+            "differentiate": f"differentiate {range_expr}{output_text} {option_text};",
+            "integrate": f"integ1 {range_expr}{output_text} {option_text};",
+            "peak_find": f"pkFind {range_expr}{output_text} {option_text};",
+            "descriptive_stats": f"moments {range_expr}{output_text} {option_text};",
+        }
+        try:
+            return " ".join(commands[analysis].split())
+        except KeyError as exc:
+            raise OriginOperationError(f"Unsupported analysis type: {analysis}") from exc
+
+    @staticmethod
+    def _analysis_range(
+        worksheet: str | None,
+        x_col: str | int | None,
+        y_col: str | int | None,
+    ) -> str:
+        if worksheet is None and x_col is None and y_col is None:
+            return ""
+        if worksheet and x_col is not None and y_col is not None:
+            return f"{worksheet}!({x_col},{y_col})"
+        if worksheet and y_col is not None:
+            return f"{worksheet}!({y_col})"
+        if worksheet:
+            return worksheet
+        return f"({x_col},{y_col})" if x_col is not None else f"({y_col})"
+
+    @staticmethod
+    def _xf_options(options: dict[str, Any]) -> str:
+        parts = []
+        for key, value in options.items():
+            if isinstance(value, bool):
+                value = int(value)
+            if isinstance(value, str):
+                parts.append(f'{key}:="{value}"')
+            else:
+                parts.append(f"{key}:={value}")
+        return " ".join(parts)
 
     @staticmethod
     def _call_first_available(obj: Any, names: list[str]) -> Any:

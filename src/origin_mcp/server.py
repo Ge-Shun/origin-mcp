@@ -8,10 +8,14 @@ from pydantic import ValidationError
 
 from .errors import OriginMcpError
 from .models import (
+    AnalysisRequest,
+    AxisSettingsRequest,
     CsvImportRequest,
     GraphFormatRequest,
     PlotKind,
+    PlotStyleRequest,
     PlotTableRequest,
+    ProjectObjectRequest,
     TableImportRequest,
     ToolResult,
 )
@@ -55,6 +59,18 @@ def origin_new_project(show: bool = True) -> dict[str, Any]:
 
 
 @mcp.tool()
+def origin_open_project(path: str, readonly: bool = False, asksave: bool = False) -> dict[str, Any]:
+    """Open an existing Origin OPJU/OPJ project."""
+
+    return _wrap(
+        lambda: _ok(
+            "Opened Origin project.",
+            **client.open_project(Path(path), readonly=readonly, asksave=asksave),
+        )
+    )
+
+
+@mcp.tool()
 def origin_save_project(path: str) -> dict[str, Any]:
     """Save the current Origin project to an OPJU/OPJ path."""
 
@@ -83,6 +99,12 @@ def origin_import_table(
     book_name: str | None = None,
     sheet_name: str | None = None,
     excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
 ) -> dict[str, Any]:
     """Import a CSV, TSV, TXT, DAT, XLS, or XLSX file into a new Origin worksheet."""
 
@@ -92,12 +114,24 @@ def origin_import_table(
             book_name=book_name,
             sheet_name=sheet_name,
             excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
         )
         worksheet = client.import_table(
             req.path,
             book_name=req.book_name,
             sheet_name=req.sheet_name,
             excel_sheet=req.excel_sheet,
+            delimiter=req.delimiter,
+            encoding=req.encoding,
+            header=req.header,
+            skiprows=req.skiprows,
+            nrows=req.nrows,
+            na_values=req.na_values,
         )
         return _ok("Imported table data into Origin worksheet.", worksheet=worksheet.as_dict())
 
@@ -122,6 +156,53 @@ def origin_import_excel(
 
 
 @mcp.tool()
+def origin_append_table(
+    path: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    start_col: str | int = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+) -> dict[str, Any]:
+    """Append table data into an existing Origin worksheet starting at a column."""
+
+    def run() -> dict[str, Any]:
+        req = TableImportRequest(
+            path=Path(path),
+            book_name=book_name,
+            sheet_name=sheet_name,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        worksheet = client.append_table(
+            req.path,
+            book_name=req.book_name,
+            sheet_name=req.sheet_name,
+            excel_sheet=req.excel_sheet,
+            start_col=start_col,
+            delimiter=req.delimiter,
+            encoding=req.encoding,
+            header=req.header,
+            skiprows=req.skiprows,
+            nrows=req.nrows,
+            na_values=req.na_values,
+        )
+        return _ok("Appended table data into Origin worksheet.", worksheet=worksheet.as_dict())
+
+    return _wrap(run)
+
+
+@mcp.tool()
 def origin_plot_line(
     path: str,
     x_col: str | int | None = None,
@@ -129,11 +210,19 @@ def origin_plot_line(
     book_name: str | None = None,
     sheet_name: str | None = None,
     excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
     graph_name: str | None = None,
     template: str | None = None,
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
     show_legend: bool = True,
     export_path: str | None = None,
 ) -> dict[str, Any]:
@@ -147,11 +236,19 @@ def origin_plot_line(
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
         graph_name=graph_name,
         template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
+        y_error_col=y_error_col,
+        x_error_col=x_error_col,
         show_legend=show_legend,
         export_path=export_path,
     )
@@ -165,11 +262,19 @@ def origin_plot_scatter(
     book_name: str | None = None,
     sheet_name: str | None = None,
     excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
     graph_name: str | None = None,
     template: str | None = None,
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
     show_legend: bool = True,
     export_path: str | None = None,
 ) -> dict[str, Any]:
@@ -183,13 +288,278 @@ def origin_plot_scatter(
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
         graph_name=graph_name,
         template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
+        y_error_col=y_error_col,
+        x_error_col=x_error_col,
         show_legend=show_legend,
         export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_line_symbol(
+    path: str,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    template: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+    show_legend: bool = True,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Import table data and create a line+symbol graph."""
+
+    return _plot_csv(
+        kind=PlotKind.line_symbol,
+        path=path,
+        x_col=x_col,
+        y_cols=y_cols,
+        book_name=book_name,
+        sheet_name=sheet_name,
+        excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
+        graph_name=graph_name,
+        template=template,
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        y_error_col=y_error_col,
+        x_error_col=x_error_col,
+        show_legend=show_legend,
+        export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_column(
+    path: str,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    template: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    y_error_col: str | int | None = None,
+    show_legend: bool = True,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Import table data and create a column/bar-style graph."""
+
+    return _plot_csv(
+        kind=PlotKind.column,
+        path=path,
+        x_col=x_col,
+        y_cols=y_cols,
+        book_name=book_name,
+        sheet_name=sheet_name,
+        excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
+        graph_name=graph_name,
+        template=template,
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        y_error_col=y_error_col,
+        show_legend=show_legend,
+        export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_contour(
+    path: str,
+    x_col: str | int,
+    y_col: str | int,
+    z_col: str | int,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    template: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    show_legend: bool = True,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Import XYZ table data and create a contour graph."""
+
+    return _plot_csv(
+        kind=PlotKind.contour,
+        path=path,
+        x_col=x_col,
+        y_cols=[y_col],
+        book_name=book_name,
+        sheet_name=sheet_name,
+        excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
+        graph_name=graph_name,
+        template=template,
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        z_col=z_col,
+        show_legend=show_legend,
+        export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_errorbar(
+    path: str,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    template: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    show_legend: bool = True,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Import table data and create a line+symbol plot with error bars."""
+
+    return _plot_csv(
+        kind=PlotKind.line_symbol,
+        path=path,
+        x_col=x_col,
+        y_cols=y_cols,
+        book_name=book_name,
+        sheet_name=sheet_name,
+        excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
+        graph_name=graph_name,
+        template=template,
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        y_error_col=y_error_col,
+        x_error_col=x_error_col,
+        show_legend=show_legend,
+        export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_from_range(
+    data_range: str,
+    template: str = "line",
+    plot_type: str = "?",
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a graph from an existing Origin range and template."""
+
+    def run() -> dict[str, Any]:
+        graph = client.plot_range(
+            data_range=data_range,
+            template=template,
+            plot_type=plot_type,
+            graph_name=graph_name,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            export_path=Path(export_path) if export_path else None,
+        )
+        return _ok("Created graph from Origin range.", graph=graph.as_dict())
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_batch_plot_from_template(
+    data_ranges: list[str],
+    template: str,
+    output_dir: str | None = None,
+    file_type: str = "png",
+    plot_type: str = "?",
+) -> dict[str, Any]:
+    """Create multiple graphs from existing Origin ranges using one template."""
+
+    return _wrap(
+        lambda: _ok(
+            "Created batch template plots.",
+            **client.batch_plot_from_template(
+                data_ranges=data_ranges,
+                template=template,
+                output_dir=Path(output_dir) if output_dir else None,
+                file_type=file_type,
+                plot_type=plot_type,
+            ),
+        )
     )
 
 
@@ -205,6 +575,28 @@ def origin_export_graph(
         lambda: _ok(
             "Exported Origin graph.",
             **client.export_graph(Path(path), graph_name=graph_name, overwrite=overwrite),
+        )
+    )
+
+
+@mcp.tool()
+def origin_export_all_graphs(
+    output_dir: str,
+    file_type: str = "png",
+    overwrite: bool = True,
+    width: int = 0,
+) -> dict[str, Any]:
+    """Export all graphs in the current Origin project."""
+
+    return _wrap(
+        lambda: _ok(
+            "Exported all Origin graphs.",
+            **client.export_all_graphs(
+                Path(output_dir),
+                file_type=file_type,
+                overwrite=overwrite,
+                width=width,
+            ),
         )
     )
 
@@ -245,6 +637,226 @@ def origin_format_graph(
 
 
 @mcp.tool()
+def origin_set_axis(
+    graph_name: str | None = None,
+    axis: str = "x",
+    scale: str | int | None = None,
+    start: float | None = None,
+    end: float | None = None,
+    step: float | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
+    """Set axis scale, limits, tick step, and title."""
+
+    def run() -> dict[str, Any]:
+        req = AxisSettingsRequest(
+            graph_name=graph_name,
+            axis=axis,
+            scale=scale,
+            start=start,
+            end=end,
+            step=step,
+            title=title,
+        )
+        return _ok("Updated Origin graph axis.", **client.set_axis(**req.model_dump()))
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_set_plot_style(
+    graph_name: str | None = None,
+    plot_index: int | None = None,
+    color: str | tuple[int, int, int] | None = None,
+    line_width: float | None = None,
+    line_style: int | None = None,
+    symbol_kind: int | None = None,
+    symbol_size: float | None = None,
+    transparency: float | None = None,
+) -> dict[str, Any]:
+    """Set line, color, symbol, and transparency style on one or all plots."""
+
+    def run() -> dict[str, Any]:
+        req = PlotStyleRequest(
+            graph_name=graph_name,
+            plot_index=plot_index,
+            color=color,
+            line_width=line_width,
+            line_style=line_style,
+            symbol_kind=symbol_kind,
+            symbol_size=symbol_size,
+            transparency=transparency,
+        )
+        return _ok("Updated Origin plot style.", **client.set_plot_style(**req.model_dump()))
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_list_project() -> dict[str, Any]:
+    """List workbooks, worksheets, matrix books, graphs, and images in the project."""
+
+    return _wrap(lambda: _ok("Listed Origin project objects.", **client.list_project()))
+
+
+@mcp.tool()
+def origin_rename_object(name: str, new_name: str, object_type: str = "graph") -> dict[str, Any]:
+    """Rename a graph, workbook, matrixbook, or worksheet."""
+
+    def run() -> dict[str, Any]:
+        req = ProjectObjectRequest(name=name, object_type=object_type)
+        return _ok(
+            "Renamed Origin object.",
+            **client.rename_object(req.name, new_name=new_name, object_type=req.object_type),
+        )
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_delete_object(name: str, object_type: str = "graph") -> dict[str, Any]:
+    """Delete a graph, workbook, matrixbook, or worksheet."""
+
+    def run() -> dict[str, Any]:
+        req = ProjectObjectRequest(name=name, object_type=object_type)
+        return _ok(
+            "Deleted Origin object.",
+            **client.delete_object(req.name, object_type=req.object_type),
+        )
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_run_analysis(
+    analysis: str,
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run a named Origin analysis X-Function through LabTalk."""
+
+    def run() -> dict[str, Any]:
+        req = AnalysisRequest(
+            analysis=analysis,
+            worksheet=worksheet,
+            x_col=x_col,
+            y_col=y_col,
+            output_sheet=output_sheet,
+            options=options or {},
+        )
+        return _ok("Ran Origin analysis.", **client.run_analysis(**req.model_dump()))
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_linear_fit(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin linear fitting."""
+
+    return origin_run_analysis("linear_fit", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_polynomial_fit(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin polynomial fitting."""
+
+    return origin_run_analysis("polynomial_fit", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_smooth(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin smoothing."""
+
+    return origin_run_analysis("smooth", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_peak_find(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin peak finding."""
+
+    return origin_run_analysis("peak_find", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_differentiate(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin differentiation."""
+
+    return origin_run_analysis("differentiate", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_integrate(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin integration."""
+
+    return origin_run_analysis("integrate", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_descriptive_stats(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin descriptive statistics."""
+
+    return origin_run_analysis("descriptive_stats", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_nonlinear_fit(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run Origin nonlinear fitting."""
+
+    return origin_run_analysis("nonlinear_fit", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
 def origin_run_labtalk(script: str) -> dict[str, Any]:
     """Execute LabTalk script text inside Origin."""
 
@@ -266,6 +878,12 @@ def _plot_csv(
     book_name: str | None,
     sheet_name: str | None,
     excel_sheet: str | int | None,
+    delimiter: str | None,
+    encoding: str | None,
+    header: int | None,
+    skiprows: int | list[int] | None,
+    nrows: int | None,
+    na_values: str | list[str] | None,
     graph_name: str | None,
     template: str | None,
     title: str | None,
@@ -273,6 +891,9 @@ def _plot_csv(
     y_label: str | None,
     show_legend: bool,
     export_path: str | None,
+    z_col: str | int | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:
         req = PlotTableRequest(
@@ -282,11 +903,20 @@ def _plot_csv(
             book_name=book_name,
             sheet_name=sheet_name,
             excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
             graph_name=graph_name,
             template=template,
             title=title,
             x_label=x_label,
             y_label=y_label,
+            z_col=z_col,
+            y_error_col=y_error_col,
+            x_error_col=x_error_col,
             show_legend=show_legend,
             export_path=Path(export_path) if export_path else None,
         )
@@ -298,11 +928,20 @@ def _plot_csv(
             book_name=req.book_name,
             sheet_name=req.sheet_name,
             excel_sheet=req.excel_sheet,
+            delimiter=req.delimiter,
+            encoding=req.encoding,
+            header=req.header,
+            skiprows=req.skiprows,
+            nrows=req.nrows,
+            na_values=req.na_values,
             graph_name=req.graph_name,
             template=req.template,
             title=req.title,
             x_label=req.x_label,
             y_label=req.y_label,
+            z_col=req.z_col,
+            y_error_col=req.y_error_col,
+            x_error_col=req.x_error_col,
             show_legend=req.show_legend,
             export_path=req.export_path,
         )
@@ -313,8 +952,6 @@ def _plot_csv(
         )
 
     return _wrap(run)
-
-
 def main() -> None:
     mcp.run()
 

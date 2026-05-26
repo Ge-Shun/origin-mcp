@@ -44,3 +44,42 @@ def test_read_table_rejects_unknown_extension(tmp_path: Path) -> None:
 
     with pytest.raises(OriginOperationError):
         OriginClient._read_table(path)
+
+
+def test_read_table_custom_delimiter_and_skiprows(tmp_path: Path) -> None:
+    path = tmp_path / "data.txt"
+    path.write_text("# comment\nx;value\n0;1\n1;2\n", encoding="utf-8")
+
+    df = OriginClient._read_table(path, delimiter=";", skiprows=1)
+
+    assert list(df.columns) == ["x", "value"]
+    assert df["value"].tolist() == [1, 2]
+
+
+def test_allowed_roots_blocks_paths_outside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    blocked = tmp_path / "blocked.csv"
+    blocked.write_text("x,y\n1,2\n", encoding="utf-8")
+    monkeypatch.setenv("ORIGIN_MCP_ALLOWED_ROOTS", str(allowed))
+
+    with pytest.raises(OriginOperationError):
+        OriginClient._validate_file(blocked)
+
+
+def test_analysis_script_linear_fit() -> None:
+    script = OriginClient()._analysis_script(
+        analysis="linear_fit",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="force",
+        output_sheet="FitOut",
+        options={"intercept": False},
+    )
+
+    assert "fitlr [Book1]Sheet1!(time,force)" in script
+    assert 'oy:="FitOut"' in script
+    assert "intercept:=0" in script

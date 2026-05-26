@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, field_validator
 class PlotKind(str, Enum):
     line = "line"
     scatter = "scatter"
+    line_symbol = "line_symbol"
+    column = "column"
+    contour = "contour"
 
 
 class TableImportRequest(BaseModel):
@@ -19,6 +22,26 @@ class TableImportRequest(BaseModel):
     excel_sheet: str | int | None = Field(
         default=0,
         description="Excel sheet name or zero-based index. Ignored for text files.",
+    )
+    delimiter: str | None = Field(
+        default=None,
+        description=(
+            "Delimiter for text files. If omitted, CSV/TSV defaults or auto-detection are used."
+        ),
+    )
+    encoding: str | None = Field(default=None, description="Optional text file encoding.")
+    header: int | None = Field(
+        default=0,
+        description="Zero-based row number to use as column names.",
+    )
+    skiprows: int | list[int] | None = Field(
+        default=None,
+        description="Rows to skip while reading.",
+    )
+    nrows: int | None = Field(default=None, description="Maximum number of data rows to read.")
+    na_values: str | list[str] | None = Field(
+        default=None,
+        description="Additional missing value markers.",
     )
 
     @field_validator("path")
@@ -49,6 +72,12 @@ class PlotTableRequest(TableImportRequest):
             "Column names or zero-based indexes to plot as Y. Defaults to all non-X columns."
         ),
     )
+    z_col: str | int | None = Field(
+        default=None,
+        description="Optional Z column for contour/XYZ plots.",
+    )
+    y_error_col: str | int | None = Field(default=None, description="Optional Y error column.")
+    x_error_col: str | int | None = Field(default=None, description="Optional X error column.")
     graph_name: str | None = Field(default=None, description="Optional Origin graph page name.")
     template: str | None = Field(
         default=None,
@@ -77,6 +106,56 @@ class GraphFormatRequest(BaseModel):
     rescale: bool = Field(
         default=True,
         description="Whether to rescale graph axes after formatting.",
+    )
+
+
+class AxisSettingsRequest(BaseModel):
+    graph_name: str | None = Field(default=None, description="Optional graph page name.")
+    axis: str = Field(default="x", description="Axis name: x, y, x2, y2, z, or z2.")
+    scale: str | int | None = Field(
+        default=None,
+        description="Axis scale, such as linear or log10.",
+    )
+    start: float | None = Field(default=None, description="Axis start value.")
+    end: float | None = Field(default=None, description="Axis end value.")
+    step: float | None = Field(default=None, description="Axis major tick step.")
+    title: str | None = Field(default=None, description="Axis title.")
+
+
+class PlotStyleRequest(BaseModel):
+    graph_name: str | None = Field(default=None, description="Optional graph page name.")
+    plot_index: int | None = Field(
+        default=None,
+        description="Zero-based plot index. Applies to all plots if omitted.",
+    )
+    color: str | tuple[int, int, int] | None = Field(default=None, description="Plot color.")
+    line_width: float | None = Field(default=None, description="Line width.")
+    line_style: int | None = Field(default=None, description="Origin line style integer.")
+    symbol_kind: int | None = Field(default=None, description="Origin symbol kind integer.")
+    symbol_size: float | None = Field(default=None, description="Symbol size.")
+    transparency: float | None = Field(default=None, description="Transparency percent, 0 to 100.")
+
+
+class ProjectObjectRequest(BaseModel):
+    name: str = Field(description="Origin page or object name.")
+    object_type: str = Field(
+        default="graph",
+        description="graph, workbook, matrixbook, or worksheet.",
+    )
+
+
+class AnalysisRequest(BaseModel):
+    analysis: str = Field(description="Analysis type.")
+    worksheet: str | None = Field(
+        default=None,
+        description="Worksheet range or book/sheet reference.",
+    )
+    x_col: str | int | None = Field(default=None, description="Optional X column.")
+    y_col: str | int | None = Field(default=None, description="Optional Y column.")
+    output_sheet: str | None = Field(default=None, description="Optional output sheet/name hint.")
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra LabTalk/X-Function options.",
     )
 
 
