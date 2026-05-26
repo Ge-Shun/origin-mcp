@@ -181,6 +181,7 @@ class OriginClient:
     def __init__(self) -> None:
         self._op: Any | None = None
         self._capabilities: dict[str, Any] | None = None
+        self._graph_annotations: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
     @property
     def op(self) -> Any:
@@ -791,9 +792,11 @@ class OriginClient:
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
         if style_mode_actual == "publication":
             self.apply_publication_style(graph_name=actual_graph_name)
+        elif style_mode_actual == "nature":
+            self.apply_nature_style(graph_name=actual_graph_name, chart_type=kind)
         exported: str | None = None
         if export_path is not None:
-            exported = self.export_graph(export_path, graph=graph)["path"]
+            exported = self._export_plot_command_graph(export_path, actual_graph_name)["path"]
 
         worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
         return worksheet, GraphRef(
@@ -822,6 +825,7 @@ class OriginClient:
         title: str | None = None,
         x_label: str | None = None,
         y_label: str | None = None,
+        style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = path.expanduser().resolve()
@@ -872,19 +876,36 @@ class OriginClient:
                 )
             except OriginOperationError:
                 pass
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        if style_mode_actual == "publication":
+            self.apply_publication_style(graph_name=graph_name_actual)
+        elif style_mode_actual == "nature":
+            self.apply_nature_style(
+                graph_name=graph_name_actual,
+                chart_type=self._nature_chart_type_for_plot_id(plot_type_id, template),
+            )
         exported = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
         worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
-        return worksheet, GraphRef(graph_name=graph_name_actual, export_path=exported), {
-            "script": script,
-            "result": result.get("result"),
-            "plot_type_id": plot_type_id,
-            "template": template,
-            "selected_columns": selected,
-            "command": command,
-            "range_option": range_option,
-        }
+        return (
+            worksheet,
+            GraphRef(
+                graph_name=graph_name_actual,
+                export_path=exported,
+                template=template,
+                style_mode=style_mode_actual,
+            ),
+            {
+                "script": script,
+                "result": result.get("result"),
+                "plot_type_id": plot_type_id,
+                "template": template,
+                "selected_columns": selected,
+                "command": command,
+                "range_option": range_option,
+            },
+        )
 
     def plot_matrix_by_id(
         self,
@@ -1225,6 +1246,595 @@ class OriginClient:
             **result,
         }
 
+    def apply_nature_style(
+        self,
+        graph_name: str | None = None,
+        layer_index: int | None = None,
+        chart_type: str | None = None,
+        page_width: float | None = None,
+        page_height: float | None = None,
+        font_family: str = "Arial",
+        axis_title_size: int = 8,
+        tick_label_size: int = 7,
+        legend_font_size: int = 6,
+        line_width: float = 1.2,
+        symbol_size: float = 4.5,
+        tick_length: int = 3,
+        show_legend: bool = True,
+        palette_role: str | list[str] | None = None,
+        run_diagnostics: bool = True,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        if page_width is not None:
+            self._set_origin_property(graph, "width", page_width)
+        if page_height is not None:
+            self._set_origin_property(graph, "height", page_height)
+
+        indexes = self._selected_layer_indexes(graph, layer_index)
+        palette = self._nature_palette()
+        semantic_palette = self._nature_semantic_palette()
+        chart_style = self._nature_chart_style(chart_type, line_width, symbol_size)
+        actual_line_width = chart_style["line_width"]
+        actual_symbol_size = chart_style["symbol_size"]
+        styled_plots = 0
+        applied_roles: list[str] = []
+        for index in indexes:
+            layer = self._graph_layer(graph, index)
+            plots = self._layer_plots(layer)
+            roles = self._palette_roles(palette_role, len(plots))
+            for plot_index, plot in enumerate(plots):
+                if actual_line_width is not None:
+                    self._set_plot_command(plot, f"-w {actual_line_width}")
+                if actual_symbol_size is not None:
+                    self._set_origin_property(plot, "symbol_size", actual_symbol_size)
+                role = roles[plot_index]
+                color = (
+                    semantic_palette[role]
+                    if role
+                    else palette[plot_index % len(palette)]
+                )
+                self._set_origin_property(plot, "color", color)
+                try:
+                    self._set_origin_property(plot, "transparency", 0)
+                except OriginOperationError:
+                    pass
+                applied_roles.append(role or f"category_{plot_index + 1}")
+            styled_plots += len(plots)
+
+        safe_font = self._escape_labtalk(font_family)
+        script_parts = (
+            [f'win -a "{self._escape_labtalk(graph_name_actual)}";']
+            if graph_name_actual
+            else []
+        )
+        for index in indexes:
+            script_parts.extend(
+                [
+                    f"layer -s {index + 1};",
+                    f'layer.x.label.font$="{safe_font}";',
+                    f'layer.y.label.font$="{safe_font}";',
+                    f'layer.x.ticklabel.font$="{safe_font}";',
+                    f'layer.y.ticklabel.font$="{safe_font}";',
+                    f"layer.x.label.pt={axis_title_size};",
+                    f"layer.y.label.pt={axis_title_size};",
+                    f"layer.x.ticklabel.pt={tick_label_size};",
+                    f"layer.y.ticklabel.pt={tick_label_size};",
+                    f"layer.x.ticks.len={tick_length};",
+                    f"layer.y.ticks.len={tick_length};",
+                ]
+            )
+            if show_legend:
+                script_parts.extend(
+                    [
+                        f"legend.fsize={legend_font_size};",
+                        "legend.showframe=0;",
+                    ]
+                )
+        script = " ".join(script_parts)
+        result = self.run_labtalk(script) if script_parts else {"result": None}
+        if show_legend:
+            try:
+                self.format_legend(
+                    graph_name_actual,
+                    font_size=legend_font_size,
+                    show_frame=False,
+                )
+            except OriginOperationError:
+                pass
+        response = {
+            "graph_name": graph_name_actual,
+            "style": "nature",
+            "chart_type": chart_style["chart_type"],
+            "font_family": font_family,
+            "palette": palette,
+            "semantic_palette": semantic_palette,
+            "palette_role": palette_role,
+            "applied_palette_roles": applied_roles,
+            "styled_layers": indexes,
+            "styled_plots": styled_plots,
+            "script": script,
+            **result,
+        }
+        if run_diagnostics:
+            response["diagnostics"] = self.diagnose_graph(
+                graph_name=graph_name_actual,
+                style="nature",
+                palette_role=palette_role,
+            )
+        return response
+
+    def diagnose_graph(
+        self,
+        graph_name: str | None = None,
+        style: str | None = None,
+        palette_role: str | list[str] | None = None,
+        require_axis_titles: bool = True,
+        require_plots: bool = True,
+        require_legend: bool = False,
+        require_panel_label: bool = False,
+        require_scale_bar: bool = False,
+        require_channel_label: bool = False,
+        require_dynamic_range: bool = False,
+        export_path: Path | str | None = None,
+        min_export_width: int = 600,
+        min_export_height: int = 400,
+    ) -> dict[str, Any]:
+        info = self.get_graph_info(graph_name)
+        issues: list[dict[str, Any]] = []
+        style_actual = self._normalize_style_mode(style) if style else None
+        layers = info.get("layers", [])
+        if not layers:
+            issues.append(
+                self._diagnostic_issue(
+                    "no_layers",
+                    "error",
+                    "Graph has no layers.",
+                )
+            )
+
+        palette = self._nature_acceptable_palette()
+        for layer in layers:
+            layer_index = layer.get("index")
+            if require_plots and layer.get("plots_count", 0) == 0:
+                issues.append(
+                    self._diagnostic_issue(
+                        "no_plots",
+                        "error",
+                        "Layer has no plots.",
+                        layer_index=layer_index,
+                    )
+                )
+            if require_axis_titles:
+                for axis_name in ("x", "y"):
+                    axis = layer.get("axes", {}).get(axis_name)
+                    if axis is None:
+                        continue
+                    if not self._has_meaningful_label(axis.get("title")):
+                        issues.append(
+                            self._diagnostic_issue(
+                                "missing_axis_title",
+                                "warning",
+                                f"Layer {layer_index} has no {axis_name.upper()} axis title.",
+                                layer_index=layer_index,
+                                axis=axis_name,
+                            )
+                        )
+            if require_legend and not layer.get("legend_present"):
+                issues.append(
+                    self._diagnostic_issue(
+                        "missing_legend",
+                        "warning",
+                        "Layer has no detected legend label.",
+                        layer_index=layer_index,
+                    )
+                )
+            if require_panel_label and not layer.get("panel_label_present"):
+                issues.append(
+                    self._diagnostic_issue(
+                        "missing_panel_label",
+                        "warning",
+                        "Layer has no detected panel label.",
+                        layer_index=layer_index,
+                    )
+                )
+            labels = layer.get("labels", [])
+            if require_scale_bar and not self._label_present(
+                labels,
+                names={"ScaleBar", "ScaleBarLabel"},
+                text_markers={"scale", "um", "µm", "mm", "nm"},
+            ):
+                issues.append(
+                    self._diagnostic_issue(
+                        "missing_scale_bar",
+                        "warning",
+                        "Layer has no detected scale bar label.",
+                        layer_index=layer_index,
+                    )
+                )
+            if require_channel_label and not self._label_present(
+                labels,
+                names={"ChannelLabel"},
+                text_markers={"channel", "ch "},
+            ):
+                issues.append(
+                    self._diagnostic_issue(
+                        "missing_channel_label",
+                        "warning",
+                        "Layer has no detected channel label.",
+                        layer_index=layer_index,
+                    )
+                )
+            if require_dynamic_range and not self._label_present(
+                labels,
+                names={"DynamicRangeLabel"},
+                text_markers={"range", "min", "max"},
+            ):
+                issues.append(
+                    self._diagnostic_issue(
+                        "missing_dynamic_range_label",
+                        "warning",
+                        "Layer has no detected dynamic range label.",
+                        layer_index=layer_index,
+                    )
+                )
+            expected_roles = self._palette_roles(palette_role, len(layer.get("plots", [])))
+            for plot in layer.get("plots", []):
+                if style_actual == "nature":
+                    color = self._rgb_tuple(plot.get("color"))
+                    if color is not None and color not in palette:
+                        issues.append(
+                            self._diagnostic_issue(
+                                "non_nature_palette_color",
+                                "info",
+                                "Plot color is outside the Nature-style palette.",
+                                layer_index=layer_index,
+                                plot_index=plot.get("index"),
+                            )
+                        )
+                    plot_index = plot.get("index", 0)
+                    expected_role = (
+                        expected_roles[plot_index]
+                        if plot_index < len(expected_roles)
+                        else ""
+                    )
+                    expected_color = self._nature_semantic_palette().get(expected_role)
+                    if color is not None and expected_color is not None and color != expected_color:
+                        issues.append(
+                            self._diagnostic_issue(
+                                "semantic_palette_mismatch",
+                                "warning",
+                                f"Plot color does not match palette role {expected_role!r}.",
+                                layer_index=layer_index,
+                                plot_index=plot_index,
+                                palette_role=expected_role,
+                            )
+                        )
+                    transparency = plot.get("transparency")
+                    if transparency not in (None, 0):
+                        issues.append(
+                            self._diagnostic_issue(
+                                "plot_transparency",
+                                "warning",
+                                "Plot transparency is not zero.",
+                                layer_index=layer_index,
+                                plot_index=plot.get("index"),
+                            )
+                        )
+                symbol_size_value = self._numeric_or_none(plot.get("symbol_size"))
+                if symbol_size_value is not None and symbol_size_value < 0:
+                    issues.append(
+                        self._diagnostic_issue(
+                            "invalid_symbol_size",
+                            "warning",
+                            "Plot symbol size is negative.",
+                            layer_index=layer_index,
+                            plot_index=plot.get("index"),
+                        )
+                    )
+
+        export_inspection = None
+        if export_path is not None:
+            export_inspection = self.inspect_export(Path(export_path))
+            for issue_code in export_inspection.get("quality_issues", []):
+                issues.append(
+                    self._diagnostic_issue(
+                        f"export_{issue_code}",
+                        "error",
+                        f"Export quality issue: {issue_code}.",
+                        export_path=str(export_path),
+                    )
+                )
+            width = self._numeric_or_none(export_inspection.get("width"))
+            height = self._numeric_or_none(export_inspection.get("height"))
+            if width is not None and width < min_export_width:
+                issues.append(
+                    self._diagnostic_issue(
+                        "export_width_too_small",
+                        "warning",
+                        f"Export width is below {min_export_width}px.",
+                        export_path=str(export_path),
+                    )
+                )
+            if height is not None and height < min_export_height:
+                issues.append(
+                    self._diagnostic_issue(
+                        "export_height_too_small",
+                        "warning",
+                        f"Export height is below {min_export_height}px.",
+                        export_path=str(export_path),
+                    )
+                )
+
+        score = max(0, 100 - sum(self._diagnostic_penalty(issue) for issue in issues))
+        passed = not any(issue["severity"] == "error" for issue in issues)
+        response = {
+            "graph_name": info.get("graph_name", graph_name or ""),
+            "style": style_actual,
+            "passed": passed,
+            "score": score,
+            "issues": issues,
+            "checklist": self._qa_checklist(
+                issues=issues,
+                export_checked=export_path is not None,
+                require_legend=require_legend,
+                require_panel_label=require_panel_label,
+                require_scale_bar=require_scale_bar,
+                require_channel_label=require_channel_label,
+                require_dynamic_range=require_dynamic_range,
+            ),
+            "summary": {
+                "layers": info.get("layers_count", 0),
+                "plots": sum(layer.get("plots_count", 0) for layer in layers),
+                "errors": sum(1 for issue in issues if issue["severity"] == "error"),
+                "warnings": sum(1 for issue in issues if issue["severity"] == "warning"),
+                "info": sum(1 for issue in issues if issue["severity"] == "info"),
+            },
+        }
+        if export_inspection is not None:
+            response["export"] = export_inspection
+        return response
+
+    def chart_atlas_route(
+        self,
+        intent: str,
+        columns: list[str] | None = None,
+        matrix: bool = False,
+    ) -> dict[str, Any]:
+        normalized = self._normalize_chart_intent(intent)
+        routes = self._chart_atlas_routes()
+        route = dict(routes[normalized])
+        route["intent"] = normalized
+        route["input_columns"] = columns or []
+        route["matrix_input"] = matrix
+        if matrix and normalized not in {"matrix", "image_plate"}:
+            route["warnings"] = ["Matrix input is best routed to matrix or image_plate."]
+        return route
+
+    def plot_chart_atlas(
+        self,
+        path: Path,
+        intent: str,
+        x_col: str | int | None = None,
+        y_cols: list[str | int] | None = None,
+        z_col: str | int | None = None,
+        y_error_col: str | int | None = None,
+        x_error_col: str | int | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+        graph_name: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        style_mode: str = "nature",
+        palette_role: str | list[str] | None = None,
+        export_path: Path | None = None,
+    ) -> dict[str, Any]:
+        route = self.chart_atlas_route(intent)
+        if route.get("matrix_required"):
+            raise OriginOperationError(
+                f"Chart atlas intent {route['intent']!r} requires an Origin matrix range."
+            )
+        route_palette = palette_role if palette_role is not None else route.get("palette_role")
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        initial_style = "origin_default" if style_mode_actual == "nature" else style_mode_actual
+        worksheet: WorksheetRef
+        graph: GraphRef
+        command: dict[str, Any] | None = None
+        if route.get("plot_type_id"):
+            selected_cols = self._atlas_selected_columns(
+                route["intent"],
+                x_col=x_col,
+                y_cols=y_cols,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+            )
+            worksheet, graph, command = self.plot_table_by_id(
+                path=path,
+                plot_type_id=int(route["plot_type_id"]),
+                template=str(route["template"]),
+                selected_cols=selected_cols,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                style_mode=initial_style,
+                export_path=export_path,
+            )
+        else:
+            worksheet, graph = self.plot_table(
+                path=path,
+                kind=str(route["kind"]),
+                x_col=x_col,
+                y_cols=y_cols,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+                style_mode=initial_style,
+                export_path=export_path,
+            )
+
+        style_result = None
+        if style_mode_actual == "nature":
+            style_result = self.apply_nature_style(
+                graph_name=graph.graph_name,
+                chart_type=str(route["chart_type"]),
+                palette_role=route_palette,
+            )
+            if export_path is not None:
+                self._export_plot_command_graph(export_path, graph.graph_name)
+            graph = GraphRef(
+                graph_name=graph.graph_name,
+                export_path=graph.export_path,
+                template=graph.template,
+                style_mode=style_mode_actual,
+            )
+
+        regression = None
+        if route.get("regression") and y_cols:
+            regression = self._atlas_linear_fit(
+                worksheet=worksheet,
+                x_col=x_col,
+                y_col=y_cols[0],
+                y_error_col=y_error_col,
+            )
+
+        diagnostics = self.diagnose_graph(
+            graph_name=graph.graph_name,
+            style=style_mode_actual if style_mode_actual == "nature" else None,
+            palette_role=route_palette,
+            export_path=export_path,
+        )
+        return {
+            "route": route,
+            "worksheet": worksheet.as_dict(),
+            "graph": graph.as_dict(),
+            "command": command,
+            "style": style_result,
+            "regression": regression,
+            "diagnostics": diagnostics,
+        }
+
+    def apply_image_panel_style(
+        self,
+        graph_name: str | None = None,
+        layer_index: int | None = None,
+        panel_label: str | None = None,
+        channel_label: str | None = None,
+        scale_bar_label: str | None = None,
+        dynamic_range_label: str | None = None,
+        dark_panel: bool = False,
+        font_size: int = 8,
+        run_diagnostics: bool = True,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        indexes = self._selected_layer_indexes(graph, layer_index)
+        labels: list[dict[str, Any]] = []
+        for index in indexes:
+            if panel_label:
+                labels.append(
+                    self.add_graph_label(
+                        panel_label,
+                        graph_name=graph_name_actual,
+                        layer_index=index,
+                        name="PanelLabel",
+                        left=5,
+                        top=5,
+                        font_size=font_size + 2,
+                    )
+                )
+            if channel_label:
+                labels.append(
+                    self.add_graph_label(
+                        channel_label,
+                        graph_name=graph_name_actual,
+                        layer_index=index,
+                        name="ChannelLabel",
+                        left=5,
+                        top=28,
+                        font_size=font_size,
+                    )
+                )
+            if scale_bar_label:
+                labels.append(
+                    self.add_graph_label(
+                        scale_bar_label,
+                        graph_name=graph_name_actual,
+                        layer_index=index,
+                        name="ScaleBarLabel",
+                        left=72,
+                        top=88,
+                        font_size=font_size,
+                    )
+                )
+            if dynamic_range_label:
+                labels.append(
+                    self.add_graph_label(
+                        dynamic_range_label,
+                        graph_name=graph_name_actual,
+                        layer_index=index,
+                        name="DynamicRangeLabel",
+                        left=72,
+                        top=5,
+                        font_size=font_size,
+                    )
+                )
+        script_parts = [f'win -a "{self._escape_labtalk(graph_name_actual)}";']
+        for index in indexes:
+            script_parts.append(f"layer -s {index + 1};")
+            if dark_panel:
+                script_parts.extend(["page.color=1;", "layer.color=1;"])
+        script = " ".join(script_parts)
+        result = self.run_labtalk(script) if script_parts else {"result": None}
+        response = {
+            "graph_name": graph_name_actual,
+            "styled_layers": indexes,
+            "dark_panel": dark_panel,
+            "labels": labels,
+            "script": script,
+            **result,
+        }
+        if run_diagnostics:
+            response["diagnostics"] = self.diagnose_graph(
+                graph_name=graph_name_actual,
+                require_panel_label=panel_label is not None,
+                require_scale_bar=scale_bar_label is not None,
+                require_channel_label=channel_label is not None,
+                require_dynamic_range=dynamic_range_label is not None,
+            )
+        return response
+
     def add_plot_to_graph(
         self,
         worksheet: str | None = None,
@@ -1445,10 +2055,18 @@ class OriginClient:
             self._set_origin_property(label, "top", top)
         if font_size is not None:
             self._set_origin_property(label, "fsize", font_size)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        label_name = self._object_name(label, default=name or "")
+        self._remember_graph_label(
+            graph_name=graph_name_actual,
+            layer_index=layer_index,
+            name=label_name,
+            text=formatted_text,
+        )
         return {
-            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "graph_name": graph_name_actual,
             "layer_index": layer_index,
-            "label_name": self._object_name(label, default=name or ""),
+            "label_name": label_name,
             "text": text,
             "formatted_text": formatted_text,
         }
@@ -1727,6 +2345,9 @@ class OriginClient:
                 "publication": (
                     "Apply origin-mcp publication styling after Origin creates the graph."
                 ),
+                "nature": (
+                    "Apply a compact Nature-style scientific figure preset after plotting."
+                ),
             },
             "mcp_overrides": {
                 "origin_default": ["title", "axis titles", "legend refresh", "axis rescale"],
@@ -1740,6 +2361,15 @@ class OriginClient:
                     "line width",
                     "symbol size",
                     "legend font size",
+                ],
+                "nature": [
+                    "Arial-compatible font settings",
+                    "small axis/title/tick/legend font sizes",
+                    "short ticks",
+                    "thin lines",
+                    "compact symbols",
+                    "colorblind-safe palette",
+                    "legend frame off",
                 ],
             },
             "notes": [
@@ -1755,7 +2385,7 @@ class OriginClient:
         layers = []
         layer_count = len(graph) if hasattr(graph, "__len__") else 1
         for index in range(layer_count):
-            layers.append(self._layer_info(graph, index))
+            layers.append(self._layer_info(graph, index, graph_name_actual))
         return {
             "graph_name": graph_name_actual,
             "long_name": getattr(graph, "lname", ""),
@@ -1769,9 +2399,10 @@ class OriginClient:
         layer_index: int = 0,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
         return {
-            "graph_name": self._object_name(graph, default=graph_name or ""),
-            "layer": self._layer_info(graph, layer_index),
+            "graph_name": graph_name_actual,
+            "layer": self._layer_info(graph, layer_index, graph_name_actual),
         }
 
     def list_fit_functions(self) -> dict[str, Any]:
@@ -1960,15 +2591,36 @@ class OriginClient:
         if path.exists() and not overwrite:
             raise OriginOperationError(f"Export path already exists: {path}")
 
-        target = graph if graph is not None else self._find_or_active_graph(graph_name)
-        if hasattr(target, "save_fig"):
-            target.save_fig(str(path))
-        elif graph_name:
-            self.run_labtalk(f'win -a {graph_name}; expGraph type:=auto path:="{path}";')
+        if graph_name:
+            self.run_labtalk(self._export_graph_labtalk(path, graph_name))
         else:
-            self.run_labtalk(f'expGraph type:=auto path:="{path}";')
+            target = graph if graph is not None else self._find_or_active_graph(graph_name)
+            if not hasattr(target, "save_fig"):
+                self.run_labtalk(self._export_graph_labtalk(path, None))
+                return {"path": str(path)}
+            target.save_fig(str(path))
 
         return {"path": str(path)}
+
+    def _export_graph_labtalk(self, path: Path, graph_name: str | None) -> str:
+        export_type = path.suffix.lower().lstrip(".") or "png"
+        if export_type == "jpeg":
+            export_type = "jpg"
+        filename = path.stem
+        safe_path = self._escape_labtalk(str(path.parent))
+        safe_filename = self._escape_labtalk(filename)
+        parts = []
+        if graph_name:
+            safe_graph_name = self._escape_labtalk(graph_name)
+            parts.append(f'win -a "{safe_graph_name}";')
+            parts.append(f'expGraph pages:="{safe_graph_name}"')
+        else:
+            parts.append("expGraph")
+        parts.append(
+            f'type:={export_type} path:="{safe_path}" '
+            f'filename:="{safe_filename}" overwrite:=replace;'
+        )
+        return " ".join(parts)
 
     def export_preview(
         self,
@@ -2094,6 +2746,235 @@ class OriginClient:
     def _resolve_graph_template(self, kind: str, template: str | None = None) -> str:
         return template or self._default_graph_templates().get(kind, "line")
 
+    @classmethod
+    def _nature_chart_style(
+        cls,
+        chart_type: str | None,
+        line_width: float,
+        symbol_size: float,
+    ) -> dict[str, Any]:
+        normalized = cls._normalize_chart_type(chart_type)
+        line_default = line_width == 1.2
+        symbol_default = symbol_size == 4.5
+        rules: dict[str, dict[str, float | None]] = {
+            "line": {"line_width": 1.2, "symbol_size": 4.5},
+            "scatter": {"line_width": 0.8, "symbol_size": 5.0},
+            "bar": {"line_width": 0.8, "symbol_size": None},
+            "box": {"line_width": 0.9, "symbol_size": None},
+            "heatmap": {"line_width": None, "symbol_size": None},
+            "surface": {"line_width": 0.8, "symbol_size": None},
+            "polar": {"line_width": 1.0, "symbol_size": 4.5},
+            "generic": {"line_width": line_width, "symbol_size": symbol_size},
+        }
+        selected = rules.get(normalized, rules["generic"])
+        return {
+            "chart_type": normalized,
+            "line_width": selected["line_width"] if line_default else line_width,
+            "symbol_size": selected["symbol_size"] if symbol_default else symbol_size,
+        }
+
+    @staticmethod
+    def _normalize_chart_type(chart_type: str | None) -> str:
+        value = (chart_type or "generic").strip().lower().replace("-", "_").replace(" ", "_")
+        if value in {"l", "line", "line_symbol", "linesymbol", "line_scatter"}:
+            return "line"
+        if value in {
+            "s",
+            "scatter",
+            "scatter3d",
+            "3dscatter",
+            "3d_scatter",
+            "bubble",
+            "bubble_color_mapped",
+            "color_mapped",
+        }:
+            return "scatter"
+        if value in {
+            "bar",
+            "column",
+            "histogram",
+            "stack_bar",
+            "floating_bar",
+            "column_stack",
+            "3d_bars",
+        }:
+            return "bar"
+        if value in {"box", "boxplot"}:
+            return "box"
+        if value in {
+            "heatmap",
+            "contour",
+            "image",
+            "matrix_heatmap",
+            "matrix_contour",
+            "ternary_contour",
+        }:
+            return "heatmap"
+        if value in {
+            "surface",
+            "surface3d",
+            "3d_surface",
+            "matrix_3d_surface",
+            "waterfall",
+            "3d_ribbon",
+        }:
+            return "surface"
+        if value in {"polar", "polar_xr_ytheta", "ternary", "smith"}:
+            return "polar"
+        return "generic"
+
+    @classmethod
+    def _nature_chart_type_for_plot_id(cls, plot_type_id: int, template: str) -> str:
+        from_template = cls._normalize_chart_type(template)
+        if from_template != "generic":
+            return from_template
+        if plot_type_id in {200, 202, 205, 207}:
+            return "line"
+        if plot_type_id in {193, 201, 240, 242, 243, 245, 247}:
+            return "scatter"
+        if plot_type_id in {203, 215, 216, 217, 219}:
+            return "bar"
+        if plot_type_id in {101, 103, 105, 220, 226}:
+            return "heatmap"
+        if plot_type_id in {241, 242, 243}:
+            return "surface"
+        return "generic"
+
+    @classmethod
+    def _chart_atlas_routes(cls) -> dict[str, dict[str, Any]]:
+        return {
+            "correlation": {
+                "kind": "scatter",
+                "chart_type": "scatter",
+                "template": "scatter",
+                "palette_role": "hero",
+                "regression": True,
+                "matrix_required": False,
+                "rationale": "Correlation is clearest as scatter with a linear-fit summary.",
+            },
+            "effect_size": {
+                "plot_type_id": 231,
+                "template": "Errbar",
+                "chart_type": "line",
+                "palette_role": "hero,neutral",
+                "matrix_required": False,
+                "rationale": "Effect sizes are best shown as interval/error-bar estimates.",
+            },
+            "composition": {
+                "plot_type_id": 216,
+                "template": "bar",
+                "chart_type": "bar",
+                "palette_role": "hero,secondary,accent,neutral",
+                "matrix_required": False,
+                "rationale": "Compositional comparisons are routed to stacked/grouped bars.",
+            },
+            "matrix": {
+                "plot_type_id": 105,
+                "template": "heatmap",
+                "chart_type": "heatmap",
+                "palette_role": "neutral",
+                "matrix_required": True,
+                "rationale": "Matrix-like values are best represented as a heatmap.",
+            },
+            "image_plate": {
+                "plot_type_id": 220,
+                "template": "image",
+                "chart_type": "heatmap",
+                "palette_role": "neutral",
+                "matrix_required": True,
+                "rationale": "Image plates should use image/heatmap plots plus panel metadata.",
+            },
+            "time_series": {
+                "kind": "line",
+                "chart_type": "line",
+                "template": "line",
+                "palette_role": "hero,baseline",
+                "matrix_required": False,
+                "rationale": "Ordered continuous values are routed to line plots.",
+            },
+            "distribution": {
+                "kind": "box",
+                "chart_type": "box",
+                "template": "box",
+                "palette_role": "hero,neutral",
+                "matrix_required": False,
+                "rationale": "Distribution summaries are routed to compact box plots.",
+            },
+        }
+
+    @classmethod
+    def _normalize_chart_intent(cls, intent: str) -> str:
+        value = intent.strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "corr": "correlation",
+            "correlation_plot": "correlation",
+            "regression": "correlation",
+            "effect": "effect_size",
+            "effectsize": "effect_size",
+            "forest": "effect_size",
+            "interval": "effect_size",
+            "composition_plot": "composition",
+            "stacked_bar": "composition",
+            "grouped_bar": "composition",
+            "heatmap": "matrix",
+            "matrix_heatmap": "matrix",
+            "image": "image_plate",
+            "microscopy": "image_plate",
+            "image_panel": "image_plate",
+            "timeseries": "time_series",
+            "time": "time_series",
+            "histogram": "distribution",
+            "box": "distribution",
+        }
+        normalized = aliases.get(value, value)
+        if normalized not in cls._chart_atlas_routes():
+            supported = ", ".join(sorted(cls._chart_atlas_routes()))
+            raise OriginOperationError(
+                f"Unsupported chart atlas intent: {intent!r}. Supported: {supported}."
+            )
+        return normalized
+
+    @staticmethod
+    def _atlas_selected_columns(
+        intent: str,
+        x_col: str | int | None,
+        y_cols: list[str | int] | None,
+        z_col: str | int | None,
+        y_error_col: str | int | None,
+        x_error_col: str | int | None,
+    ) -> list[str | int] | None:
+        selected: list[str | int] = []
+        if x_col is not None:
+            selected.append(x_col)
+        if y_cols:
+            selected.extend(y_cols)
+        if intent == "effect_size" and y_error_col is not None:
+            selected.append(y_error_col)
+        if intent == "effect_size" and x_error_col is not None:
+            selected.append(x_error_col)
+        if z_col is not None:
+            selected.append(z_col)
+        return selected or None
+
+    def _atlas_linear_fit(
+        self,
+        worksheet: WorksheetRef,
+        x_col: str | int | None,
+        y_col: str | int,
+        y_error_col: str | int | None,
+    ) -> dict[str, Any]:
+        worksheet_ref = f"[{worksheet.book_name}]{worksheet.sheet_name}"
+        x_value = x_col if x_col is not None else worksheet.columns[0]
+        try:
+            return self.linear_fit_result(
+                worksheet=worksheet_ref,
+                x_col=x_value,
+                y_col=y_col,
+                y_error_col=y_error_col,
+            )
+        except OriginOperationError as exc:
+            return {"warning": str(exc)}
+
     @staticmethod
     def _normalize_style_mode(style_mode: str | None) -> str:
         value = (style_mode or "origin_default").strip().lower()
@@ -2105,6 +2986,9 @@ class OriginClient:
             "theme": "origin_default",
             "none": "origin_default",
             "publication": "publication",
+            "nature": "nature",
+            "nature_style": "nature",
+            "nature-style": "nature",
         }
         try:
             return aliases[value]
@@ -2113,6 +2997,169 @@ class OriginClient:
             raise OriginOperationError(
                 f"Unsupported style_mode: {style_mode!r}. Supported: {supported}."
             ) from exc
+
+    @staticmethod
+    def _nature_palette() -> list[tuple[int, int, int]]:
+        return [
+            (0, 114, 178),
+            (213, 94, 0),
+            (0, 158, 115),
+            (204, 121, 167),
+            (230, 159, 0),
+            (86, 180, 233),
+            (240, 228, 66),
+            (0, 0, 0),
+        ]
+
+    @staticmethod
+    def _nature_semantic_palette() -> dict[str, tuple[int, int, int]]:
+        return {
+            "hero": (0, 114, 178),
+            "baseline": (0, 0, 0),
+            "positive": (0, 158, 115),
+            "negative": (213, 94, 0),
+            "neutral": (117, 117, 117),
+            "accent": (204, 121, 167),
+            "secondary": (86, 180, 233),
+            "warning": (230, 159, 0),
+        }
+
+    @classmethod
+    def _nature_acceptable_palette(cls) -> set[tuple[int, int, int]]:
+        return set(cls._nature_palette()) | set(cls._nature_semantic_palette().values())
+
+    @classmethod
+    def _palette_roles(
+        cls,
+        palette_role: str | list[str] | None,
+        plot_count: int,
+    ) -> list[str]:
+        if plot_count <= 0:
+            return []
+        if palette_role is None:
+            return [""] * plot_count
+        if isinstance(palette_role, str):
+            raw_roles = [role.strip().lower() for role in palette_role.split(",")]
+        else:
+            raw_roles = [str(role).strip().lower() for role in palette_role]
+        available = cls._nature_semantic_palette()
+        roles = [role for role in raw_roles if role in available]
+        if not roles:
+            return [""] * plot_count
+        if len(roles) == 1 and plot_count > 1:
+            return roles + ["neutral"] * (plot_count - 1)
+        return [roles[index % len(roles)] for index in range(plot_count)]
+
+    @staticmethod
+    def _qa_checklist(
+        issues: list[dict[str, Any]],
+        export_checked: bool,
+        require_legend: bool,
+        require_panel_label: bool,
+        require_scale_bar: bool,
+        require_channel_label: bool,
+        require_dynamic_range: bool,
+    ) -> list[dict[str, Any]]:
+        issue_codes = {issue["code"] for issue in issues}
+
+        def check(name: str, codes: set[str], active: bool = True) -> dict[str, Any]:
+            failed = sorted(issue_codes & codes)
+            return {
+                "name": name,
+                "active": active,
+                "passed": (not active) or not failed,
+                "issues": failed,
+            }
+
+        return [
+            check("layers", {"no_layers"}),
+            check("plots", {"no_plots"}),
+            check("axis_titles", {"missing_axis_title"}),
+            check(
+                "palette",
+                {"non_nature_palette_color", "semantic_palette_mismatch"},
+            ),
+            check("transparency", {"plot_transparency"}),
+            check("legend", {"missing_legend"}, active=require_legend),
+            check("panel_label", {"missing_panel_label"}, active=require_panel_label),
+            check("scale_bar", {"missing_scale_bar"}, active=require_scale_bar),
+            check("channel_label", {"missing_channel_label"}, active=require_channel_label),
+            check(
+                "dynamic_range",
+                {"missing_dynamic_range_label"},
+                active=require_dynamic_range,
+            ),
+            check(
+                "export_quality",
+                {
+                    "export_all_pixels_transparent",
+                    "export_single_color_image",
+                    "export_blank_or_near_blank",
+                    "export_low_color_complexity",
+                },
+                active=export_checked,
+            ),
+            check(
+                "export_dimensions",
+                {"export_width_too_small", "export_height_too_small"},
+                active=export_checked,
+            ),
+        ]
+
+    @staticmethod
+    def _diagnostic_issue(
+        code: str,
+        severity: str,
+        message: str,
+        **context: Any,
+    ) -> dict[str, Any]:
+        issue = {"code": code, "severity": severity, "message": message}
+        issue.update({key: value for key, value in context.items() if value is not None})
+        return issue
+
+    @staticmethod
+    def _diagnostic_penalty(issue: dict[str, Any]) -> int:
+        return {"error": 35, "warning": 15, "info": 5}.get(issue.get("severity"), 0)
+
+    @staticmethod
+    def _has_meaningful_label(value: Any) -> bool:
+        if value is None:
+            return False
+        text = str(value).strip()
+        return bool(text and text.lower() not in {"none", "axis"})
+
+    @staticmethod
+    def _rgb_tuple(value: Any) -> tuple[int, int, int] | None:
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            return None
+        try:
+            return (int(value[0]), int(value[1]), int(value[2]))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _numeric_or_none(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _label_present(
+        labels: list[dict[str, Any]],
+        names: set[str],
+        text_markers: set[str],
+    ) -> bool:
+        lower_names = {name.lower() for name in names}
+        lower_markers = {marker.lower() for marker in text_markers}
+        for label in labels:
+            name = str(label.get("name") or "").lower()
+            text = str(label.get("text") or "").lower()
+            if name in lower_names:
+                return True
+            if any(marker in text for marker in lower_markers):
+                return True
+        return False
 
     def _origin_template_paths(self) -> dict[str, str]:
         paths: dict[str, str] = {}
@@ -2663,9 +3710,17 @@ class OriginClient:
         layer_count = len(graph) if hasattr(graph, "__len__") else 1
         return list(range(layer_count))
 
-    def _layer_info(self, graph: Any, layer_index: int) -> dict[str, Any]:
+    def _layer_info(
+        self,
+        graph: Any,
+        layer_index: int,
+        graph_name: str | None = None,
+    ) -> dict[str, Any]:
         layer = self._graph_layer(graph, layer_index)
         plots = self._layer_plots(layer)
+        labels = self._layer_labels(layer)
+        if graph_name:
+            labels.extend(self._graph_annotations.get((graph_name, layer_index), []))
         axes: dict[str, dict[str, Any]] = {}
         for axis_name in ("x", "y", "z"):
             axis = getattr(layer, "axis", lambda _name: None)(axis_name)
@@ -2682,6 +3737,9 @@ class OriginClient:
             "plots_count": len(plots),
             "plots": [self._plot_info(plot, index) for index, plot in enumerate(plots)],
             "axes": axes,
+            "labels": labels,
+            "legend_present": any(label["name"].lower() == "legend" for label in labels),
+            "panel_label_present": self._panel_label_present(labels),
         }
 
     def _plot_info(self, plot: Any, index: int) -> dict[str, Any]:
@@ -2695,6 +3753,58 @@ class OriginClient:
             "symbol_size": self._safe_origin_attr(plot, "symbol_size"),
             "transparency": self._safe_origin_attr(plot, "transparency"),
         }
+
+    @staticmethod
+    def _layer_labels(layer: Any) -> list[dict[str, Any]]:
+        labels: list[dict[str, Any]] = []
+        layer_labels = getattr(layer, "labels", None)
+        if isinstance(layer_labels, dict):
+            iterable = layer_labels.items()
+        else:
+            iterable = []
+        for name, label in iterable:
+            label_name = OriginClient._object_name(label, default=str(name))
+            labels.append(
+                {
+                    "name": label_name,
+                    "text": getattr(label, "text", None),
+                }
+            )
+        label_getter = getattr(layer, "label", None)
+        if callable(label_getter) and not any(label["name"] == "Legend" for label in labels):
+            try:
+                legend = label_getter("Legend")
+            except Exception:
+                legend = None
+            if legend is not None:
+                labels.append(
+                    {
+                        "name": "Legend",
+                        "text": getattr(legend, "text", None),
+                    }
+                )
+        return labels
+
+    def _remember_graph_label(
+        self,
+        graph_name: str,
+        layer_index: int,
+        name: str,
+        text: str,
+    ) -> None:
+        if not graph_name:
+            return
+        key = (graph_name, layer_index)
+        labels = self._graph_annotations.setdefault(key, [])
+        labels.append({"name": name, "text": text})
+
+    @staticmethod
+    def _panel_label_present(labels: list[dict[str, Any]]) -> bool:
+        for label in labels:
+            text = str(label.get("text") or "").strip()
+            if len(text) == 1 and text.isalpha():
+                return True
+        return False
 
     @staticmethod
     def _safe_origin_attr(obj: Any, name: str) -> Any:

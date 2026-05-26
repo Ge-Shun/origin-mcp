@@ -1245,6 +1245,7 @@ def origin_plot_table_id(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Create a graph from table data using an Origin Plot Type ID and template."""
@@ -1267,6 +1268,7 @@ def origin_plot_table_id(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -1986,6 +1988,198 @@ def origin_apply_publication_style(
 
 
 @mcp.tool()
+def origin_apply_nature_style(
+    graph_name: str | None = None,
+    layer_index: int | None = None,
+    chart_type: str | None = None,
+    page_width: float | None = None,
+    page_height: float | None = None,
+    font_family: str = "Arial",
+    axis_title_size: int = 8,
+    tick_label_size: int = 7,
+    legend_font_size: int = 6,
+    line_width: float = 1.2,
+    symbol_size: float = 4.5,
+    tick_length: int = 3,
+    show_legend: bool = True,
+    palette_role: str | None = None,
+    run_diagnostics: bool = True,
+) -> dict[str, Any]:
+    """Apply a compact Nature-style scientific figure preset."""
+
+    return _wrap(
+        lambda: _ok(
+            "Applied Origin Nature-style figure preset.",
+            **client.apply_nature_style(
+                graph_name=graph_name,
+                layer_index=layer_index,
+                chart_type=chart_type,
+                page_width=page_width,
+                page_height=page_height,
+                font_family=font_family,
+                axis_title_size=axis_title_size,
+                tick_label_size=tick_label_size,
+                legend_font_size=legend_font_size,
+                line_width=line_width,
+                symbol_size=symbol_size,
+                tick_length=tick_length,
+                show_legend=show_legend,
+                palette_role=palette_role,
+                run_diagnostics=run_diagnostics,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_diagnose_graph(
+    graph_name: str | None = None,
+    style: str | None = None,
+    palette_role: str | None = None,
+    require_axis_titles: bool = True,
+    require_plots: bool = True,
+    require_legend: bool = False,
+    require_panel_label: bool = False,
+    require_scale_bar: bool = False,
+    require_channel_label: bool = False,
+    require_dynamic_range: bool = False,
+    export_path: str | None = None,
+    min_export_width: int = 600,
+    min_export_height: int = 400,
+) -> dict[str, Any]:
+    """Diagnose graph readiness issues such as empty layers or missing axis titles."""
+
+    return _wrap(
+        lambda: _ok(
+            "Diagnosed Origin graph.",
+            **client.diagnose_graph(
+                graph_name=graph_name,
+                style=style,
+                palette_role=palette_role,
+                require_axis_titles=require_axis_titles,
+                require_plots=require_plots,
+                require_legend=require_legend,
+                require_panel_label=require_panel_label,
+                require_scale_bar=require_scale_bar,
+                require_channel_label=require_channel_label,
+                require_dynamic_range=require_dynamic_range,
+                export_path=Path(export_path) if export_path else None,
+                min_export_width=min_export_width,
+                min_export_height=min_export_height,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_chart_atlas_route(
+    intent: str,
+    columns: list[str] | None = None,
+    matrix: bool = False,
+) -> dict[str, Any]:
+    """Choose the recommended plot route for a semantic chart intent."""
+
+    return _wrap(
+        lambda: _ok(
+            "Selected chart atlas route.",
+            **client.chart_atlas_route(intent=intent, columns=columns, matrix=matrix),
+        )
+    )
+
+
+@mcp.tool()
+def origin_plot_chart_atlas(
+    path: str,
+    intent: str,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    z_col: str | int | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    style_mode: str = "nature",
+    palette_role: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a plot using chart-atlas intent routing."""
+
+    return _wrap(
+        lambda: _ok(
+            "Created chart atlas plot.",
+            **client.plot_chart_atlas(
+                path=Path(path),
+                intent=intent,
+                x_col=x_col,
+                y_cols=y_cols,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                style_mode=style_mode,
+                palette_role=palette_role,
+                export_path=Path(export_path) if export_path else None,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_apply_image_panel_style(
+    graph_name: str | None = None,
+    layer_index: int | None = None,
+    panel_label: str | None = None,
+    channel_label: str | None = None,
+    scale_bar_label: str | None = None,
+    dynamic_range_label: str | None = None,
+    dark_panel: bool = False,
+    font_size: int = 8,
+    run_diagnostics: bool = True,
+) -> dict[str, Any]:
+    """Apply heatmap/image panel labels and optional dark panel layout."""
+
+    return _wrap(
+        lambda: _ok(
+            "Applied Origin image panel style.",
+            **client.apply_image_panel_style(
+                graph_name=graph_name,
+                layer_index=layer_index,
+                panel_label=panel_label,
+                channel_label=channel_label,
+                scale_bar_label=scale_bar_label,
+                dynamic_range_label=dynamic_range_label,
+                dark_panel=dark_panel,
+                font_size=font_size,
+                run_diagnostics=run_diagnostics,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_add_plot_to_graph(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -2689,9 +2883,11 @@ def _plot_table_id(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:
+        style_mode_actual = PlotStyleMode(style_mode).value
         worksheet, graph, command = client.plot_table_by_id(
             path=Path(path),
             plot_type_id=plot_type_id,
@@ -2710,6 +2906,7 @@ def _plot_table_id(
             title=title,
             x_label=x_label,
             y_label=y_label,
+            style_mode=style_mode_actual,
             export_path=Path(export_path) if export_path else None,
         )
         return _ok(
@@ -2731,6 +2928,7 @@ def _pti(
     graph_name: str | None,
     title: str | None,
     export_path: str | None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     return _plot_table_id(
         path=path,
@@ -2739,8 +2937,11 @@ def _pti(
         selected_cols=selected_cols,
         graph_name=graph_name,
         title=title,
+        style_mode=style_mode,
         export_path=export_path,
     )
+
+
 def main() -> None:
     mcp.run()
 

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from origin_mcp.errors import OriginOperationError
-from origin_mcp.origin_client import OriginClient
+from origin_mcp.origin_client import GraphRef, OriginClient, WorksheetRef
 
 
 def test_read_table_csv(tmp_path: Path) -> None:
@@ -487,6 +487,7 @@ class FakeLayer:
 
     def add_label(self, text: str) -> FakeLabel:
         label = FakeLabel(text)
+        label.name = f"Label{len(self.labels) + 1}"
         self.labels[label.name] = label
         return label
 
@@ -592,6 +593,26 @@ def test_format_graph_formats_axis_titles_and_title(monkeypatch: pytest.MonkeyPa
     assert next(iter(layer.labels.values())).text == "CO\\-(2) response"
 
 
+def test_export_graph_prefers_labtalk_when_graph_name_provided(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    path = tmp_path / "graph.png"
+    scripts = []
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.export_graph(path, graph_name="Graph 1")
+
+    assert result["path"] == str(path)
+    assert 'win -a "Graph 1"; expGraph pages:="Graph 1" type:=png path:="' in scripts[0]
+    assert 'filename:="graph" overwrite:=replace;' in scripts[0]
+
+
 def test_add_graph_label_formats_text(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     layer = FakeLayer()
@@ -671,6 +692,69 @@ def test_plot_table_publication_style_applies_override(
     assert publication_calls == [{"graph_name": "Graph1"}]
 
 
+def test_plot_table_nature_style_applies_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    graph = FakeGraph(FakeLayer())
+    nature_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(
+        client,
+        "apply_nature_style",
+        lambda **kwargs: nature_calls.append(kwargs) or {"styled": True},
+    )
+
+    _, graph_ref = client.plot_table(
+        path=path,
+        kind="line",
+        show_legend=False,
+        style_mode="nature",
+    )
+
+    assert graph_ref.style_mode == "nature"
+    assert nature_calls == [{"graph_name": "Graph1", "chart_type": "line"}]
+
+
+def test_plot_table_exports_by_graph_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    export_path = tmp_path / "line.png"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    graph = FakeGraph(FakeLayer())
+    export_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(
+        client,
+        "_export_plot_command_graph",
+        lambda path_arg, graph_name: export_calls.append((path_arg, graph_name))
+        or {"path": str(path_arg)},
+    )
+
+    _worksheet, graph_ref = client.plot_table(
+        path=path,
+        kind="line",
+        graph_name="NamedLine",
+        export_path=export_path,
+    )
+
+    assert graph_ref.export_path == str(export_path)
+    assert export_calls == [(export_path, "Graph1")]
+
+
 def test_default_plot_config_discovers_user_templates(tmp_path: Path) -> None:
     (tmp_path / "CustomLine.otpu").write_text("placeholder", encoding="utf-8")
     client = OriginClient()
@@ -718,6 +802,258 @@ def test_apply_publication_style_updates_plots(monkeypatch: pytest.MonkeyPatch) 
     assert "-w 2.0" in plot.commands
     assert plot.symbol_size == 8.0
     assert "layer.x.label.pt=18;" in scripts[-1]
+
+
+def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", page_width=None, page_height=None)
+
+    assert result["style"] == "nature"
+    assert result["styled_plots"] == 1
+    assert "-w 1.2" in plot.commands
+    assert plot.symbol_size == 4.5
+    assert plot.color == (0, 114, 178)
+    assert plot.transparency == 0
+    assert 'layer.x.label.font$="Arial";' in scripts[-1]
+    assert "legend.showframe=0;" in scripts[-1]
+    assert result["diagnostics"]["summary"]["plots"] == 1
+
+
+def test_apply_nature_style_uses_chart_specific_scatter_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", chart_type="scatter")
+
+    assert result["chart_type"] == "scatter"
+    assert "-w 0.8" in plot.commands
+    assert plot.symbol_size == 5.0
+
+
+def test_apply_nature_style_quotes_graph_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    graph = FakeGraph(FakeLayer([FakePlot()]))
+    graph.name = "Graph 1"
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    client.apply_nature_style("Graph 1")
+
+    assert scripts[-1].startswith('win -a "Graph 1";')
+
+
+def test_apply_nature_style_uses_semantic_palette_roles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    hero = FakePlot()
+    baseline = FakePlot()
+    graph = FakeGraph(FakeLayer([hero, baseline]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", palette_role="hero,baseline")
+
+    assert hero.color == (0, 114, 178)
+    assert baseline.color == (0, 0, 0)
+    assert result["applied_palette_roles"] == ["hero", "baseline"]
+    assert result["diagnostics"]["checklist"][3]["name"] == "palette"
+    assert result["diagnostics"]["checklist"][3]["passed"] is True
+
+
+def test_diagnose_graph_reports_missing_axis_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer([FakePlot()])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = ""
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.diagnose_graph("Graph1")
+
+    assert result["passed"] is True
+    assert result["score"] == 85
+    assert result["issues"][0]["code"] == "missing_axis_title"
+
+
+def test_diagnose_graph_reports_semantic_palette_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    plot.color = (213, 94, 0)
+    plot.transparency = 0
+    layer = FakeLayer([plot])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = "Value"
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.diagnose_graph("Graph1", style="nature", palette_role="positive")
+
+    assert result["issues"][0]["code"] == "semantic_palette_mismatch"
+    assert result["checklist"][3]["passed"] is False
+
+
+def test_diagnose_graph_checks_export_quality(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer([FakePlot()])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = "Value"
+    graph = FakeGraph(layer)
+    path = tmp_path / "blank.png"
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR"
+        b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00"
+        b"\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc```\x00\x00\x00\x04\x00\x01"
+        b"\xf6\x178U"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.diagnose_graph(
+        "Graph1",
+        export_path=path,
+        min_export_width=2,
+        min_export_height=2,
+    )
+
+    issue_codes = {issue["code"] for issue in result["issues"]}
+    assert "export_blank_or_near_blank" in issue_codes
+    assert "export_width_too_small" in issue_codes
+    assert result["checklist"][-2]["name"] == "export_quality"
+    assert result["checklist"][-2]["passed"] is False
+
+
+def test_chart_atlas_route_selects_correlation_scatter() -> None:
+    client = OriginClient()
+
+    route = client.chart_atlas_route("correlation", columns=["x", "y"])
+
+    assert route["intent"] == "correlation"
+    assert route["kind"] == "scatter"
+    assert route["regression"] is True
+    assert route["palette_role"] == "hero"
+
+
+def test_plot_chart_atlas_applies_route_style_and_regression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    worksheet = WorksheetRef("Book1", "Sheet1", ["x", "y"], 1)
+    graph = GraphRef("AtlasGraph", template="scatter", style_mode="origin_default")
+    calls = {}
+
+    def fake_plot_table(**kwargs: object) -> tuple[WorksheetRef, GraphRef]:
+        calls["plot_table"] = kwargs
+        return worksheet, graph
+
+    monkeypatch.setattr(
+        client,
+        "plot_table",
+        fake_plot_table,
+    )
+    monkeypatch.setattr(
+        client,
+        "apply_nature_style",
+        lambda **kwargs: calls.setdefault("style", kwargs) or {"styled": True},
+    )
+    monkeypatch.setattr(
+        client,
+        "_atlas_linear_fit",
+        lambda **kwargs: calls.setdefault("fit", kwargs) or {"mode": "result"},
+    )
+    monkeypatch.setattr(
+        client,
+        "diagnose_graph",
+        lambda **kwargs: calls.setdefault("diagnose", kwargs) or {"passed": True},
+    )
+
+    result = client.plot_chart_atlas(
+        path=path,
+        intent="correlation",
+        x_col="x",
+        y_cols=["y"],
+    )
+
+    assert result["route"]["intent"] == "correlation"
+    assert calls["plot_table"]["kind"] == "scatter"
+    assert calls["plot_table"]["style_mode"] == "origin_default"
+    assert calls["style"]["palette_role"] == "hero"
+    assert calls["fit"]["worksheet"] == worksheet
+    assert result["graph"]["style_mode"] == "nature"
+
+
+def test_apply_image_panel_style_adds_panel_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    graph = FakeGraph(FakeLayer([FakePlot()]))
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.apply_image_panel_style(
+        graph_name="Graph1",
+        panel_label="A",
+        channel_label="Channel 1",
+        scale_bar_label="10 um",
+        dynamic_range_label="min-max matched",
+        dark_panel=True,
+    )
+
+    label_texts = {label.text for label in graph.layer.labels.values()}
+    assert {"A", "Channel 1", "10 um", "min-max matched"} <= label_texts
+    scale_bar = next(
+        item for item in result["diagnostics"]["checklist"] if item["name"] == "scale_bar"
+    )
+    assert scale_bar["passed"] is True
+    assert "page.color=1;" in scripts[-1]
+
+
+def test_normalize_style_mode_accepts_nature_aliases() -> None:
+    assert OriginClient._normalize_style_mode("nature") == "nature"
+    assert OriginClient._normalize_style_mode("nature-style") == "nature"
 
 
 def test_change_and_remove_plot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -889,6 +1225,36 @@ def test_plot_table_by_id_sets_xyzxyz_designations(
     assert command["command"] == "worksheet"
     assert command["range_option"] == "selection"
     assert "worksheet -s 1 0 6 0; worksheet -p 183 gl3DVector;" in scripts[-1]
+
+
+def test_plot_table_by_id_nature_style_applies_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    nature_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(
+        client,
+        "apply_nature_style",
+        lambda **kwargs: nature_calls.append(kwargs) or {"styled": True},
+    )
+
+    _worksheet, graph, _command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=200,
+        template="line",
+        selected_cols=["x", "y"],
+        graph_name="NatureLine",
+        style_mode="nature",
+    )
+
+    assert graph.style_mode == "nature"
+    assert nature_calls == [{"graph_name": "NatureLine", "chart_type": "line"}]
 
 
 def test_plot_table_by_id_exports_active_graph_when_named_graph_missing(

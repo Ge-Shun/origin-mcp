@@ -63,9 +63,23 @@ Common plot wrappers:
 Common plot wrappers accept `style_mode`. The default is `origin_default`, which
 lets Origin resolve the graph template from the user's Origin/system template
 folders and avoids origin-mcp style overrides. `publication` applies the compact
-origin-mcp publication style after Origin creates the graph. `template`, `theme`,
-and `none` are accepted aliases for preserving Origin defaults; pass `template`
-when you want a specific custom template.
+origin-mcp publication style after Origin creates the graph. `nature` applies a
+Nature-style scientific figure preset with small typography, thin lines, short
+ticks, compact symbols, a colorblind-safe palette, and a frameless legend while
+preserving the resolved Origin template page size. The Nature preset also applies
+conservative chart-specific tweaks for line, scatter, bar/column, heatmap,
+surface/3D, polar, and box-style plots, then returns an automatic diagnostic
+summary. `origin_apply_nature_style` accepts `palette_role` as a semantic color
+sequence such as `hero,baseline,positive,negative`; supported roles are `hero`,
+`baseline`, `positive`, `negative`, `neutral`, `accent`, `secondary`, and
+`warning`. `template`, `theme`, and `none` are accepted aliases for preserving
+Origin defaults; pass `template` when you want a specific custom template.
+
+`origin_chart_atlas_route` and `origin_plot_chart_atlas` choose an expression
+from a semantic intent before plotting. Supported intents include `correlation`
+(scatter plus linear-fit summary), `effect_size` (interval/error-bar estimate),
+`composition` (stacked/grouped bar), `matrix` (heatmap route), `image_plate`
+(image/heatmap panel route), `time_series` (line), and `distribution` (box).
 
 Origin Plot Type ID wrappers:
 
@@ -116,6 +130,11 @@ Template/range plotting:
 - `origin_set_axis`
 - `origin_set_plot_style`
 - `origin_apply_publication_style`
+- `origin_apply_nature_style`
+- `origin_diagnose_graph`
+- `origin_chart_atlas_route`
+- `origin_plot_chart_atlas`
+- `origin_apply_image_panel_style`
 - `origin_add_plot_to_graph`
 - `origin_remove_plot_from_graph`
 - `origin_change_plot_type`
@@ -133,6 +152,13 @@ convert common notation such as `CO_2`, `x_{max}`, `m^2`, `E^{1/2}`, `H₂O`,
 subscript and superscript rendering. Single-letter suffixes such as `signal_a`
 also render as subscripts, while multi-letter identifiers such as `sample_id`
 are left unchanged unless braces are used.
+
+`origin_apply_image_panel_style` adds heatmap/image-plate metadata such as panel
+labels, channel labels, scale bar labels, dynamic-range labels, and an optional
+dark panel background. `origin_diagnose_graph` returns a QA checklist covering
+layers, plots, axis titles, palette conformance, transparency, optional legend,
+panel-label, scale-bar, channel-label, dynamic-range checks, and optional export
+quality/dimension checks when `export_path` is provided.
 
 ## Analysis Tools
 
