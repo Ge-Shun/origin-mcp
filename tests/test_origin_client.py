@@ -419,6 +419,51 @@ def test_add_plot_supports_extended_plot_types() -> None:
     assert layer.added[0][1]["type"] == "surface"
 
 
+def test_plot_table_by_id_builds_labtalk_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,size\n0,1,3\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    worksheet, graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=193,
+        template="scatter",
+        selected_cols=["x", "y", "size"],
+        graph_name="Bubble",
+    )
+
+    assert worksheet.columns == ["x", "y", "size"]
+    assert graph.graph_name == "Bubble"
+    assert command["plot_type_id"] == 193
+    assert "plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in scripts[-1]
+
+
+def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    scripts = []
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    graph = client.plot_matrix_by_id("[MBook1]MSheet1!1", 105, "heatmap", "Heat")
+
+    assert graph.graph_name == "Heat"
+    assert "plotm im:=[MBook1]MSheet1!1 plot:=105" in scripts[-1]
+
+
 def test_add_reference_line_selects_layer(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     graph = FakeGraph()

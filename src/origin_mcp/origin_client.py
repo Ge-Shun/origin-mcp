@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from .analysis_adapters import resolve_analysis_adapter
-from .compat import collect_capabilities, feature_available
+from .compat import collect_capabilities, feature_available, plot_type_coverage
 from .errors import OriginDependencyError, OriginOperationError
 
 
@@ -86,6 +86,16 @@ class OriginClient:
             **collect_capabilities(self.op, connection.get("origin_version")),
         }
         return self._capabilities
+
+    def plot_type_coverage(
+        self,
+        origin_version: float | int | None = None,
+        show: bool = False,
+        refresh: bool = False,
+    ) -> dict[str, Any]:
+        if origin_version is None:
+            origin_version = self.capabilities(show=show, refresh=refresh).get("origin_version")
+        return plot_type_coverage(origin_version)
 
     def ensure_feature(self, feature: str, operation: str) -> None:
         caps = self.capabilities(show=False)
@@ -547,7 +557,7 @@ class OriginClient:
         excel_sheet: str | int | None = 0,
         graph_name: str | None = None,
         export_path: Path | None = None,
-    ) -> tuple[WorksheetRef, GraphRef]:
+    ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         return self.plot_table(
             path=path,
             kind=kind,
@@ -654,6 +664,115 @@ class OriginClient:
 
         worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
         return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
+
+    def plot_table_by_id(
+        self,
+        path: Path,
+        plot_type_id: int,
+        template: str,
+        selected_cols: list[str | int] | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+        graph_name: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        export_path: Path | None = None,
+    ) -> tuple[WorksheetRef, GraphRef]:
+        path = path.expanduser().resolve()
+        self._validate_file(path)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        if df.empty:
+            raise OriginOperationError(f"Data file contains no rows: {path}")
+
+        columns = [str(col) for col in df.columns]
+        selected = self._resolve_selected_columns(columns, selected_cols)
+        wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+        wks.from_df(df)
+        data_range = self._worksheet_range_expr(wks, columns, selected)
+        graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
+        script = self._plot_command(
+            command="plotxy",
+            range_option="iy",
+            data_range=data_range,
+            plot_type_id=plot_type_id,
+            template=template,
+            graph_name=graph_name_actual,
+        )
+        result = self.run_labtalk(script)
+        if title or x_label or y_label:
+            try:
+                self.format_graph(
+                    graph_name=graph_name_actual,
+                    title=title,
+                    x_label=x_label,
+                    y_label=y_label,
+                    rescale=True,
+                )
+            except OriginOperationError:
+                pass
+        exported = None
+        if export_path is not None:
+            exported = self.export_graph(export_path, graph_name=graph_name_actual)["path"]
+        worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
+        return worksheet, GraphRef(graph_name=graph_name_actual, export_path=exported), {
+            "script": script,
+            "result": result.get("result"),
+            "plot_type_id": plot_type_id,
+            "template": template,
+            "selected_columns": selected,
+        }
+
+    def plot_matrix_by_id(
+        self,
+        data_range: str,
+        plot_type_id: int,
+        template: str,
+        graph_name: str | None = None,
+        title: str | None = None,
+        export_path: Path | None = None,
+    ) -> GraphRef:
+        if not data_range.strip():
+            raise OriginOperationError("data_range is empty.")
+        graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
+        command = "plotm" if plot_type_id in {101, 105, 220, 226} else "plotxyz"
+        range_option = "im" if command == "plotm" else "iz"
+        script = self._plot_command(
+            command=command,
+            range_option=range_option,
+            data_range=data_range,
+            plot_type_id=plot_type_id,
+            template=template,
+            graph_name=graph_name_actual,
+        )
+        result = self.run_labtalk(script)
+        if not result.get("result"):
+            raise OriginOperationError(f"Origin rejected plot command: {script}")
+        if title:
+            try:
+                self.format_graph(graph_name=graph_name_actual, title=title, rescale=True)
+            except OriginOperationError:
+                pass
+        exported = None
+        if export_path is not None:
+            exported = self.export_graph(export_path, graph_name=graph_name_actual)["path"]
+        return GraphRef(graph_name=graph_name_actual, export_path=exported)
 
     def list_project(self) -> dict[str, Any]:
         self.ensure_feature("pages", "Project object listing")
@@ -1961,6 +2080,47 @@ class OriginClient:
         if not resolved:
             raise OriginOperationError("No Y columns selected.")
         return resolved
+
+    def _resolve_selected_columns(
+        self,
+        columns: list[str],
+        selected_cols: list[str | int] | None,
+    ) -> list[str]:
+        if selected_cols is None:
+            return columns
+        resolved = [
+            self._resolve_column(columns, column, default_index=0)
+            for column in selected_cols
+        ]
+        if not resolved:
+            raise OriginOperationError("No columns selected.")
+        return resolved
+
+    def _worksheet_range_expr(
+        self,
+        wks: Any,
+        columns: list[str],
+        selected: list[str],
+    ) -> str:
+        ref = self._worksheet_ref(wks, columns=columns)
+        indexes = [columns.index(column) + 1 for column in selected]
+        return f"[{ref.book_name}]{ref.sheet_name}!({','.join(str(index) for index in indexes)})"
+
+    @staticmethod
+    def _plot_command(
+        command: str,
+        range_option: str,
+        data_range: str,
+        plot_type_id: int,
+        template: str,
+        graph_name: str,
+    ) -> str:
+        safe_template = OriginClient._escape_labtalk(template)
+        safe_graph = OriginClient._escape_labtalk(graph_name)
+        return (
+            f"{command} {range_option}:={data_range} plot:={plot_type_id} "
+            f"ogl:=<new template:={safe_template} name:={safe_graph}>;"
+        )
 
     @staticmethod
     def _object_name(obj: Any, default: str) -> str:

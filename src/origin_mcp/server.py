@@ -66,6 +66,26 @@ def origin_capabilities(show: bool = False, refresh: bool = False) -> dict[str, 
 
 
 @mcp.tool()
+def origin_plot_type_coverage(
+    origin_version: float | None = None,
+    show: bool = False,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Report documented Origin plot type coverage by Origin version and MCP support."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin plot type coverage information.",
+            **client.plot_type_coverage(
+                origin_version=origin_version,
+                show=show,
+                refresh=refresh,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_new_project(show: bool = True) -> dict[str, Any]:
     """Create a new Origin project."""
 
@@ -1068,6 +1088,462 @@ def origin_plot_polar(
 
 
 @mcp.tool()
+def origin_plot_table_id(
+    path: str,
+    plot_type_id: int,
+    template: str,
+    selected_cols: list[str | int] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a graph from table data using an Origin Plot Type ID and template."""
+
+    return _plot_table_id(
+        path=path,
+        plot_type_id=plot_type_id,
+        template=template,
+        selected_cols=selected_cols,
+        book_name=book_name,
+        sheet_name=sheet_name,
+        excel_sheet=excel_sheet,
+        delimiter=delimiter,
+        encoding=encoding,
+        header=header,
+        skiprows=skiprows,
+        nrows=nrows,
+        na_values=na_values,
+        graph_name=graph_name,
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        export_path=export_path,
+    )
+
+
+@mcp.tool()
+def origin_plot_matrix_id(
+    data_range: str,
+    plot_type_id: int,
+    template: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a graph from an existing matrix/XYZ Origin range using a Plot Type ID."""
+
+    return _wrap(
+        lambda: _ok(
+            "Created Origin graph from range and Plot Type ID.",
+            graph=client.plot_matrix_by_id(
+                data_range=data_range,
+                plot_type_id=plot_type_id,
+                template=template,
+                graph_name=graph_name,
+                title=title,
+                export_path=Path(export_path) if export_path else None,
+            ).as_dict(),
+        )
+    )
+
+
+@mcp.tool()
+def origin_plot_area(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create an area plot from table data."""
+
+    return _pti(path, 204, "area", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_stack_area(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a stacked area plot from table data."""
+
+    return _pti(path, 214, "stackarea", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_fill_area(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a fill area plot from table data."""
+
+    return _pti(path, 249, "fillarea", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_bar(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a horizontal bar plot from table data."""
+
+    return _pti(path, 215, "bar", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_stack_bar(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a stacked bar plot from table data."""
+
+    return _pti(path, 216, "bar", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_floating_bar(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a floating bar plot from table data."""
+
+    return _pti(path, 207, "floatbar", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_column_stack(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a column stack plot from table data."""
+
+    return _pti(path, 213, "column", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_pie(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a pie chart from table data."""
+
+    return _pti(path, 225, "pie", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_ternary(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a ternary plot from XYZ table data."""
+
+    return _pti(path, 245, "ternary", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_ternary_contour(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a ternary contour plot from table data."""
+
+    return _pti(path, 185, "TernaryContour", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_bubble(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a bubble plot from table data."""
+
+    return _pti(path, 193, "scatter", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_bubble_color_mapped(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a bubble and color-mapped plot from table data."""
+
+    return _pti(path, 248, "scatter", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_color_mapped(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a color-mapped scatter plot from table data."""
+
+    return _pti(path, 247, "scatter", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_vector_xyam(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create an XYAM vector plot from table data."""
+
+    return _pti(path, 208, "vector", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_vector_xyxy(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create an XYXY vector plot from table data."""
+
+    return _pti(path, 218, "vectxyxy", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_3d_vector(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D vector plot from table data."""
+
+    return _pti(path, 183, "gl3DVector", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_high_low_close(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a high-low-close plot from table data."""
+
+    return _pti(path, 205, "hclose", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_candlestick(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create an OHLC/candlestick chart from table data."""
+
+    return _pti(path, 221, "Candlestick", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_waterfall(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D waterfall/walls plot from table data."""
+
+    return _pti(path, 210, "walls", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_3d_ribbon(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D ribbon plot from table data."""
+
+    return _pti(path, 211, "ribbon", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_3d_bars(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D bar plot from table data."""
+
+    return _pti(path, 212, "bar3d", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_3d_errorbar(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D scatter plot with error bars from table data."""
+
+    return _pti(path, 184, "gl3DError", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_polar_xr_ytheta(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a polar X(R) Y(Theta) plot from table data."""
+
+    return _pti(path, 186, "PolarXrYTheta", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_smith(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a Smith chart from table data."""
+
+    return _pti(path, 191, "SmithCht", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_dendrogram(
+    path: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a dendrogram plot from table data."""
+
+    return _pti(path, 108, "Cluster", selected_cols, graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_matrix_3d_scatter(
+    data_range: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D scatter plot from an existing Origin matrix range."""
+
+    return origin_plot_matrix_id(data_range, 101, "gl3DScatterMat", graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_matrix_3d_surface(
+    data_range: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a 3D surface plot from an existing Origin matrix range."""
+
+    return origin_plot_matrix_id(data_range, 103, "glmesh", graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_matrix_heatmap(
+    data_range: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a heatmap from an existing Origin matrix range."""
+
+    return origin_plot_matrix_id(data_range, 105, "heatmap", graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_matrix_contour(
+    data_range: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create a contour plot from an existing Origin matrix range."""
+
+    return origin_plot_matrix_id(data_range, 226, "contour", graph_name, title, export_path)
+
+
+@mcp.tool()
+def origin_plot_image(
+    data_range: str,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Create an image plot from an existing Origin matrix range."""
+
+    return origin_plot_matrix_id(data_range, 220, "image", graph_name, title, export_path)
+
+
+@mcp.tool()
 def origin_plot_from_range(
     data_range: str,
     template: str = "line",
@@ -1967,6 +2443,77 @@ def _plot_csv(
         )
 
     return _wrap(run)
+
+
+def _plot_table_id(
+    path: str,
+    plot_type_id: int,
+    template: str,
+    selected_cols: list[str | int] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    def run() -> dict[str, Any]:
+        worksheet, graph, command = client.plot_table_by_id(
+            path=Path(path),
+            plot_type_id=plot_type_id,
+            template=template,
+            selected_cols=selected_cols,
+            book_name=book_name,
+            sheet_name=sheet_name,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+            graph_name=graph_name,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            export_path=Path(export_path) if export_path else None,
+        )
+        return _ok(
+            "Created Origin graph from table data and Plot Type ID.",
+            worksheet=worksheet.as_dict(),
+            graph=graph.as_dict(),
+            command=command,
+        )
+
+    return _wrap(run)
+
+
+def _pti(
+    path: str,
+    plot_type_id: int,
+    template: str,
+    selected_cols: list[str | int] | None,
+    graph_name: str | None,
+    title: str | None,
+    export_path: str | None,
+) -> dict[str, Any]:
+    return _plot_table_id(
+        path=path,
+        plot_type_id=plot_type_id,
+        template=template,
+        selected_cols=selected_cols,
+        graph_name=graph_name,
+        title=title,
+        export_path=export_path,
+    )
 def main() -> None:
     mcp.run()
 
