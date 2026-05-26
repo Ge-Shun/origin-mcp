@@ -16,6 +16,8 @@ from typing import Any
 import pandas as pd
 
 from .analysis_adapters import resolve_analysis_adapter
+from .chart_router import profile_table
+from .chart_router import recommend_chart as recommend_chart_route
 from .compat import collect_capabilities, feature_available, plot_type_coverage
 from .errors import OriginDependencyError, OriginOperationError
 from .runtime import python_runtime_profile
@@ -127,8 +129,7 @@ class _ImageQualityStats:
             "pixels_sampled": self.pixels,
             "unique_colors": len(self.colors),
             "top_colors": [
-                {"rgba": list(color), "count": count}
-                for color, count in self.colors.most_common(5)
+                {"rgba": list(color), "count": count} for color, count in self.colors.most_common(5)
             ],
             "non_white_ratio": round(non_white_ratio, 6),
             "non_background_ratio": round(non_background_ratio, 6),
@@ -145,10 +146,7 @@ class _ImageQualityStats:
             return False
         if rgba[3] == 0 and self.background[3] == 0:
             return False
-        delta = sum(
-            abs(value - base)
-            for value, base in zip(rgba, self.background, strict=True)
-        )
+        delta = sum(abs(value - base) for value, base in zip(rgba, self.background, strict=True))
         return delta > 24
 
     def _extend_bbox(self, x: int, y: int) -> None:
@@ -746,9 +744,7 @@ class OriginClient:
         x_name = self._resolve_column(columns, x_col, default_index=0)
         y_names = self._resolve_y_columns(columns, x_name, y_cols)
         z_name = (
-            self._resolve_column(columns, z_col, default_index=2)
-            if z_col is not None
-            else None
+            self._resolve_column(columns, z_col, default_index=2) if z_col is not None else None
         )
         yerr_name = (
             self._resolve_column(columns, y_error_col, default_index=2)
@@ -876,6 +872,7 @@ class OriginClient:
                 )
             except OriginOperationError:
                 pass
+        self._suppress_graph_title_text(graph_name=graph_name_actual, title=title)
         style_mode_actual = self._normalize_style_mode(style_mode)
         if style_mode_actual == "publication":
             self.apply_publication_style(graph_name=graph_name_actual)
@@ -939,6 +936,8 @@ class OriginClient:
                 self.format_graph(graph_name=graph_name_actual, title=title, rescale=True)
             except OriginOperationError:
                 pass
+        else:
+            self._suppress_graph_title_text(graph_name=graph_name_actual, title=None)
         exported = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
@@ -1289,11 +1288,7 @@ class OriginClient:
                 if actual_symbol_size is not None:
                     self._set_origin_property(plot, "symbol_size", actual_symbol_size)
                 role = roles[plot_index]
-                color = (
-                    semantic_palette[role]
-                    if role
-                    else palette[plot_index % len(palette)]
-                )
+                color = semantic_palette[role] if role else palette[plot_index % len(palette)]
                 self._set_origin_property(plot, "color", color)
                 try:
                     self._set_origin_property(plot, "transparency", 0)
@@ -1304,9 +1299,7 @@ class OriginClient:
 
         safe_font = self._escape_labtalk(font_family)
         script_parts = (
-            [f'win -a "{self._escape_labtalk(graph_name_actual)}";']
-            if graph_name_actual
-            else []
+            [f'win -a "{self._escape_labtalk(graph_name_actual)}";'] if graph_name_actual else []
         )
         for index in indexes:
             script_parts.extend(
@@ -1494,9 +1487,7 @@ class OriginClient:
                         )
                     plot_index = plot.get("index", 0)
                     expected_role = (
-                        expected_roles[plot_index]
-                        if plot_index < len(expected_roles)
-                        else ""
+                        expected_roles[plot_index] if plot_index < len(expected_roles) else ""
                     )
                     expected_color = self._nature_semantic_palette().get(expected_role)
                     if color is not None and expected_color is not None and color != expected_color:
@@ -1595,6 +1586,156 @@ class OriginClient:
             response["export"] = export_inspection
         return response
 
+    def recommend_chart(
+        self,
+        path: Path,
+        intent: str | None = None,
+        x_col: str | int | None = None,
+        y_cols: list[str | int] | None = None,
+        z_col: str | int | None = None,
+        y_error_col: str | int | None = None,
+        x_error_col: str | int | None = None,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+        max_recommendations: int = 5,
+    ) -> dict[str, Any]:
+        path = path.expanduser().resolve()
+        self._validate_file(path)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        if df.empty:
+            raise OriginOperationError(f"Data file contains no rows: {path}")
+        profile = profile_table(df)
+        return recommend_chart_route(
+            profile,
+            intent=intent,
+            x_col=x_col,
+            y_cols=y_cols,
+            z_col=z_col,
+            y_error_col=y_error_col,
+            x_error_col=x_error_col,
+            max_recommendations=max_recommendations,
+        )
+
+    def plot_auto(
+        self,
+        path: Path,
+        intent: str | None = None,
+        x_col: str | int | None = None,
+        y_cols: list[str | int] | None = None,
+        z_col: str | int | None = None,
+        y_error_col: str | int | None = None,
+        x_error_col: str | int | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+        graph_name: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        style_mode: str = "origin_default",
+        export_path: Path | None = None,
+    ) -> dict[str, Any]:
+        recommendation = self.recommend_chart(
+            path=path,
+            intent=intent,
+            x_col=x_col,
+            y_cols=y_cols,
+            z_col=z_col,
+            y_error_col=y_error_col,
+            x_error_col=x_error_col,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        selected = recommendation["selected"]
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        if selected.get("plot_type_id"):
+            worksheet, graph, command = self.plot_table_by_id(
+                path=path,
+                plot_type_id=int(selected["plot_type_id"]),
+                template=str(selected.get("template") or "line"),
+                selected_cols=selected.get("selected_cols"),
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                style_mode=style_mode_actual,
+                export_path=export_path,
+            )
+        else:
+            worksheet, graph = self.plot_table(
+                path=path,
+                kind=str(selected.get("kind") or "line"),
+                x_col=x_col if x_col is not None else selected.get("x_col"),
+                y_cols=y_cols if y_cols is not None else selected.get("y_cols"),
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                template=selected.get("template"),
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                z_col=z_col if z_col is not None else selected.get("z_col"),
+                y_error_col=y_error_col if y_error_col is not None else selected.get("y_error_col"),
+                x_error_col=x_error_col if x_error_col is not None else selected.get("x_error_col"),
+                style_mode=style_mode_actual,
+                export_path=export_path,
+            )
+            command = None
+        diagnostics = self.diagnose_graph(
+            graph_name=graph.graph_name,
+            style=style_mode_actual if style_mode_actual == "nature" else None,
+            palette_role=selected.get("palette_role"),
+            export_path=export_path,
+        )
+        return {
+            "recommendation": recommendation,
+            "worksheet": worksheet.as_dict(),
+            "graph": graph.as_dict(),
+            "command": command,
+            "diagnostics": diagnostics,
+        }
+
     def chart_atlas_route(
         self,
         intent: str,
@@ -1633,7 +1774,7 @@ class OriginClient:
         title: str | None = None,
         x_label: str | None = None,
         y_label: str | None = None,
-        style_mode: str = "nature",
+        style_mode: str = "origin_default",
         palette_role: str | list[str] | None = None,
         export_path: Path | None = None,
     ) -> dict[str, Any]:
@@ -1857,9 +1998,7 @@ class OriginClient:
         x_name = self._resolve_column(columns, x_col, default_index=0)
         y_name = self._resolve_column(columns, y_col, default_index=1)
         z_name = (
-            self._resolve_column(columns, z_col, default_index=2)
-            if z_col is not None
-            else None
+            self._resolve_column(columns, z_col, default_index=2) if z_col is not None else None
         )
         yerr_name = (
             self._resolve_column(columns, y_error_col, default_index=2)
@@ -2345,9 +2484,7 @@ class OriginClient:
                 "publication": (
                     "Apply origin-mcp publication styling after Origin creates the graph."
                 ),
-                "nature": (
-                    "Apply a compact Nature-style scientific figure preset after plotting."
-                ),
+                "nature": ("Apply a compact Nature-style scientific figure preset after plotting."),
             },
             "mcp_overrides": {
                 "origin_default": ["title", "axis titles", "legend refresh", "axis rescale"],
@@ -2566,15 +2703,27 @@ class OriginClient:
         if y_label:
             layer.axis("y").title = self._label_text(y_label)
         if title:
-            self._set_graph_title(layer, title)
+            self._set_page_long_name(target, title, force_labtalk=graph_name is not None)
 
         if show_legend is not None:
             self._set_legend(layer, show=show_legend)
         if rescale:
             self._rescale(layer)
+        object_graph_name = self._object_name(target, default="")
+        graph_name_actual = object_graph_name or graph_name or "Graph"
+        title_command_graph_name = None
+        if graph_name is not None:
+            title_command_graph_name = graph_name
+        elif self._supports_graph_page_commands(target):
+            title_command_graph_name = object_graph_name
+        self._suppress_graph_title_text(
+            graph=target,
+            graph_name=title_command_graph_name,
+            title=title,
+        )
 
         return {
-            "graph_name": self._object_name(target, default=graph_name or "Graph"),
+            "graph_name": graph_name_actual,
             "formatted": True,
         }
 
@@ -2592,9 +2741,11 @@ class OriginClient:
             raise OriginOperationError(f"Export path already exists: {path}")
 
         if graph_name:
+            self._suppress_graph_title_text(graph_name=graph_name, title=None)
             self.run_labtalk(self._export_graph_labtalk(path, graph_name))
         else:
             target = graph if graph is not None else self._find_or_active_graph(graph_name)
+            self._suppress_graph_title_text(graph=target, graph_name=None, title=None)
             if not hasattr(target, "save_fig"):
                 self.run_labtalk(self._export_graph_labtalk(path, None))
                 return {"path": str(path)}
@@ -3295,19 +3446,128 @@ class OriginClient:
             if callable(remove):
                 remove()
 
-    def _set_graph_title(self, layer: Any, title: str) -> None:
-        formatted_title = self._label_text(title)
-        label = getattr(layer, "label", lambda _name: None)("title")
-        if label is None:
-            add_label = getattr(layer, "add_label", None)
-            if callable(add_label):
-                label = add_label(formatted_title)
-        if label is not None:
+    def _set_page_long_name(
+        self,
+        page: Any,
+        long_name: str,
+        force_labtalk: bool = False,
+    ) -> None:
+        page_name = self._object_name(page, default="")
+        try:
+            page.lname = long_name
+        except Exception:
+            pass
+        if not page_name or (not force_labtalk and not self._supports_graph_page_commands(page)):
+            return
+        try:
+            safe_page = self._escape_labtalk(page_name)
+            safe_long_name = self._escape_labtalk(long_name)
+            self.run_labtalk(f'win -a "{safe_page}"; page.longname$="{safe_long_name}";')
+        except Exception:
+            pass
+
+    def _suppress_graph_title_text(
+        self,
+        graph_name: str | None = None,
+        graph: Any | None = None,
+        title: str | None = None,
+    ) -> None:
+        target = graph
+
+        candidates = self._graph_title_text_candidates(target, graph_name, title)
+        if target is not None:
+            layer_count = len(target) if hasattr(target, "__len__") else 1
+            for index in range(layer_count):
+                try:
+                    layer = target[index] if hasattr(target, "__getitem__") else target
+                except Exception:
+                    continue
+                self._suppress_layer_title_text(layer, candidates)
+
+        page_name = graph_name or ""
+        if page_name:
             try:
-                label.name = "title"
+                safe_page = self._escape_labtalk(page_name)
+                self.run_labtalk(
+                    f'win -a "{safe_page}"; '
+                    'title.show=0; title.text$=""; '
+                    'Title.show=0; Title.text$=""; '
+                    'GraphTitle.show=0; GraphTitle.text$="";'
+                )
             except Exception:
                 pass
-            label.text = formatted_title
+
+    def _suppress_layer_title_text(self, layer: Any, candidates: set[str]) -> None:
+        labels = getattr(layer, "labels", None)
+        if isinstance(labels, dict):
+            for key, label in list(labels.items()):
+                if self._is_graph_title_label(str(key), label, candidates):
+                    self._remove_or_clear_label(label)
+                    labels.pop(key, None)
+
+        label_getter = getattr(layer, "label", None)
+        if callable(label_getter):
+            for name in ("title", "Title", "GraphTitle", "Graph Title"):
+                try:
+                    label = label_getter(name)
+                except Exception:
+                    continue
+                if label is not None:
+                    self._remove_or_clear_label(label)
+
+    @staticmethod
+    def _supports_graph_page_commands(graph: Any) -> bool:
+        return bool(
+            graph is not None
+            and (
+                hasattr(graph, "save_fig")
+                or hasattr(graph, "obj")
+                or graph.__class__.__module__.startswith("originpro")
+            )
+        )
+
+    @staticmethod
+    def _remove_or_clear_label(label: Any) -> None:
+        remove = getattr(label, "remove", None)
+        if callable(remove):
+            try:
+                remove()
+                return
+            except Exception:
+                pass
+        for attr, value in (("text", ""), ("show", False), ("visible", False)):
+            try:
+                setattr(label, attr, value)
+            except Exception:
+                pass
+
+    def _graph_title_text_candidates(
+        self,
+        graph: Any | None,
+        graph_name: str | None,
+        title: str | None,
+    ) -> set[str]:
+        values = {
+            graph_name,
+            title,
+            self._object_name(graph, default="") if graph is not None else None,
+            str(getattr(graph, "lname", "")) if graph is not None else None,
+        }
+        return {self._plain_label_text(str(value)) for value in values if value}
+
+    @classmethod
+    def _is_graph_title_label(cls, name: str, label: Any, candidates: set[str]) -> bool:
+        name_key = name.strip().lower().replace(" ", "").replace("_", "")
+        object_name = cls._object_name(label, default="")
+        object_key = object_name.strip().lower().replace(" ", "").replace("_", "")
+        if name_key in {"title", "graphtitle"} or object_key in {"title", "graphtitle"}:
+            return True
+        text = cls._plain_label_text(str(getattr(label, "text", "") or ""))
+        return bool(text and text in candidates)
+
+    @staticmethod
+    def _plain_label_text(value: str) -> str:
+        return value.replace("\r", "\n").strip().casefold()
 
     def _worksheet_to_df(self, wks: Any) -> pd.DataFrame:
         to_df = getattr(wks, "to_df", None)
@@ -3579,8 +3839,7 @@ class OriginClient:
     def _serialize_analysis_value(value: Any) -> Any:
         if isinstance(value, dict):
             return {
-                str(key): OriginClient._serialize_analysis_value(val)
-                for key, val in value.items()
+                str(key): OriginClient._serialize_analysis_value(val) for key, val in value.items()
             }
         if isinstance(value, list | tuple):
             return [OriginClient._serialize_analysis_value(item) for item in value]
@@ -3593,11 +3852,7 @@ class OriginClient:
             except Exception:
                 pass
         if hasattr(value, "__dict__") and not isinstance(value, type):
-            public = {
-                key: val
-                for key, val in vars(value).items()
-                if not key.startswith("_")
-            }
+            public = {key: val for key, val in vars(value).items() if not key.startswith("_")}
             if public:
                 return OriginClient._serialize_analysis_value(public)
         try:
@@ -3929,8 +4184,7 @@ class OriginClient:
                     )
                 elif chunk_type == b"PLTE":
                     palette = [
-                        tuple(data[index : index + 3])
-                        for index in range(0, len(data) - 2, 3)
+                        tuple(data[index : index + 3]) for index in range(0, len(data) - 2, 3)
                     ]
                 elif chunk_type == b"IDAT":
                     idat.extend(data)
@@ -4147,9 +4401,7 @@ class OriginClient:
             if root.strip()
         ]
         if not any(resolved == root or root in resolved.parents for root in roots):
-            raise OriginOperationError(
-                f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}"
-            )
+            raise OriginOperationError(f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}")
 
     @staticmethod
     def _resolve_column(columns: list[str], value: str | int | None, default_index: int) -> str:
@@ -4187,8 +4439,7 @@ class OriginClient:
         if selected_cols is None:
             return columns
         resolved = [
-            self._resolve_column(columns, column, default_index=0)
-            for column in selected_cols
+            self._resolve_column(columns, column, default_index=0) for column in selected_cols
         ]
         if not resolved:
             raise OriginOperationError("No columns selected.")

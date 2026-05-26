@@ -29,9 +29,7 @@ client = OriginClient()
 
 
 def _ok(message: str, **data: Any) -> dict[str, Any]:
-    return ToolResult(ok=True, message=message, data=_json_safe(data)).model_dump(
-        exclude_none=True
-    )
+    return ToolResult(ok=True, message=message, data=_json_safe(data)).model_dump(exclude_none=True)
 
 
 def _json_safe(value: Any) -> Any:
@@ -1869,7 +1867,7 @@ def origin_format_graph(
     show_legend: bool | None = None,
     rescale: bool = True,
 ) -> dict[str, Any]:
-    """Set graph title, axis labels, legend visibility, and optional rescale."""
+    """Set graph long name, axis labels, legend visibility, and optional rescale."""
 
     def run() -> dict[str, Any]:
         req = GraphFormatRequest(
@@ -2072,6 +2070,108 @@ def origin_diagnose_graph(
 
 
 @mcp.tool()
+def origin_recommend_chart(
+    path: str,
+    intent: str | None = None,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    z_col: str | int | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    max_recommendations: int = 5,
+) -> dict[str, Any]:
+    """Recommend chart types from table shape, column semantics, and optional intent."""
+
+    return _wrap(
+        lambda: _ok(
+            "Recommended chart route.",
+            **client.recommend_chart(
+                path=Path(path),
+                intent=intent,
+                x_col=x_col,
+                y_cols=y_cols,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                max_recommendations=max_recommendations,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_plot_auto(
+    path: str,
+    intent: str | None = None,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    z_col: str | int | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    style_mode: str = "origin_default",
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Choose a chart route from table data and create the plot."""
+
+    return _wrap(
+        lambda: _ok(
+            "Created automatically routed plot.",
+            **client.plot_auto(
+                path=Path(path),
+                intent=intent,
+                x_col=x_col,
+                y_cols=y_cols,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                excel_sheet=excel_sheet,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                skiprows=skiprows,
+                nrows=nrows,
+                na_values=na_values,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                style_mode=style_mode,
+                export_path=Path(export_path) if export_path else None,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_chart_atlas_route(
     intent: str,
     columns: list[str] | None = None,
@@ -2109,7 +2209,7 @@ def origin_plot_chart_atlas(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    style_mode: str = "nature",
+    style_mode: str = "origin_default",
     palette_role: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:

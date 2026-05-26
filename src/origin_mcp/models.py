@@ -98,7 +98,7 @@ class PlotTableRequest(TableImportRequest):
         default=None,
         description="Optional Origin graph template name or path.",
     )
-    title: str | None = Field(default=None, description="Optional graph title label.")
+    title: str | None = Field(default=None, description="Optional graph page long name.")
     x_label: str | None = Field(default=None, description="Optional X axis title.")
     y_label: str | None = Field(default=None, description="Optional Y axis title.")
     show_legend: bool = Field(default=True, description="Whether to refresh/show the graph legend.")
@@ -118,7 +118,7 @@ class PlotCsvRequest(PlotTableRequest):
 
 class GraphFormatRequest(BaseModel):
     graph_name: str | None = Field(default=None, description="Optional graph page name.")
-    title: str | None = Field(default=None, description="Optional graph title label.")
+    title: str | None = Field(default=None, description="Optional graph page long name.")
     x_label: str | None = Field(default=None, description="Optional X axis title.")
     y_label: str | None = Field(default=None, description="Optional Y axis title.")
     show_legend: bool | None = Field(

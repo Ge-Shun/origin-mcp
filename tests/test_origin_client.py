@@ -246,9 +246,7 @@ def test_run_analysis_structures_polynomial_output(monkeypatch: pytest.MonkeyPat
     assert {"name": "Intercept", "path": "coefVec[1]", "value": 1.0, "stderr": 0.1} in result[
         "parameters"
     ]
-    assert {"name": "B1", "path": "coefVec[2]", "value": 2.0, "stderr": 0.2} in result[
-        "parameters"
-    ]
+    assert {"name": "B1", "path": "coefVec[2]", "value": 2.0, "stderr": 0.2} in result["parameters"]
     assert result["metrics"]["RSquare"] == 0.99
     assert result["metrics"]["RSqCOD"] == 0.99
 
@@ -263,9 +261,7 @@ def test_structure_fit_result_extracts_parameters_and_metrics() -> None:
         }
     )
 
-    assert {"name": "Slope", "path": "Parameters.Slope", "value": 2.0} in structured[
-        "parameters"
-    ]
+    assert {"name": "Slope", "path": "Parameters.Slope", "value": 2.0} in structured["parameters"]
     assert structured["metrics"]["RSquare"] == 0.99
 
 
@@ -427,6 +423,7 @@ class FakeGraph:
 
     def __init__(self, layer: "FakeLayer | None" = None) -> None:
         self.layer = layer
+        self.lname = ""
 
     def __len__(self) -> int:
         return 1 if self.layer is not None else 0
@@ -464,6 +461,10 @@ class FakeLabel:
 
     def __init__(self, text: str) -> None:
         self.text = text
+        self.removed = False
+
+    def remove(self) -> None:
+        self.removed = True
 
 
 class FakeLayer:
@@ -573,12 +574,16 @@ def test_get_graph_info_tolerates_origin_plot_property_errors(
     assert result["layers"][0]["plots"][0]["symbol_kind"] is None
 
 
-def test_format_graph_formats_axis_titles_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_format_graph_formats_axis_titles_and_sets_graph_long_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = OriginClient()
     layer = FakeLayer()
     graph = FakeGraph(layer)
+    scripts = []
     monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
     monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(client, "run_labtalk", lambda script: scripts.append(script))
 
     client.format_graph(
         "Graph1",
@@ -590,7 +595,30 @@ def test_format_graph_formats_axis_titles_and_title(monkeypatch: pytest.MonkeyPa
 
     assert layer.axis("x").title == "time (s)"
     assert layer.axis("y").title == "rate m\\+(-2)"
-    assert next(iter(layer.labels.values())).text == "CO\\-(2) response"
+    assert graph.lname == "CO_2 response"
+    assert layer.labels == {}
+    assert scripts == [
+        'win -a "Graph1"; page.longname$="CO_2 response";',
+        'win -a "Graph1"; title.show=0; title.text$=""; '
+        'Title.show=0; Title.text$=""; GraphTitle.show=0; GraphTitle.text$="";',
+    ]
+
+
+def test_format_graph_removes_template_title_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    title_label = FakeLabel("Graph1")
+    title_label.name = "Title"
+    layer.labels["Title"] = title_label
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+
+    client.format_graph("Graph1", rescale=False)
+
+    assert title_label.removed is True
+    assert layer.labels == {}
 
 
 def test_export_graph_prefers_labtalk_when_graph_name_provided(
@@ -609,8 +637,9 @@ def test_export_graph_prefers_labtalk_when_graph_name_provided(
     result = client.export_graph(path, graph_name="Graph 1")
 
     assert result["path"] == str(path)
-    assert 'win -a "Graph 1"; expGraph pages:="Graph 1" type:=png path:="' in scripts[0]
-    assert 'filename:="graph" overwrite:=replace;' in scripts[0]
+    assert 'title.show=0; title.text$="";' in scripts[0]
+    assert 'win -a "Graph 1"; expGraph pages:="Graph 1" type:=png path:="' in scripts[1]
+    assert 'filename:="graph" overwrite:=replace;' in scripts[1]
 
 
 def test_add_graph_label_formats_text(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -740,8 +769,9 @@ def test_plot_table_exports_by_graph_name(
     monkeypatch.setattr(
         client,
         "_export_plot_command_graph",
-        lambda path_arg, graph_name: export_calls.append((path_arg, graph_name))
-        or {"path": str(path_arg)},
+        lambda path_arg, graph_name: (
+            export_calls.append((path_arg, graph_name)) or {"path": str(path_arg)}
+        ),
     )
 
     _worksheet, graph_ref = client.plot_table(
@@ -969,7 +999,7 @@ def test_chart_atlas_route_selects_correlation_scatter() -> None:
     assert route["palette_role"] == "hero"
 
 
-def test_plot_chart_atlas_applies_route_style_and_regression(
+def test_plot_chart_atlas_defaults_to_origin_style_and_regression(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1015,8 +1045,46 @@ def test_plot_chart_atlas_applies_route_style_and_regression(
     assert result["route"]["intent"] == "correlation"
     assert calls["plot_table"]["kind"] == "scatter"
     assert calls["plot_table"]["style_mode"] == "origin_default"
-    assert calls["style"]["palette_role"] == "hero"
+    assert "style" not in calls
     assert calls["fit"]["worksheet"] == worksheet
+    assert calls["diagnose"]["style"] is None
+    assert result["graph"]["style_mode"] == "origin_default"
+
+
+def test_plot_chart_atlas_applies_nature_only_when_requested(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    worksheet = WorksheetRef("Book1", "Sheet1", ["x", "y"], 1)
+    graph = GraphRef("AtlasGraph", template="scatter", style_mode="origin_default")
+    calls = {}
+
+    def fake_plot_table(**kwargs: object) -> tuple[WorksheetRef, GraphRef]:
+        calls["plot_table"] = kwargs
+        return worksheet, graph
+
+    monkeypatch.setattr(client, "plot_table", fake_plot_table)
+    monkeypatch.setattr(
+        client,
+        "apply_nature_style",
+        lambda **kwargs: calls.setdefault("style", kwargs) or {"styled": True},
+    )
+    monkeypatch.setattr(client, "_atlas_linear_fit", lambda **kwargs: {"mode": "result"})
+    monkeypatch.setattr(client, "diagnose_graph", lambda **kwargs: {"passed": True})
+
+    result = client.plot_chart_atlas(
+        path=path,
+        intent="correlation",
+        x_col="x",
+        y_cols=["y"],
+        style_mode="nature",
+    )
+
+    assert calls["plot_table"]["style_mode"] == "origin_default"
+    assert calls["style"]["palette_role"] == "hero"
     assert result["graph"]["style_mode"] == "nature"
 
 
@@ -1157,7 +1225,8 @@ def test_plot_table_by_id_builds_labtalk_command(
     assert worksheet.columns == ["x", "y", "size"]
     assert graph.graph_name == "Bubble"
     assert command["plot_type_id"] == 193
-    assert "plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in scripts[-1]
+    assert any("plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in script for script in scripts)
+    assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
 def test_plot_table_by_id_uses_plotxyz_for_xyz_plot_types(
@@ -1189,7 +1258,8 @@ def test_plot_table_by_id_uses_plotxyz_for_xyz_plot_types(
     assert "wks.col1.type=4;" in scripts[0]
     assert "wks.col2.type=1;" in scripts[0]
     assert "wks.col3.type=6;" in scripts[0]
-    assert "plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240" in scripts[-1]
+    assert any("plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240" in script for script in scripts)
+    assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
 def test_plot_table_by_id_sets_xyzxyz_designations(
@@ -1224,7 +1294,8 @@ def test_plot_table_by_id_sets_xyzxyz_designations(
     assert "wks.col6.type=6;" in scripts[0]
     assert command["command"] == "worksheet"
     assert command["range_option"] == "selection"
-    assert "worksheet -s 1 0 6 0; worksheet -p 183 gl3DVector;" in scripts[-1]
+    assert any("worksheet -s 1 0 6 0; worksheet -p 183 gl3DVector;" in script for script in scripts)
+    assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
 def test_plot_table_by_id_nature_style_applies_override(
@@ -1304,7 +1375,8 @@ def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch)
 
     assert graph.graph_name == "Heat"
     assert 'win -a "MBook1";' in scripts[0]
-    assert "plotm im:=[MBook1]MSheet1!1 plot:=105" in scripts[-1]
+    assert any("plotm im:=[MBook1]MSheet1!1 plot:=105" in script for script in scripts)
+    assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
 def test_plot_matrix_by_id_uses_plotm_for_surface_matrix(
@@ -1322,7 +1394,8 @@ def test_plot_matrix_by_id_uses_plotm_for_surface_matrix(
 
     assert graph.graph_name == "Surface"
     assert 'win -a "MBook1";' in scripts[0]
-    assert "plotm im:=[MBook1]MSheet1!1 plot:=103" in scripts[-1]
+    assert any("plotm im:=[MBook1]MSheet1!1 plot:=103" in script for script in scripts)
+    assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
 def test_add_reference_line_selects_layer(monkeypatch: pytest.MonkeyPatch) -> None:

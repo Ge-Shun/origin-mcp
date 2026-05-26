@@ -75,11 +75,19 @@ sequence such as `hero,baseline,positive,negative`; supported roles are `hero`,
 `warning`. `template`, `theme`, and `none` are accepted aliases for preserving
 Origin defaults; pass `template` when you want a specific custom template.
 
+`origin_recommend_chart` and `origin_plot_auto` inspect the table before choosing
+a graph route. The recommender profiles column types, date/time columns,
+categorical groups, error/interval columns, OHLC financial columns, ternary
+composition triplets, source/target network-like columns, and XYZ grid structure.
+It returns ranked candidates with a rationale before plotting.
+
 `origin_chart_atlas_route` and `origin_plot_chart_atlas` choose an expression
 from a semantic intent before plotting. Supported intents include `correlation`
 (scatter plus linear-fit summary), `effect_size` (interval/error-bar estimate),
 `composition` (stacked/grouped bar), `matrix` (heatmap route), `image_plate`
 (image/heatmap panel route), `time_series` (line), and `distribution` (box).
+Chart atlas plotting also defaults to `origin_default`; pass `style_mode="nature"`
+explicitly to apply Nature styling.
 
 Origin Plot Type ID wrappers:
 
@@ -132,6 +140,8 @@ Template/range plotting:
 - `origin_apply_publication_style`
 - `origin_apply_nature_style`
 - `origin_diagnose_graph`
+- `origin_recommend_chart`
+- `origin_plot_auto`
 - `origin_chart_atlas_route`
 - `origin_plot_chart_atlas`
 - `origin_apply_image_panel_style`
@@ -146,12 +156,15 @@ Template/range plotting:
 - `origin_format_legend`
 
 Text shown on graphs is normalized for Origin rich text automatically. Axis
-titles, graph titles, graph labels, reference-line labels, and column label rows
+titles, graph labels, reference-line labels, and column label rows
 convert common notation such as `CO_2`, `x_{max}`, `m^2`, `E^{1/2}`, `H₂O`,
 `m⁻²`, `<sub>2</sub>`, and `<sup>-1</sup>` to Origin escape sequences for
 subscript and superscript rendering. Single-letter suffixes such as `signal_a`
 also render as subscripts, while multi-letter identifiers such as `sample_id`
 are left unchanged unless braces are used.
+
+Plot `title` parameters are stored as graph page long names instead of visible
+labels inside the exported image.
 
 `origin_apply_image_panel_style` adds heatmap/image-plate metadata such as panel
 labels, channel labels, scale bar labels, dynamic-range labels, and an optional
