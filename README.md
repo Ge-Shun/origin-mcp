@@ -77,6 +77,20 @@ origin-mcp
 The server speaks MCP over stdio. It is normally launched by an MCP client rather than
 run by hand.
 
+## Smoke Test
+
+After installation, run a real Origin end-to-end check:
+
+```powershell
+.\.venv\Scripts\origin-mcp-smoke.exe
+```
+
+The smoke test imports `examples/sample_data.csv`, creates and formats a graph,
+exports a PNG preview, saves an OPJU project, and detaches from Origin. See
+[examples/smoke-test.md](examples/smoke-test.md) for options and troubleshooting.
+If the executable is not present after pulling a new version, rerun
+`python -m pip install -e .` or use `python -m origin_mcp.smoke_test`.
+
 ## MCP Client Configuration
 
 Example configuration:

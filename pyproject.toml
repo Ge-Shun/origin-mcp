@@ -42,6 +42,7 @@ dev = [
 
 [project.scripts]
 origin-mcp = "origin_mcp.server:main"
+origin-mcp-smoke = "origin_mcp.smoke_test:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/origin_mcp"]

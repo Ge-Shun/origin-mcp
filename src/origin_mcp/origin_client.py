@@ -782,11 +782,10 @@ class OriginClient:
         graph = self._find_or_active_graph(graph_name)
         graph_name_actual = self._object_name(graph, default=graph_name or "")
         if page_width is not None or page_height is not None:
-            self.set_graph_page(
-                graph_name=graph_name_actual,
-                width=page_width,
-                height=page_height,
-            )
+            if page_width is not None:
+                self._set_origin_property(graph, "width", page_width)
+            if page_height is not None:
+                self._set_origin_property(graph, "height", page_height)
         indexes = self._selected_layer_indexes(graph, layer_index)
         styled_plots = 0
         for index in indexes:
