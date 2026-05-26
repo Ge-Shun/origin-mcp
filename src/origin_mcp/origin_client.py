@@ -2329,9 +2329,9 @@ class OriginClient:
             if axis is None:
                 continue
             axes[axis_name] = {
-                "title": getattr(axis, "title", None),
-                "scale": getattr(axis, "scale", None),
-                "limits": getattr(axis, "limits", None),
+                "title": self._safe_origin_attr(axis, "title"),
+                "scale": self._safe_origin_attr(axis, "scale"),
+                "limits": self._safe_origin_attr(axis, "limits"),
             }
         return {
             "index": layer_index,
@@ -2345,13 +2345,20 @@ class OriginClient:
         return {
             "index": index,
             "name": self._object_name(plot, default=f"Plot{index + 1}"),
-            "color": getattr(plot, "color", None),
-            "line_width": getattr(plot, "line_width", None),
-            "line_style": getattr(plot, "line_style", None),
-            "symbol_kind": getattr(plot, "symbol_kind", None),
-            "symbol_size": getattr(plot, "symbol_size", None),
-            "transparency": getattr(plot, "transparency", None),
+            "color": self._safe_origin_attr(plot, "color"),
+            "line_width": self._safe_origin_attr(plot, "line_width"),
+            "line_style": self._safe_origin_attr(plot, "line_style"),
+            "symbol_kind": self._safe_origin_attr(plot, "symbol_kind"),
+            "symbol_size": self._safe_origin_attr(plot, "symbol_size"),
+            "transparency": self._safe_origin_attr(plot, "transparency"),
         }
+
+    @staticmethod
+    def _safe_origin_attr(obj: Any, name: str) -> Any:
+        try:
+            return getattr(obj, name, None)
+        except (RuntimeError, SystemError, ValueError, TypeError):
+            return None
 
     @staticmethod
     def _set_plot_command(plot: Any, command: str) -> None:

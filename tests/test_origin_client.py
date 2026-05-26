@@ -436,6 +436,24 @@ def test_get_graph_info_reports_layers_and_plots(monkeypatch: pytest.MonkeyPatch
     assert result["layers"][0]["axes"]["x"]["scale"] == "linear"
 
 
+def test_get_graph_info_tolerates_origin_plot_property_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+
+    class BrokenPlot(FakePlot):
+        @property
+        def symbol_kind(self) -> int:
+            raise ValueError("cannot convert float NaN to integer")
+
+    graph = FakeGraph(FakeLayer([BrokenPlot()]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.get_graph_info("Graph1")
+
+    assert result["layers"][0]["plots"][0]["symbol_kind"] is None
+
+
 def test_format_graph_formats_axis_titles_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     layer = FakeLayer()
