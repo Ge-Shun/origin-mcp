@@ -35,11 +35,12 @@ directly instead of only generating standalone plotting code.
 
 - Windows
 - Origin or OriginPro installed and licensed
-- Python 3.10 to 3.12 recommended
+- Python 3.11 or 3.12 recommended; Python 3.10 is supported but less tested
 - Origin's `originpro` package and `pywin32`
 
-Python 3.14 may run the MCP server itself, but Origin automation packages may not
-publish compatible wheels yet. If installation fails, use Python 3.11 or 3.12.
+Newer Python versions such as Python 3.14 may run the MCP server itself, but
+Origin automation packages may not publish compatible wheels yet. If installation
+fails on a newer Python version, use Python 3.11 or 3.12.
 
 ## Install
 
@@ -73,38 +74,6 @@ Example MCP client configuration:
 
 Replace `C:\\path\\to\\origin-mcp` with your local checkout path. More examples
 are in [docs/mcp-config.md](docs/mcp-config.md).
-
-## Smoke Test
-
-After installation, run a real end-to-end Origin check:
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.smoke_test
-```
-
-The smoke test imports `examples/sample_data.csv`, creates and formats a graph,
-exports a PNG preview, saves an OPJU project, and detaches from Origin. See
-[examples/smoke-test.md](examples/smoke-test.md) for options.
-
-For broader verification:
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
-```
-
-To regression-check documented Origin Plot Type IDs:
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix --limit 10
-```
-
-## Example Prompt
-
-```text
-Import D:\origin-mcp\examples\sample_data.csv, plot signal_a and signal_b
-against time as lines, set the title to "Sample Signals", and export the graph
-to D:\origin-mcp\output\sample_labeled.png.
-```
 
 ## Documentation
 

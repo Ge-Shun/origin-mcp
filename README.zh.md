@@ -29,11 +29,12 @@ pull request。
 
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
-- 推荐 Python 3.10 到 3.12
+- 推荐 Python 3.11 或 3.12；Python 3.10 受支持，但测试较少
 - Origin 的 `originpro` 包和 `pywin32`
 
-Python 3.14 可能可以运行 MCP 服务器本身，但 Origin 自动化相关包不一定已经发布兼容
-wheel。如果安装失败，请使用 Python 3.11 或 3.12。
+Python 3.14 等较新的 Python 版本可能可以运行 MCP 服务器本身，但 Origin 自动化相关包
+不一定已经发布兼容 wheel。如果在较新的 Python 版本上安装失败，请使用 Python 3.11
+或 3.12。
 
 ## 安装
 
@@ -67,37 +68,6 @@ MCP 客户端配置示例：
 
 请将 `C:\\path\\to\\origin-mcp` 替换为你的本地项目路径。更多示例见
 [docs/mcp-config.md](docs/mcp-config.md)。
-
-## 烟测
-
-安装后可以运行真实 Origin 端到端检查：
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.smoke_test
-```
-
-该烟测会导入 `examples/sample_data.csv`，创建并格式化图形，导出 PNG 预览，保存 OPJU
-项目，并从 Origin 断开。可选参数见 [examples/smoke-test.md](examples/smoke-test.md)。
-
-更完整的检查：
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
-```
-
-回归检查 Origin Plot Type ID：
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix --limit 10
-```
-
-## 示例提示词
-
-```text
-导入 D:\origin-mcp\examples\sample_data.csv，将 signal_a 和 signal_b
-按 time 绘制为折线图，标题设为 "Sample Signals"，并导出到
-D:\origin-mcp\output\sample_labeled.png。
-```
 
 ## 文档
 
