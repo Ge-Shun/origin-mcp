@@ -1,7 +1,20 @@
 # origin-mcp
 
-`origin-mcp` is a local MCP server that lets AI clients control Origin/OriginPro on a
-Windows machine through Origin's Python automation interface.
+`origin-mcp` is a local Model Context Protocol (MCP) server for controlling
+Origin/OriginPro from AI assistants. It runs on a Windows machine, connects to
+Origin through OriginLab's Python automation interface, and exposes practical
+tools for importing data, editing worksheets, creating publication-style graphs,
+running Origin analyses, exporting figures, and managing the Origin application
+lifecycle.
+
+The project is designed for researchers, engineers, and data analysts who want an
+AI model to operate Origin as part of a reproducible desktop workflow. Instead
+of asking the model to generate only Python plotting code, `origin-mcp` lets the
+model use the installed Origin environment directly: it can load real project
+files, reuse Origin templates, inspect worksheets, refine graph pages, run
+LabTalk/X-Function analysis commands, and export finished figures.
+
+## What It Can Do
 
 The first version focuses on a practical plotting loop:
 
