@@ -1,0 +1,119 @@
+# origin-mcp
+
+[English README](README.md)
+
+`origin-mcp` 是一个本地 Model Context Protocol (MCP) 服务器，用于让 AI
+助手在 Windows 上控制 Origin/OriginPro。它通过 OriginLab 的 Python 自动化接口连接
+Origin，并提供数据导入、工作表编辑、绘图与图形美化、Origin 分析、图形导出以及
+Origin 生命周期管理等工具。
+
+本项目目前仍处于测试阶段。欢迎在真实 Origin 工作流中试用，提交 issue、改进建议或
+pull request。
+
+项目目标是让 AI 模型直接协作使用你本机安装的 Origin 环境，而不是只生成独立的绘图
+代码。
+
+## 功能亮点
+
+- 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
+- 读取、写入、排序、清空和导出工作表数据。
+- 创建常见 2D、3D、等高线、统计、极坐标、三元图、向量图、气泡图、图像图和矩阵图。
+- 覆盖 Origin 文档中的 Plot Type ID，并提供直接 MCP 工具。
+- 检查和调整图页、图层、坐标轴、图例、标签、参考线、plot 样式和发表级样式。
+- 支持 Nature 风格预设、语义色板、chart atlas 路由、图像板块标签和 QA checklist。
+- 运行常见 Origin 分析，包括拟合、平滑、积分、微分、寻峰和描述统计。
+- 将分析输出工作表读回 JSON，并在可能时规范化拟合参数和指标。
+- 导出图形、预览导出图像、保存项目，并安全释放或关闭 Origin。
+
+## 环境要求
+
+- Windows
+- 已安装并授权的 Origin 或 OriginPro
+- 推荐 Python 3.10 到 3.12
+- Origin 的 `originpro` 包和 `pywin32`
+
+Python 3.14 可能可以运行 MCP 服务器本身，但 Origin 自动化相关包不一定已经发布兼容
+wheel。如果安装失败，请使用 Python 3.11 或 3.12。
+
+## 安装
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install -e ".[origin]"
+```
+
+如果你的 Origin 安装环境已经能提供 `originpro`：
+
+```powershell
+python -m pip install -e .
+```
+
+## MCP 配置
+
+MCP 客户端配置示例：
+
+```json
+{
+  "mcpServers": {
+    "origin": {
+      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "origin_mcp"]
+    }
+  }
+}
+```
+
+请将 `C:\\path\\to\\origin-mcp` 替换为你的本地项目路径。更多示例见
+[docs/mcp-config.md](docs/mcp-config.md)。
+
+## 烟测
+
+安装后可以运行真实 Origin 端到端检查：
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.smoke_test
+```
+
+该烟测会导入 `examples/sample_data.csv`，创建并格式化图形，导出 PNG 预览，保存 OPJU
+项目，并从 Origin 断开。可选参数见 [examples/smoke-test.md](examples/smoke-test.md)。
+
+更完整的检查：
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
+```
+
+回归检查 Origin Plot Type ID：
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix --limit 10
+```
+
+## 示例提示词
+
+```text
+导入 D:\origin-mcp\examples\sample_data.csv，将 signal_a 和 signal_b
+按 time 绘制为折线图，标题设为 "Sample Signals"，并导出到
+D:\origin-mcp\output\sample_labeled.png。
+```
+
+## 文档
+
+- [工具与兼容性参考](docs/tools.md)
+- [MCP 客户端配置](docs/mcp-config.md)
+- [烟测](examples/smoke-test.md)
+- [Plot matrix 回归检查](examples/plot-matrix.md)
+
+## 安全说明
+
+该服务器可以读取本地数据文件、写入导出的图形和项目文件，并控制本地 Origin 会话。
+请只在可信 MCP 客户端中使用。必要时可用 `ORIGIN_MCP_ALLOWED_ROOTS` 限制文件访问范围。
+
+如果 Origin 提示正在被其他程序控制，请先调用 `origin_detach`。只有在确认没有未保存
+工作后，才使用 `origin_force_quit`。
+
+## 许可证
+
+MIT。见 [LICENSE](LICENSE)。

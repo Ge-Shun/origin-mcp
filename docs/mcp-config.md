@@ -18,25 +18,17 @@ Then configure your MCP client to launch the server over stdio.
 {
   "mcpServers": {
     "origin": {
-      "command": "D:\\origin-mcp\\.venv\\Scripts\\origin-mcp.exe",
-      "args": []
-    }
-  }
-}
-```
-
-If you run directly from source instead of installing the script entry point:
-
-```json
-{
-  "mcpServers": {
-    "origin": {
-      "command": "D:\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
       "args": ["-m", "origin_mcp"]
     }
   }
 }
 ```
+
+Replace `C:\\path\\to\\origin-mcp` with your local checkout path.
+
+Using `python.exe` with `-m origin_mcp` avoids hard-coding the generated console
+script path and works reliably for editable installs.
 
 ## First Test Prompt
 
