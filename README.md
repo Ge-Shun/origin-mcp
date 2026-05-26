@@ -79,6 +79,12 @@ The smoke test imports `examples/sample_data.csv`, creates and formats a graph,
 exports a PNG preview, saves an OPJU project, and detaches from Origin. See
 [examples/smoke-test.md](examples/smoke-test.md) for options.
 
+For broader verification:
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
+```
+
 ## Example Prompt
 
 ```text

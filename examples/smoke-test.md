@@ -7,6 +7,7 @@ upgrading Origin, or after changing graph/worksheet tools.
 The smoke test:
 
 - connects to Origin/OriginPro
+- reports runtime capabilities and Plot Type ID coverage
 - creates a new project
 - imports `examples/sample_data.csv`
 - creates a line graph
@@ -15,6 +16,9 @@ The smoke test:
 - exports a PNG preview
 - saves an OPJU project
 - releases the Origin automation connection with `detach`
+
+Optional modes also test analysis output readback and generate a gallery of
+multiple plot types.
 
 ## Run
 
@@ -58,6 +62,14 @@ Useful flags:
 
 - `--hide`: run Origin hidden when supported
 - `--no-detach`: leave the automation connection attached for debugging
+- `--analysis`: run a smoothing analysis and read the output worksheet back as JSON
+- `--gallery`: export a multi-plot gallery under `output/smoke_test/gallery`
+
+Run the broader verification suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
+```
 
 ## Expected Result
 
@@ -65,6 +77,7 @@ A successful run returns `"ok": true` and creates:
 
 - a PNG preview image
 - `origin_mcp_smoke.opju`
+- optional gallery PNGs when `--gallery` is used
 
 If the run fails, check the printed `error_type`, `error`, and `steps` fields.
 Common causes are missing `originpro`, incompatible Python/OriginExt versions,

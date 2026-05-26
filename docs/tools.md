@@ -189,6 +189,13 @@ The current catalog reports the documented Plot Type ID table as direct-tool
 covered. Version-specific edge cases should still be checked with the smoke test
 on the user's actual Origin installation.
 
+Use the broader smoke test to generate a small plot gallery and verify analysis
+output readback:
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
+```
+
 ## Version Compatibility
 
 Use `origin_capabilities` after configuring the MCP server. It reports:
