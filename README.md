@@ -149,6 +149,11 @@ They return the generated script and whether Origin accepted execution. For
 advanced analysis settings, pass an `options` object whose keys map to X-Function
 option names.
 
+The generic analysis path uses a centralized adapter table for X-Function names,
+aliases, minimum versions, output option names, and common option aliases. It
+returns the generated LabTalk script plus `executed`; if Origin rejects a command,
+`executed` is `false` and the script is included for debugging.
+
 `origin_linear_fit` is more structured when both `x_col` and `y_col` are provided:
 it uses Origin's `originpro.LinearFit` API and returns either a result tree or a
 report sheet reference. Use `options={"report": true, "band": 1}` to create a

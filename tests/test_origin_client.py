@@ -71,7 +71,9 @@ def test_allowed_roots_blocks_paths_outside_root(
 
 
 def test_analysis_script_linear_fit() -> None:
-    script = OriginClient()._analysis_script(
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    script = client._analysis_script(
         analysis="linear_fit",
         worksheet="[Book1]Sheet1",
         x_col="time",
@@ -82,7 +84,31 @@ def test_analysis_script_linear_fit() -> None:
 
     assert "fitlr [Book1]Sheet1!(time,force)" in script
     assert 'oy:="FitOut"' in script
-    assert "intercept:=0" in script
+    assert "fixintercept:=0" in script
+
+
+def test_analysis_script_requires_range() -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+
+    with pytest.raises(OriginOperationError, match="requires an input range"):
+        client._analysis_script("smooth", None, None, None, None, {})
+
+
+def test_run_analysis_marks_false_labtalk_result() -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client.run_labtalk = lambda _script: {"result": False}  # type: ignore[method-assign]
+
+    result = client.run_analysis(
+        analysis="smooth",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="signal",
+    )
+
+    assert result["executed"] is False
+    assert "warning" in result
 
 
 def test_origin_name_matches_truncated_short_name() -> None:

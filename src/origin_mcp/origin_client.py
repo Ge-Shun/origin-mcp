@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from .analysis_adapters import resolve_analysis_adapter, xf_options
 from .compat import collect_capabilities, feature_available
 from .errors import OriginDependencyError, OriginOperationError
 
@@ -673,7 +674,13 @@ class OriginClient:
             options=options or {},
         )
         result = self.run_labtalk(script)
-        return {"script": script, **result}
+        executed = bool(result.get("result"))
+        return {
+            "script": script,
+            "executed": executed,
+            "warning": "" if executed else "Origin returned false for this analysis command.",
+            **result,
+        }
 
     def format_graph(
         self,
@@ -1111,24 +1118,16 @@ class OriginClient:
         output_sheet: str | None,
         options: dict[str, Any],
     ) -> str:
-        analysis = analysis.lower().replace("-", "_")
+        origin_version = self.capabilities(show=False).get("origin_version")
+        adapter = resolve_analysis_adapter(analysis, origin_version)
         range_expr = self._analysis_range(worksheet, x_col, y_col)
-        option_text = self._xf_options(options)
-        output_text = f' oy:="{output_sheet}"' if output_sheet else ""
-        commands = {
-            "linear_fit": f"fitlr {range_expr}{output_text} {option_text};",
-            "polynomial_fit": f"fitpoly {range_expr}{output_text} {option_text};",
-            "nonlinear_fit": f"nlfit {range_expr}{output_text} {option_text};",
-            "smooth": f"smooth {range_expr}{output_text} {option_text};",
-            "differentiate": f"differentiate {range_expr}{output_text} {option_text};",
-            "integrate": f"integ1 {range_expr}{output_text} {option_text};",
-            "peak_find": f"pkFind {range_expr}{output_text} {option_text};",
-            "descriptive_stats": f"moments {range_expr}{output_text} {option_text};",
-        }
-        try:
-            return " ".join(commands[analysis].split())
-        except KeyError as exc:
-            raise OriginOperationError(f"Unsupported analysis type: {analysis}") from exc
+        if adapter.range_required and not range_expr:
+            raise OriginOperationError(f"Analysis '{adapter.name}' requires an input range.")
+        normalized_options = adapter.normalize_options(options)
+        option_text = xf_options(normalized_options)
+        output_text = f' {adapter.output_option}:="{output_sheet}"' if output_sheet else ""
+        command = f"{adapter.x_function} {range_expr}{output_text} {option_text};"
+        return " ".join(command.split())
 
     @staticmethod
     def _analysis_range(
@@ -1145,18 +1144,6 @@ class OriginClient:
         if worksheet:
             return worksheet
         return f"({x_col},{y_col})" if x_col is not None else f"({y_col})"
-
-    @staticmethod
-    def _xf_options(options: dict[str, Any]) -> str:
-        parts = []
-        for key, value in options.items():
-            if isinstance(value, bool):
-                value = int(value)
-            if isinstance(value, str):
-                parts.append(f'{key}:="{value}"')
-            else:
-                parts.append(f"{key}:={value}")
-        return " ".join(parts)
 
     @staticmethod
     def _call_first_available(obj: Any, names: list[str]) -> Any:
