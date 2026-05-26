@@ -392,6 +392,33 @@ def test_add_plot_to_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     assert layer.added[0][1]["coly"] == "force"
 
 
+def test_new_graph_uses_extended_templates(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    created = {}
+
+    class FakeOrigin:
+        def new_graph(self, **kwargs: object) -> FakeGraph:
+            created.update(kwargs)
+            return FakeGraph()
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    client._new_graph(kind="heatmap", graph_name="Heatmap")
+
+    assert created["template"] == "heatmap"
+    assert created["lname"] == "Heatmap"
+
+
+def test_add_plot_supports_extended_plot_types() -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [0], "y": [1], "z": [2]}))
+    layer = FakeLayer()
+
+    client._add_plot(layer, wks, x_name="x", y_name="y", z_name="z", kind="surface3d")
+
+    assert layer.added[0][1]["type"] == "surface"
+
+
 def test_add_reference_line_selects_layer(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     graph = FakeGraph()

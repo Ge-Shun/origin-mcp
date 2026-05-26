@@ -1538,6 +1538,12 @@ class OriginClient:
             "line_symbol": "linesymbol",
             "column": "column",
             "contour": "contour",
+            "histogram": "histogram",
+            "box": "box",
+            "heatmap": "heatmap",
+            "scatter3d": "3dscatter",
+            "surface3d": "surface",
+            "polar": "polar",
         }
         graph_template = template or default_templates.get(kind, "line")
         kwargs: dict[str, Any] = {"template": graph_template}
@@ -1587,6 +1593,12 @@ class OriginClient:
             "column": "c",
             "c": "c",
             "contour": "contour",
+            "histogram": "histogram",
+            "box": "box",
+            "heatmap": "heatmap",
+            "scatter3d": "3dscatter",
+            "surface3d": "surface",
+            "polar": "polar",
         }
         plot_type = plot_types.get(kind, "l")
         attempts = [

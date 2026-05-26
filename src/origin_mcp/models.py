@@ -13,6 +13,12 @@ class PlotKind(str, Enum):
     line_symbol = "line_symbol"
     column = "column"
     contour = "contour"
+    histogram = "histogram"
+    box = "box"
+    heatmap = "heatmap"
+    scatter3d = "scatter3d"
+    surface3d = "surface3d"
+    polar = "polar"
 
 
 class TableImportRequest(BaseModel):

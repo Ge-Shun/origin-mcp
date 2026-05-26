@@ -27,6 +27,7 @@ The first version focuses on a practical plotting loop:
 - inspect worksheet metadata and add calculated columns
 - edit cells, delete/clear columns, sort rows, and export worksheets to CSV
 - create line, scatter, line+symbol, error bar, column, contour, and template plots
+- create histogram, box, heatmap, 3D scatter, 3D surface, and polar plots
 - inspect graph/layer/plot state and add, remove, or retarget plots in existing graphs
 - set graph title, axis labels, legends, and templates
 - set plot color, line width, symbol style, axis scale, and axis limits
@@ -136,6 +137,12 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_plot_errorbar`: create a line+symbol plot with X/Y error bars
 - `origin_plot_column`: create a column/bar-style plot
 - `origin_plot_contour`: create a contour plot from XYZ columns
+- `origin_plot_histogram`: create a histogram graph
+- `origin_plot_box`: create a box plot
+- `origin_plot_heatmap`: create a heatmap graph from XYZ columns
+- `origin_plot_3d_scatter`: create a 3D scatter graph from XYZ columns
+- `origin_plot_3d_surface`: create a 3D surface graph from XYZ columns
+- `origin_plot_polar`: create a polar graph
 - `origin_plot_from_range`: plot an existing Origin range with any template
 - `origin_batch_plot_from_template`: batch plot existing ranges with one template
 - `origin_list_graph_templates`: list common templates and optional template files
