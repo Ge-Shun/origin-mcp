@@ -435,6 +435,107 @@ class OriginClient:
             "ascending": ascending,
         }
 
+    def get_cell_value(
+        self,
+        row: int,
+        column: str | int,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        if row < 0:
+            raise OriginOperationError("row must be non-negative.")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        column_name = self._resolve_column([str(col) for col in df.columns], column, 0)
+        if row >= len(df):
+            raise OriginOperationError(f"row is out of range: {row}")
+        value = df.iloc[row][column_name]
+        return {
+            "row": row,
+            "column": column_name,
+            "value": None if pd.isna(value) else value,
+        }
+
+    def set_cell_value(
+        self,
+        row: int,
+        column: str | int,
+        value: Any,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        if row < 0:
+            raise OriginOperationError("row must be non-negative.")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        column_name = self._resolve_column([str(col) for col in df.columns], column, 0)
+        if row >= len(df):
+            raise OriginOperationError(f"row is out of range: {row}")
+        df.at[df.index[row], column_name] = value
+        self._write_dataframe_to_worksheet(wks, df)
+        return {"row": row, "column": column_name, "value": value}
+
+    def delete_columns(
+        self,
+        columns: list[str | int],
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        if not columns:
+            raise OriginOperationError("No columns were provided.")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        available = [str(col) for col in df.columns]
+        selected = [self._resolve_column(available, column, 0) for column in columns]
+        remaining = df.drop(columns=selected)
+        self._write_dataframe_to_worksheet(wks, remaining)
+        return {
+            "worksheet": self._worksheet_ref(
+                wks,
+                columns=[str(col) for col in remaining.columns],
+            ).as_dict(),
+            "deleted_columns": selected,
+        }
+
+    def clear_worksheet(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        keep_columns: bool = True,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        if keep_columns:
+            cleared = pd.DataFrame(columns=df.columns)
+        else:
+            cleared = pd.DataFrame()
+        self._write_dataframe_to_worksheet(wks, cleared, allow_empty=True)
+        return {
+            "worksheet": self._worksheet_ref(
+                wks,
+                columns=[str(col) for col in cleared.columns],
+                rows=0,
+            ).as_dict(),
+            "kept_columns": keep_columns,
+        }
+
+    def export_worksheet_csv(
+        self,
+        path: Path,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        overwrite: bool = True,
+    ) -> dict[str, Any]:
+        path = path.expanduser().resolve()
+        self._check_path_allowed(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and not overwrite:
+            raise OriginOperationError(f"Export path already exists: {path}")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        df.to_csv(path, index=False)
+        return {"path": str(path), "rows": len(df), "columns": [str(col) for col in df.columns]}
+
     def plot_csv(
         self,
         path: Path,
@@ -663,6 +764,201 @@ class OriginClient:
             "graph_name": self._object_name(graph, default=graph_name or ""),
             "styled_plots": len(selected),
         }
+
+    def apply_publication_style(
+        self,
+        graph_name: str | None = None,
+        layer_index: int | None = None,
+        page_width: float | None = 6.0,
+        page_height: float | None = 4.0,
+        axis_title_size: int = 18,
+        tick_label_size: int = 14,
+        legend_font_size: int = 12,
+        line_width: float = 2.0,
+        symbol_size: float = 8.0,
+        tick_length: int = 6,
+        show_legend: bool = True,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        if page_width is not None or page_height is not None:
+            self.set_graph_page(
+                graph_name=graph_name_actual,
+                width=page_width,
+                height=page_height,
+            )
+        indexes = self._selected_layer_indexes(graph, layer_index)
+        styled_plots = 0
+        for index in indexes:
+            layer = self._graph_layer(graph, index)
+            plots = self._layer_plots(layer)
+            for plot in plots:
+                if line_width is not None:
+                    self._set_plot_command(plot, f"-w {line_width}")
+                if symbol_size is not None:
+                    self._set_origin_property(plot, "symbol_size", symbol_size)
+            styled_plots += len(plots)
+        script_parts = [f"win -a {graph_name_actual};"] if graph_name_actual else []
+        for index in indexes:
+            script_parts.extend(
+                [
+                    f"layer -s {index + 1};",
+                    f"layer.x.label.pt={axis_title_size};",
+                    f"layer.y.label.pt={axis_title_size};",
+                    f"layer.x.ticklabel.pt={tick_label_size};",
+                    f"layer.y.ticklabel.pt={tick_label_size};",
+                    f"layer.x.ticks.len={tick_length};",
+                    f"layer.y.ticks.len={tick_length};",
+                ]
+            )
+            if show_legend:
+                script_parts.append(f"legend.fsize={legend_font_size};")
+        script = " ".join(script_parts)
+        result = self.run_labtalk(script) if script_parts else {"result": None}
+        if show_legend:
+            try:
+                self.format_legend(graph_name_actual, font_size=legend_font_size)
+            except OriginOperationError:
+                pass
+        return {
+            "graph_name": graph_name_actual,
+            "styled_layers": indexes,
+            "styled_plots": styled_plots,
+            "script": script,
+            **result,
+        }
+
+    def add_plot_to_graph(
+        self,
+        worksheet: str | None = None,
+        x_col: str | int | None = None,
+        y_col: str | int | None = None,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+        plot_type: str = "l",
+        z_col: str | int | None = None,
+        y_error_col: str | int | None = None,
+        x_error_col: str | int | None = None,
+    ) -> dict[str, Any]:
+        if x_col is None or y_col is None:
+            raise OriginOperationError("x_col and y_col are required.")
+        graph = self._find_or_active_graph(graph_name)
+        layer = self._graph_layer(graph, layer_index)
+        wks = self._find_sheet_from_ref(worksheet)
+        ref = self._worksheet_ref(wks)
+        columns = ref.columns
+        x_name = self._resolve_column(columns, x_col, default_index=0)
+        y_name = self._resolve_column(columns, y_col, default_index=1)
+        z_name = (
+            self._resolve_column(columns, z_col, default_index=2)
+            if z_col is not None
+            else None
+        )
+        yerr_name = (
+            self._resolve_column(columns, y_error_col, default_index=2)
+            if y_error_col is not None
+            else None
+        )
+        xerr_name = (
+            self._resolve_column(columns, x_error_col, default_index=2)
+            if x_error_col is not None
+            else None
+        )
+        self._add_plot(
+            layer,
+            wks,
+            x_name=x_name,
+            y_name=y_name,
+            kind=plot_type,
+            z_name=z_name,
+            y_error_name=yerr_name,
+            x_error_name=xerr_name,
+        )
+        self._rescale(layer)
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
+            "worksheet": ref.as_dict(),
+            "x_col": x_name,
+            "y_col": y_name,
+            "plot_type": plot_type,
+        }
+
+    def remove_plot_from_graph(
+        self,
+        plot_index: int,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+    ) -> dict[str, Any]:
+        if plot_index < 0:
+            raise OriginOperationError("plot_index must be non-negative.")
+        graph = self._find_or_active_graph(graph_name)
+        layer = self._graph_layer(graph, layer_index)
+        plots = self._layer_plots(layer)
+        try:
+            plot = plots[plot_index]
+        except IndexError as exc:
+            raise OriginOperationError(f"plot_index is out of range: {plot_index}") from exc
+        remover = getattr(plot, "remove", None) or getattr(plot, "destroy", None)
+        if callable(remover):
+            remover()
+            result = {"result": True}
+        else:
+            graph_name_actual = self._object_name(graph, default=graph_name or "")
+            self._activate_graph(graph, graph_name_actual)
+            result = self.run_labtalk(f"layer -s {layer_index + 1}; layer -d {plot_index + 1};")
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
+            "removed_plot_index": plot_index,
+            **result,
+        }
+
+    def change_plot_type(
+        self,
+        plot_index: int,
+        plot_type: str,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+    ) -> dict[str, Any]:
+        if not plot_type.strip():
+            raise OriginOperationError("plot_type is empty.")
+        graph = self._find_or_active_graph(graph_name)
+        layer = self._graph_layer(graph, layer_index)
+        plots = self._layer_plots(layer)
+        try:
+            plot = plots[plot_index]
+        except IndexError as exc:
+            raise OriginOperationError(f"plot_index is out of range: {plot_index}") from exc
+        self._set_plot_command(plot, f"-c {plot_type}")
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
+            "plot_index": plot_index,
+            "plot_type": plot_type,
+        }
+
+    def change_plot_data(
+        self,
+        plot_index: int,
+        worksheet: str | None,
+        x_col: str | int,
+        y_col: str | int,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+    ) -> dict[str, Any]:
+        self.remove_plot_from_graph(
+            plot_index=plot_index,
+            graph_name=graph_name,
+            layer_index=layer_index,
+        )
+        return self.add_plot_to_graph(
+            worksheet=worksheet,
+            x_col=x_col,
+            y_col=y_col,
+            graph_name=graph_name,
+            layer_index=layer_index,
+        )
 
     def set_graph_page(
         self,
@@ -959,6 +1255,130 @@ class OriginClient:
             graphs.append(graph.as_dict())
         return {"count": len(graphs), "graphs": graphs}
 
+    def list_graph_templates(self, template_dir: Path | None = None) -> dict[str, Any]:
+        builtin = [
+            "line",
+            "scatter",
+            "linesymbol",
+            "column",
+            "bar",
+            "histogram",
+            "box",
+            "contour",
+            "heatmap",
+            "surface",
+            "polar",
+            "ternary",
+        ]
+        discovered: list[dict[str, str]] = []
+        if template_dir is not None:
+            template_dir = template_dir.expanduser().resolve()
+            self._check_path_allowed(template_dir)
+            if not template_dir.exists() or not template_dir.is_dir():
+                raise OriginOperationError(f"Template directory does not exist: {template_dir}")
+            for suffix in ("*.otp", "*.otpu", "*.otm", "*.otmu"):
+                for path in template_dir.glob(suffix):
+                    discovered.append({"name": path.stem, "path": str(path)})
+        return {
+            "builtin": builtin,
+            "discovered": discovered,
+            "count": len(builtin) + len(discovered),
+        }
+
+    def get_graph_info(self, graph_name: str | None = None) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        layers = []
+        layer_count = len(graph) if hasattr(graph, "__len__") else 1
+        for index in range(layer_count):
+            layers.append(self._layer_info(graph, index))
+        return {
+            "graph_name": graph_name_actual,
+            "long_name": getattr(graph, "lname", ""),
+            "layers_count": layer_count,
+            "layers": layers,
+        }
+
+    def get_layer_info(
+        self,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer": self._layer_info(graph, layer_index),
+        }
+
+    def list_fit_functions(self) -> dict[str, Any]:
+        functions = [
+            {
+                "name": "Gauss",
+                "category": "Peak",
+                "parameters": ["y0", "xc", "w", "A"],
+                "description": "Gaussian peak.",
+            },
+            {
+                "name": "Lorentz",
+                "category": "Peak",
+                "parameters": ["y0", "xc", "w", "A"],
+                "description": "Lorentzian peak.",
+            },
+            {
+                "name": "ExpDec1",
+                "category": "Exponential",
+                "parameters": ["y0", "A1", "t1"],
+                "description": "First-order exponential decay.",
+            },
+            {
+                "name": "ExpDec2",
+                "category": "Exponential",
+                "parameters": ["y0", "A1", "t1", "A2", "t2"],
+                "description": "Second-order exponential decay.",
+            },
+            {
+                "name": "Boltzmann",
+                "category": "Sigmoidal",
+                "parameters": ["A1", "A2", "x0", "dx"],
+                "description": "Boltzmann sigmoid.",
+            },
+            {
+                "name": "Logistic",
+                "category": "Sigmoidal",
+                "parameters": ["A1", "A2", "x0", "p"],
+                "description": "Logistic curve.",
+            },
+        ]
+        return {"count": len(functions), "functions": functions}
+
+    def nonlinear_fit_structured(
+        self,
+        worksheet: str | None,
+        x_col: str | int,
+        y_col: str | int,
+        function: str,
+        output_sheet: str | None = None,
+        initial_params: dict[str, float] | None = None,
+        fixed_params: list[str] | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if not function.strip():
+            raise OriginOperationError("function is empty.")
+        options = dict(options or {})
+        options["function"] = function
+        for name, value in (initial_params or {}).items():
+            options[f"init_{name}"] = value
+        if fixed_params:
+            options["fixed"] = ",".join(fixed_params)
+        return self.run_analysis(
+            analysis="nonlinear_fit",
+            worksheet=worksheet,
+            x_col=x_col,
+            y_col=y_col,
+            output_sheet=output_sheet,
+            options=options,
+        )
+
     def run_analysis(
         self,
         analysis: str,
@@ -1159,9 +1579,14 @@ class OriginClient:
 
         plot_types = {
             "scatter": "s",
+            "s": "s",
             "line": "l",
+            "l": "l",
             "line_symbol": "y",
+            "linesymbol": "y",
+            "y": "y",
             "column": "c",
+            "c": "c",
             "contour": "contour",
         }
         plot_type = plot_types.get(kind, "l")
@@ -1235,6 +1660,24 @@ class OriginClient:
         raise OriginOperationError("The worksheet object does not support to_df().")
 
     @staticmethod
+    def _write_dataframe_to_worksheet(
+        wks: Any,
+        df: pd.DataFrame,
+        allow_empty: bool = False,
+    ) -> None:
+        if df.empty and not allow_empty:
+            raise OriginOperationError("No worksheet data was provided.")
+        from_df = getattr(wks, "from_df", None)
+        if not callable(from_df):
+            raise OriginOperationError("The worksheet object does not support from_df().")
+        try:
+            from_df(df)
+        except ValueError:
+            if not allow_empty:
+                raise
+            from_df(pd.DataFrame(columns=df.columns))
+
+    @staticmethod
     def _rows_to_dataframe(
         rows: list[dict[str, Any]] | list[list[Any]],
         columns: list[str] | None,
@@ -1280,6 +1723,60 @@ class OriginClient:
             return
         if graph_name:
             self.run_labtalk(f"win -a {graph_name};")
+
+    @staticmethod
+    def _layer_plots(layer: Any) -> list[Any]:
+        plot_list = getattr(layer, "plot_list", None)
+        if not callable(plot_list):
+            raise OriginOperationError("Graph layer does not support plot_list().")
+        return list(plot_list())
+
+    def _selected_layer_indexes(self, graph: Any, layer_index: int | None) -> list[int]:
+        if layer_index is not None:
+            self._graph_layer(graph, layer_index)
+            return [layer_index]
+        layer_count = len(graph) if hasattr(graph, "__len__") else 1
+        return list(range(layer_count))
+
+    def _layer_info(self, graph: Any, layer_index: int) -> dict[str, Any]:
+        layer = self._graph_layer(graph, layer_index)
+        plots = self._layer_plots(layer)
+        axes: dict[str, dict[str, Any]] = {}
+        for axis_name in ("x", "y", "z"):
+            axis = getattr(layer, "axis", lambda _name: None)(axis_name)
+            if axis is None:
+                continue
+            axes[axis_name] = {
+                "title": getattr(axis, "title", None),
+                "scale": getattr(axis, "scale", None),
+                "limits": getattr(axis, "limits", None),
+            }
+        return {
+            "index": layer_index,
+            "name": self._object_name(layer, default=f"Layer{layer_index + 1}"),
+            "plots_count": len(plots),
+            "plots": [self._plot_info(plot, index) for index, plot in enumerate(plots)],
+            "axes": axes,
+        }
+
+    def _plot_info(self, plot: Any, index: int) -> dict[str, Any]:
+        return {
+            "index": index,
+            "name": self._object_name(plot, default=f"Plot{index + 1}"),
+            "color": getattr(plot, "color", None),
+            "line_width": getattr(plot, "line_width", None),
+            "line_style": getattr(plot, "line_style", None),
+            "symbol_kind": getattr(plot, "symbol_kind", None),
+            "symbol_size": getattr(plot, "symbol_size", None),
+            "transparency": getattr(plot, "transparency", None),
+        }
+
+    @staticmethod
+    def _set_plot_command(plot: Any, command: str) -> None:
+        set_cmd = getattr(plot, "set_cmd", None)
+        if not callable(set_cmd):
+            raise OriginOperationError("Plot object does not support set_cmd().")
+        set_cmd(command)
 
     @staticmethod
     def _set_origin_property(obj: Any, name: str, value: Any) -> None:

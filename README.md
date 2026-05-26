@@ -25,11 +25,15 @@ The first version focuses on a practical plotting loop:
 - append data into existing worksheets
 - read worksheet data back as JSON rows and write structured rows into worksheets
 - inspect worksheet metadata and add calculated columns
+- edit cells, delete/clear columns, sort rows, and export worksheets to CSV
 - create line, scatter, line+symbol, error bar, column, contour, and template plots
+- inspect graph/layer/plot state and add, remove, or retarget plots in existing graphs
 - set graph title, axis labels, legends, and templates
 - set plot color, line width, symbol style, axis scale, and axis limits
+- apply a compact publication-style graph format
 - adjust graph page size, arrange layers, add graph labels, and add reference lines
 - run common analysis X-Functions such as fitting, smoothing, integration, and peak finding
+- list common nonlinear fit functions and run nonlinear fits with explicit function hints
 - run linear fitting through `originpro.LinearFit` when X/Y columns are provided
 - export graphs to image/PDF files
 - export preview images with file-size and image-dimension diagnostics
@@ -107,6 +111,11 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_write_worksheet`: write structured rows to a new or existing worksheet
 - `origin_add_calculated_column`: add a column filled by a LabTalk formula
 - `origin_sort_worksheet`: sort worksheet rows by a column
+- `origin_get_cell_value`: read one worksheet cell
+- `origin_set_cell_value`: update one worksheet cell
+- `origin_delete_columns`: delete worksheet columns
+- `origin_clear_worksheet`: clear worksheet data
+- `origin_export_worksheet_csv`: export a worksheet to CSV
 - `origin_plot_line`: import table data and create a line plot
 - `origin_plot_scatter`: import table data and create a scatter plot
 - `origin_plot_line_symbol`: create a line+symbol plot
@@ -115,9 +124,17 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_plot_contour`: create a contour plot from XYZ columns
 - `origin_plot_from_range`: plot an existing Origin range with any template
 - `origin_batch_plot_from_template`: batch plot existing ranges with one template
+- `origin_list_graph_templates`: list common templates and optional template files
+- `origin_get_graph_info`: inspect graph layers, axes, and plots
+- `origin_get_layer_info`: inspect one graph layer
 - `origin_format_graph`: set graph title, axis labels, legend visibility, and rescale
 - `origin_set_axis`: set axis scale, limits, tick step, and title
 - `origin_set_plot_style`: set color, line width, line style, symbol, and transparency
+- `origin_apply_publication_style`: apply a compact publication-style graph format
+- `origin_add_plot_to_graph`: add an X/Y plot to an existing graph layer
+- `origin_remove_plot_from_graph`: remove a plot from an existing graph layer
+- `origin_change_plot_type`: change an existing plot type
+- `origin_change_plot_data`: retarget an existing plot to different worksheet columns
 - `origin_set_graph_page`: set graph page size and page placement properties
 - `origin_arrange_layers`: arrange graph layers into a panel layout
 - `origin_add_graph_label`: add text labels to a graph layer
@@ -134,6 +151,7 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_delete_object`: delete a graph, workbook, matrix book, or worksheet
 - `origin_run_analysis`: run a named Origin X-Function analysis
 - `origin_linear_fit`, `origin_polynomial_fit`, `origin_nonlinear_fit`
+- `origin_list_fit_functions`, `origin_nonlinear_fit_structured`
 - `origin_smooth`, `origin_differentiate`, `origin_integrate`
 - `origin_peak_find`, `origin_descriptive_stats`
 - `origin_run_labtalk`: execute LabTalk script text

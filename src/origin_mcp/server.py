@@ -358,6 +358,114 @@ def origin_sort_worksheet(
 
 
 @mcp.tool()
+def origin_get_cell_value(
+    row: int,
+    column: str | int,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Read one worksheet cell value by zero-based row and column name/index."""
+
+    return _wrap(
+        lambda: _ok(
+            "Read Origin worksheet cell value.",
+            **client.get_cell_value(
+                row=row,
+                column=column,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_set_cell_value(
+    row: int,
+    column: str | int,
+    value: Any,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Set one worksheet cell value by zero-based row and column name/index."""
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin worksheet cell value.",
+            **client.set_cell_value(
+                row=row,
+                column=column,
+                value=value,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_delete_columns(
+    columns: list[str | int],
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Delete worksheet columns by name or zero-based index."""
+
+    return _wrap(
+        lambda: _ok(
+            "Deleted Origin worksheet columns.",
+            **client.delete_columns(
+                columns=columns,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_clear_worksheet(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    keep_columns: bool = True,
+) -> dict[str, Any]:
+    """Clear worksheet data, optionally preserving column headers."""
+
+    return _wrap(
+        lambda: _ok(
+            "Cleared Origin worksheet.",
+            **client.clear_worksheet(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                keep_columns=keep_columns,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_export_worksheet_csv(
+    path: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    overwrite: bool = True,
+) -> dict[str, Any]:
+    """Export an Origin worksheet to a CSV file."""
+
+    return _wrap(
+        lambda: _ok(
+            "Exported Origin worksheet to CSV.",
+            **client.export_worksheet_csv(
+                Path(path),
+                book_name=book_name,
+                sheet_name=sheet_name,
+                overwrite=overwrite,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_plot_line(
     path: str,
     x_col: str | int | None = None,
@@ -719,6 +827,45 @@ def origin_batch_plot_from_template(
 
 
 @mcp.tool()
+def origin_list_graph_templates(template_dir: str | None = None) -> dict[str, Any]:
+    """List common graph template names and optional template files in a directory."""
+
+    return _wrap(
+        lambda: _ok(
+            "Listed Origin graph templates.",
+            **client.list_graph_templates(Path(template_dir) if template_dir else None),
+        )
+    )
+
+
+@mcp.tool()
+def origin_get_graph_info(graph_name: str | None = None) -> dict[str, Any]:
+    """Inspect a graph page, its layers, axes, and plots."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin graph information.",
+            **client.get_graph_info(graph_name=graph_name),
+        )
+    )
+
+
+@mcp.tool()
+def origin_get_layer_info(
+    graph_name: str | None = None,
+    layer_index: int = 0,
+) -> dict[str, Any]:
+    """Inspect one graph layer, its axes, and plots."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin graph layer information.",
+            **client.get_layer_info(graph_name=graph_name, layer_index=layer_index),
+        )
+    )
+
+
+@mcp.tool()
 def origin_export_graph(
     path: str,
     graph_name: str | None = None,
@@ -879,6 +1026,142 @@ def origin_set_plot_style(
         return _ok("Updated Origin plot style.", **client.set_plot_style(**req.model_dump()))
 
     return _wrap(run)
+
+
+@mcp.tool()
+def origin_apply_publication_style(
+    graph_name: str | None = None,
+    layer_index: int | None = None,
+    page_width: float | None = 6.0,
+    page_height: float | None = 4.0,
+    axis_title_size: int = 18,
+    tick_label_size: int = 14,
+    legend_font_size: int = 12,
+    line_width: float = 2.0,
+    symbol_size: float = 8.0,
+    tick_length: int = 6,
+    show_legend: bool = True,
+) -> dict[str, Any]:
+    """Apply a compact publication-style graph format."""
+
+    return _wrap(
+        lambda: _ok(
+            "Applied Origin publication style.",
+            **client.apply_publication_style(
+                graph_name=graph_name,
+                layer_index=layer_index,
+                page_width=page_width,
+                page_height=page_height,
+                axis_title_size=axis_title_size,
+                tick_label_size=tick_label_size,
+                legend_font_size=legend_font_size,
+                line_width=line_width,
+                symbol_size=symbol_size,
+                tick_length=tick_length,
+                show_legend=show_legend,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_add_plot_to_graph(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+    plot_type: str = "l",
+    z_col: str | int | None = None,
+    y_error_col: str | int | None = None,
+    x_error_col: str | int | None = None,
+) -> dict[str, Any]:
+    """Add a worksheet X/Y plot to an existing graph layer."""
+
+    return _wrap(
+        lambda: _ok(
+            "Added plot to Origin graph.",
+            **client.add_plot_to_graph(
+                worksheet=worksheet,
+                x_col=x_col,
+                y_col=y_col,
+                graph_name=graph_name,
+                layer_index=layer_index,
+                plot_type=plot_type,
+                z_col=z_col,
+                y_error_col=y_error_col,
+                x_error_col=x_error_col,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_remove_plot_from_graph(
+    plot_index: int,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+) -> dict[str, Any]:
+    """Remove a plot from an existing graph layer."""
+
+    return _wrap(
+        lambda: _ok(
+            "Removed plot from Origin graph.",
+            **client.remove_plot_from_graph(
+                plot_index=plot_index,
+                graph_name=graph_name,
+                layer_index=layer_index,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_change_plot_type(
+    plot_index: int,
+    plot_type: str,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+) -> dict[str, Any]:
+    """Change an existing graph plot type."""
+
+    return _wrap(
+        lambda: _ok(
+            "Changed Origin plot type.",
+            **client.change_plot_type(
+                plot_index=plot_index,
+                plot_type=plot_type,
+                graph_name=graph_name,
+                layer_index=layer_index,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_change_plot_data(
+    plot_index: int,
+    worksheet: str | None,
+    x_col: str | int,
+    y_col: str | int,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+) -> dict[str, Any]:
+    """Replace a plot by removing it and adding new worksheet X/Y data."""
+
+    return _wrap(
+        lambda: _ok(
+            "Changed Origin plot data.",
+            **client.change_plot_data(
+                plot_index=plot_index,
+                worksheet=worksheet,
+                x_col=x_col,
+                y_col=y_col,
+                graph_name=graph_name,
+                layer_index=layer_index,
+            ),
+        )
+    )
 
 
 @mcp.tool()
@@ -1234,6 +1517,43 @@ def origin_nonlinear_fit(
     """Run Origin nonlinear fitting."""
 
     return origin_run_analysis("nonlinear_fit", worksheet, x_col, y_col, output_sheet, options)
+
+
+@mcp.tool()
+def origin_list_fit_functions() -> dict[str, Any]:
+    """List common Origin nonlinear fit function names and parameters."""
+
+    return _wrap(lambda: _ok("Listed Origin fit functions.", **client.list_fit_functions()))
+
+
+@mcp.tool()
+def origin_nonlinear_fit_structured(
+    worksheet: str | None,
+    x_col: str | int,
+    y_col: str | int,
+    function: str,
+    output_sheet: str | None = None,
+    initial_params: dict[str, float] | None = None,
+    fixed_params: list[str] | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run nonlinear fitting with explicit function and parameter hints."""
+
+    return _wrap(
+        lambda: _ok(
+            "Ran structured Origin nonlinear fitting.",
+            **client.nonlinear_fit_structured(
+                worksheet=worksheet,
+                x_col=x_col,
+                y_col=y_col,
+                function=function,
+                output_sheet=output_sheet,
+                initial_params=initial_params,
+                fixed_params=fixed_params,
+                options=options,
+            ),
+        )
+    )
 
 
 @mcp.tool()
