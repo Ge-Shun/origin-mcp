@@ -45,6 +45,20 @@ def test_smooth_adapter_uses_official_input_and_option_names() -> None:
     assert "polyorder:=2" in command
 
 
+def test_polynomial_adapter_leaves_output_variables_unquoted() -> None:
+    adapter = resolve_analysis_adapter("polynomial_fit", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[PolyOut]Result!(1,2)",
+        options={"order": 2, "coef": "coefVec", "RSqCOD": "rsqVal"},
+    )
+
+    assert "oy:=[PolyOut]Result!(1,2)" in command
+    assert "polyorder:=2" in command
+    assert "coef:=coefVec" in command
+    assert "RSqCOD:=rsqVal" in command
+
+
 def test_peak_find_adapter_maps_common_names() -> None:
     adapter = resolve_analysis_adapter("peak-find", 10.3)
     command = adapter.command(

@@ -14,6 +14,45 @@ from .origin_client import OriginClient
 from .runtime import python_runtime_profile
 
 MATRIX_INPUTS = {"Matrix Object", "XYZ Range/Matrix Object", "Matrix Object/XYZ Range"}
+PLOT_TYPE_COLUMNS = {
+    183: ["vec_x", "vec_y", "vec_z", "vec_x2", "vec_y2", "vec_z2"],
+    184: ["err_x", "err_y", "err_z", "err_zerr"],
+    185: ["ternary_a", "ternary_b", "ternary_c", "ternary_value"],
+    245: ["ternary_a", "ternary_b", "ternary_c"],
+}
+REQUIRED_DATA_COLUMNS = [
+    "x",
+    "y",
+    "y2",
+    "y3",
+    "x2",
+    "z",
+    "z2",
+    "dx",
+    "dy",
+    "dz",
+    "xerr",
+    "yerr",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "ternary_a",
+    "ternary_b",
+    "ternary_c",
+    "ternary_value",
+    "vec_x",
+    "vec_y",
+    "vec_z",
+    "vec_x2",
+    "vec_y2",
+    "vec_z2",
+    "err_x",
+    "err_y",
+    "err_z",
+    "err_zerr",
+]
 
 
 @dataclass(frozen=True)
@@ -119,6 +158,8 @@ def run_plot_matrix(
             except Exception as exc:
                 detach_result = {"error_type": type(exc).__name__, "error": str(exc)}
 
+    summary = summarize_results(results)
+    quality_summary = summarize_quality(results)
     report = {
         "ok": error_count == 0,
         "output_dir": str(output_dir),
@@ -128,8 +169,9 @@ def run_plot_matrix(
         "backend": backend,
         "matrix_range": matrix_range,
         "matrix_info": matrix_info,
-        "summary": summarize_results(results),
-        "quality_summary": summarize_quality(results),
+        **summary,
+        "summary": summary,
+        "quality_summary": quality_summary,
         "duplicate_exports": duplicate_exports,
         "results": results,
         "save_project": save_result,
@@ -152,11 +194,18 @@ def build_plot_matrix_cases() -> list[PlotMatrixCase]:
             category=str(item["category"]),
             input=str(item["input"]),
             template=str(item["templates"][0]),
-            selected_columns=columns_for_input(str(item["input"])),
+            selected_columns=columns_for_plot_type(int(item["id"]), str(item["input"])),
             matrix_required=str(item["input"]) in MATRIX_INPUTS,
         )
         for item in PLOT_TYPE_CATALOG
     ]
+
+
+def columns_for_plot_type(plot_type_id: int, input_spec: str) -> list[str]:
+    override = PLOT_TYPE_COLUMNS.get(plot_type_id)
+    if override is not None:
+        return override
+    return columns_for_input(input_spec)
 
 
 def columns_for_input(input_spec: str) -> list[str]:
@@ -187,35 +236,79 @@ def columns_for_input(input_spec: str) -> list[str]:
 
 def ensure_plot_matrix_data(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
+    if path.exists() and _plot_matrix_data_current(path):
         return path
     rows = []
-    for index in range(1, 13):
-        x = float(index)
-        y = float(index * index) / 10.0
-        rows.append(
-            {
-                "x": x,
-                "y": y,
-                "y2": y + 1.5,
-                "y3": y + 3.0,
-                "x2": x + 0.5,
-                "z": float((index % 4) + 1),
-                "z2": float((index % 5) + 2),
-                "dx": 0.2,
-                "dy": 0.3,
-                "dz": 0.4,
-                "xerr": 0.1,
-                "yerr": 0.2,
-                "date": index,
-                "open": y,
-                "high": y + 0.8,
-                "low": y - 0.5,
-                "close": y + 0.3,
-            }
-        )
+    ternary_points = [
+        (0.8, 0.1, 0.1),
+        (0.7, 0.2, 0.1),
+        (0.7, 0.1, 0.2),
+        (0.6, 0.3, 0.1),
+        (0.6, 0.2, 0.2),
+        (0.6, 0.1, 0.3),
+        (0.5, 0.4, 0.1),
+        (0.5, 0.3, 0.2),
+        (0.5, 0.2, 0.3),
+        (0.4, 0.4, 0.2),
+        (0.4, 0.3, 0.3),
+        (0.34, 0.33, 0.33),
+    ]
+    for row in range(6):
+        for col in range(6):
+            index = row * 6 + col + 1
+            x = float(col + 1)
+            y = float(row + 1)
+            z = math_surface(x, y)
+            ternary_a, ternary_b, ternary_c = ternary_points[(index - 1) % len(ternary_points)]
+            rows.append(
+                {
+                    "x": x,
+                    "y": y,
+                    "y2": z + 1.5,
+                    "y3": z + 3.0,
+                    "x2": x + 0.5,
+                    "z": z,
+                    "z2": z + 0.6,
+                    "dx": 0.15 + col * 0.02,
+                    "dy": 0.2 + row * 0.02,
+                    "dz": 0.25,
+                    "xerr": 0.1,
+                    "yerr": 0.2,
+                    "date": index,
+                    "open": z,
+                    "high": z + 0.8,
+                    "low": z - 0.5,
+                    "close": z + 0.3,
+                    "ternary_a": ternary_a,
+                    "ternary_b": ternary_b,
+                    "ternary_c": ternary_c,
+                    "ternary_value": z,
+                    "vec_x": x,
+                    "vec_y": y,
+                    "vec_z": z,
+                    "vec_x2": x + 0.25 + col * 0.03,
+                    "vec_y2": y + 0.3 + row * 0.02,
+                    "vec_z2": z + 0.35,
+                    "err_x": x,
+                    "err_y": y,
+                    "err_z": z,
+                    "err_zerr": 0.15 + (index % 3) * 0.05,
+                }
+            )
     pd.DataFrame(rows).to_csv(path, index=False)
     return path
+
+
+def math_surface(x: float, y: float) -> float:
+    return round((x - 3.5) ** 2 / 7.0 + (y - 3.5) ** 2 / 8.0 + x * y / 12.0, 6)
+
+
+def _plot_matrix_data_current(path: Path) -> bool:
+    try:
+        header = pd.read_csv(path, nrows=0)
+    except Exception:
+        return False
+    return all(column in header.columns for column in REQUIRED_DATA_COLUMNS)
 
 
 def summarize_results(results: Iterable[dict[str, Any]]) -> dict[str, int]:

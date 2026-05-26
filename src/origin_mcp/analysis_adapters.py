@@ -57,6 +57,7 @@ ANALYSIS_ADAPTERS = {
         aliases=("fitpoly", "polynomial-fit"),
         minimum_origin_version=9.0,
         range_required=True,
+        symbol_options=("coef", "err", "N", "AdjRSq", "RSqCOD"),
         option_aliases={
             "order": "polyorder",
             "degree": "polyorder",

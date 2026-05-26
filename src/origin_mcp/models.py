@@ -191,4 +191,5 @@ class AnalysisRequest(BaseModel):
 class ToolResult(BaseModel):
     ok: bool = True
     message: str
+    error_code: str | None = None
     data: dict[str, Any] = Field(default_factory=dict)

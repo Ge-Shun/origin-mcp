@@ -3,6 +3,13 @@
 `origin-mcp` exposes MCP tools for Origin project management, worksheet editing,
 plotting, graph formatting, analysis, export, and lifecycle control.
 
+Tool failures return `ok=false`, a human-readable `message`, the Python
+`error_type`, and a stable `error_code` such as `worksheet_not_found`,
+`graph_not_found`, `file_not_found`, `path_not_allowed`,
+`unsupported_origin_feature`, `unsupported_analysis_type`, or
+`origin_dependency_unavailable`. Clients should branch on `error_code` instead
+of parsing the message text.
+
 ## Core Tools
 
 - `origin_ping`
@@ -143,7 +150,15 @@ are left unchanged unless braces are used.
 
 Analysis tools accept `include_output=true` and `output_max_rows` when an
 `output_sheet` is supplied. When enabled, the MCP response attempts to read the
-output worksheet back as structured JSON rows:
+output worksheet back as structured JSON rows. Generic analysis responses also
+include stable machine-readable fields:
+
+- `analysis`: resolved analysis adapter name
+- `parameters`: extracted fit parameters or coefficients when recognized
+- `metrics`: common fit/statistical metrics when recognized
+- `sections`: reserved for summary/statistics sections
+- `warnings`: non-fatal execution or output-read warnings
+- `raw_result`: serialized LabTalk execution result
 
 ```json
 {
@@ -152,6 +167,10 @@ output worksheet back as structured JSON rows:
   "output_max_rows": 50
 }
 ```
+
+`origin_polynomial_fit` can extract coefficient-like rows and common metrics
+such as `RSquare` from the output worksheet when `output_sheet` and
+`include_output=true` are supplied.
 
 `origin_linear_fit` returns a normalized `result` object when it can use
 `originpro.LinearFit`. The normalized result includes:
@@ -231,6 +250,8 @@ PNG previews, performs image quality checks, and writes
 flags empty exports, near-blank images, undersized previews, missing plotted
 data, and exact duplicate PNG exports. Use `--limit` or `--only` for focused
 checks.
+The JSON report exposes `total`, `passed`, `failed`, and `skipped` at the top
+level as well as under `summary`, so clients can inspect either shape.
 Inside a running MCP server, use `origin_run_plot_matrix` to execute the same
 matrix through the already-active MCP/Origin automation session. Matrix-only
 plot types get an auto-created sample Origin matrix unless `matrix_range` is

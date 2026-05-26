@@ -145,6 +145,10 @@ def test_run_analysis_marks_false_labtalk_result() -> None:
 
     assert result["executed"] is False
     assert "warning" in result
+    assert result["parameters"] == []
+    assert result["metrics"] == {}
+    assert result["warnings"] == ["Origin returned false for this analysis command."]
+    assert result["raw_result"] == {"result": False}
 
 
 def test_run_analysis_reads_output_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,6 +160,11 @@ def test_run_analysis_reads_output_when_requested(monkeypatch: pytest.MonkeyPatc
         client,
         "_analysis_output",
         lambda output_sheet, max_rows: {"output_sheet": output_sheet, "max_rows": max_rows},
+    )
+    monkeypatch.setattr(
+        client,
+        "_prepare_analysis_xy_output",
+        lambda output_sheet: f"[{output_sheet}]Result!(1,2)",
     )
 
     result = client.run_analysis(
@@ -169,7 +178,79 @@ def test_run_analysis_reads_output_when_requested(monkeypatch: pytest.MonkeyPatc
     )
 
     assert result["executed"] is True
+    assert result["output_target"] == "[SmoothOut]Result!(1,2)"
+    assert "oy:=[SmoothOut]Result!(1,2)" in result["script"]
     assert result["output"] == {"output_sheet": "SmoothOut", "max_rows": 5}
+    assert result["parameters"] == []
+    assert result["metrics"] == {}
+    assert result["warnings"] == []
+
+
+def test_run_analysis_structures_polynomial_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,signal)"  # type: ignore[method-assign]
+    client.run_labtalk = lambda _script: {"result": True}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        client,
+        "_analysis_output",
+        lambda _output_sheet, _max_rows: {
+            "rows": [
+                {"Parameter": "Intercept", "Value": 1.0, "Standard Error": 0.1},
+                {"Parameter": "B1", "Value": 2.0},
+                {"Parameter": "RSquare", "Value": 0.99},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        client,
+        "_prepare_analysis_xy_output",
+        lambda output_sheet: f"[{output_sheet}]Result!(1,2)",
+    )
+    monkeypatch.setattr(
+        client,
+        "_polynomial_output_variables",
+        lambda: {
+            "coef": "coefVec",
+            "err": "errVec",
+            "N": "nVal",
+            "AdjRSq": "adjVal",
+            "RSqCOD": "rsqVal",
+        },
+    )
+    values = {
+        "coefVec[1]": 1.0,
+        "coefVec[2]": 2.0,
+        "errVec[1]": 0.1,
+        "errVec[2]": 0.2,
+        "nVal": 7,
+        "adjVal": 0.98,
+        "rsqVal": 0.99,
+    }
+    monkeypatch.setattr(client, "_safe_eval", lambda expression: values.get(expression))
+
+    result = client.run_analysis(
+        analysis="polynomial_fit",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="signal",
+        output_sheet="PolyOut",
+        options={"order": 1},
+        include_output=True,
+    )
+
+    assert result["analysis"] == "polynomial_fit"
+    assert "oy:=[PolyOut]Result!(1,2)" in result["script"]
+    assert "coef:=coefVec" in result["script"]
+    assert "RSqCOD:=rsqVal" in result["script"]
+    assert {"name": "Intercept", "path": "coefVec[1]", "value": 1.0, "stderr": 0.1} in result[
+        "parameters"
+    ]
+    assert {"name": "B1", "path": "coefVec[2]", "value": 2.0, "stderr": 0.2} in result[
+        "parameters"
+    ]
+    assert result["metrics"]["RSquare"] == 0.99
+    assert result["metrics"]["RSqCOD"] == 0.99
 
 
 def test_structure_fit_result_extracts_parameters_and_metrics() -> None:
@@ -192,6 +273,43 @@ def test_origin_name_matches_truncated_short_name() -> None:
     assert OriginClient._origin_name_matches("OfficialImport", {"OfficialImpor"})
     assert OriginClient._origin_name_matches("Book1", {"Book1"})
     assert not OriginClient._origin_name_matches("OtherBook", {"Book1"})
+
+
+def test_find_sheet_from_ref_falls_back_to_output_book_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"fit": [1]}))
+
+    class OutputBook:
+        name = "Book2"
+        lname = "SmokeSmooth"
+
+        def __iter__(self):
+            return iter([wks])
+
+        def __getitem__(self, index: int) -> FakeWorksheet:
+            if index != 0:
+                raise IndexError(index)
+            return wks
+
+    class FakeOrigin:
+        def find_sheet(self, _kind: str, _ref: str) -> None:
+            return None
+
+        def pages(self, _kind: str) -> list[OutputBook]:
+            return [OutputBook()]
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    assert client._find_sheet_from_ref("SmokeSmooth") is wks
+
+
+def test_prepare_analysis_xy_output_converts_sheet_ref() -> None:
+    client = OriginClient()
+
+    assert client._prepare_analysis_xy_output("[Book1]Result") == "[Book1]Result!(1,2)"
+    assert client._prepare_analysis_xy_output("[Book1]Result!(3,4)") == "[Book1]Result!(3,4)"
 
 
 def test_ensure_feature_reports_detected_version() -> None:
@@ -706,6 +824,73 @@ def test_plot_table_by_id_builds_labtalk_command(
     assert "plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in scripts[-1]
 
 
+def test_plot_table_by_id_uses_plotxyz_for_xyz_plot_types(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=240,
+        template="3d",
+        selected_cols=["x", "y", "z"],
+        graph_name="Scatter3D",
+    )
+
+    assert command["command"] == "plotxyz"
+    assert command["range_option"] == "iz"
+    assert "wks.col1.type=4;" in scripts[0]
+    assert "wks.col2.type=1;" in scripts[0]
+    assert "wks.col3.type=6;" in scripts[0]
+    assert "plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240" in scripts[-1]
+
+
+def test_plot_table_by_id_sets_xyzxyz_designations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z,dx,dy,dz\n0,1,2,0.1,0.2,0.3\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=183,
+        template="gl3DVector",
+        selected_cols=["x", "y", "z", "dx", "dy", "dz"],
+        graph_name="Vector3D",
+    )
+
+    assert "wks.col1.type=4;" in scripts[0]
+    assert "wks.col2.type=1;" in scripts[0]
+    assert "wks.col3.type=6;" in scripts[0]
+    assert "wks.col4.type=4;" in scripts[0]
+    assert "wks.col5.type=1;" in scripts[0]
+    assert "wks.col6.type=6;" in scripts[0]
+    assert command["command"] == "worksheet"
+    assert command["range_option"] == "selection"
+    assert "worksheet -s 1 0 6 0; worksheet -p 183 gl3DVector;" in scripts[-1]
+
+
 def test_plot_table_by_id_exports_active_graph_when_named_graph_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -752,7 +937,26 @@ def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch)
     graph = client.plot_matrix_by_id("[MBook1]MSheet1!1", 105, "heatmap", "Heat")
 
     assert graph.graph_name == "Heat"
+    assert 'win -a "MBook1";' in scripts[0]
     assert "plotm im:=[MBook1]MSheet1!1 plot:=105" in scripts[-1]
+
+
+def test_plot_matrix_by_id_uses_plotm_for_surface_matrix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    scripts = []
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    graph = client.plot_matrix_by_id("[MBook1]MSheet1!1", 103, "glmesh", "Surface")
+
+    assert graph.graph_name == "Surface"
+    assert 'win -a "MBook1";' in scripts[0]
+    assert "plotm im:=[MBook1]MSheet1!1 plot:=103" in scripts[-1]
 
 
 def test_add_reference_line_selects_layer(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,7 +7,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
-from .errors import OriginMcpError
+from .errors import OriginDependencyError, OriginMcpError, OriginOperationError
 from .models import (
     AnalysisRequest,
     AxisSettingsRequest,
@@ -29,7 +29,9 @@ client = OriginClient()
 
 
 def _ok(message: str, **data: Any) -> dict[str, Any]:
-    return ToolResult(ok=True, message=message, data=_json_safe(data)).model_dump()
+    return ToolResult(ok=True, message=message, data=_json_safe(data)).model_dump(
+        exclude_none=True
+    )
 
 
 def _json_safe(value: Any) -> Any:
@@ -43,11 +45,46 @@ def _json_safe(value: Any) -> Any:
 
 
 def _error(exc: Exception) -> dict[str, Any]:
+    error_code = _error_code(exc)
     return ToolResult(
         ok=False,
         message=str(exc),
-        data={"error_type": type(exc).__name__},
-    ).model_dump()
+        error_code=error_code,
+        data={"error_type": type(exc).__name__, "error_code": error_code},
+    ).model_dump(exclude_none=True)
+
+
+def _error_code(exc: Exception) -> str:
+    if isinstance(exc, OriginDependencyError):
+        return "origin_dependency_unavailable"
+    if isinstance(exc, ValidationError):
+        return "invalid_request"
+    if isinstance(exc, ValueError):
+        return "invalid_request"
+    if isinstance(exc, OriginOperationError):
+        message = str(exc).lower()
+        if "outside origin_mcp_allowed_roots" in message:
+            return "path_not_allowed"
+        if "file does not exist" in message:
+            return "file_not_found"
+        if "path is not a file" in message:
+            return "invalid_file_path"
+        if "unsupported data file extension" in message:
+            return "unsupported_file_type"
+        if "unsupported analysis type" in message:
+            return "unsupported_analysis_type"
+        if "worksheet not found" in message:
+            return "worksheet_not_found"
+        if "graph not found" in message:
+            return "graph_not_found"
+        if "labtalk" in message and "not available" in message:
+            return "labtalk_unavailable"
+        if "requires origin >=" in message:
+            return "unsupported_origin_version"
+        if "not supported by this origin/originpro environment" in message:
+            return "unsupported_origin_feature"
+        return "origin_operation_failed"
+    return "unexpected_error"
 
 
 def _wrap(func: Any) -> dict[str, Any]:

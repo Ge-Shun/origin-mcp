@@ -21,6 +21,11 @@ from .errors import OriginDependencyError, OriginOperationError
 from .runtime import python_runtime_profile
 from .text_format import normalize_label_text, origin_rich_text
 
+TABLE_PLOTXYZ_IDS = {103, 183, 184, 185, 240, 242, 243, 245}
+TABLE_WORKSHEET_PLOT_IDS = {183, 184}
+MATRIX_PLOTM_IDS = {101, 103, 105, 220, 226, 242}
+ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth"}
+
 
 @dataclass(frozen=True)
 class WorksheetRef:
@@ -838,17 +843,24 @@ class OriginClient:
         selected = self._resolve_selected_columns(columns, selected_cols)
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         wks.from_df(df)
+        command, range_option = self._table_plot_command_options(plot_type_id)
+        if command in {"plotxyz", "worksheet"}:
+            self._set_plotxyz_designations(wks, columns, selected, plot_type_id)
         data_range = self._worksheet_range_expr(wks, columns, selected)
         graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
-        script = self._plot_command(
-            command="plotxy",
-            range_option="iy",
-            data_range=data_range,
-            plot_type_id=plot_type_id,
-            template=template,
-            graph_name=graph_name_actual,
-        )
-        result = self.run_labtalk(script)
+        if command == "worksheet":
+            script = self._worksheet_plot_command(columns, selected, plot_type_id, template)
+            result = self._execute_on_worksheet(wks, script)
+        else:
+            script = self._plot_command(
+                command=command,
+                range_option=range_option,
+                data_range=data_range,
+                plot_type_id=plot_type_id,
+                template=template,
+                graph_name=graph_name_actual,
+            )
+            result = self.run_labtalk(script)
         if title or x_label or y_label:
             try:
                 self.format_graph(
@@ -870,6 +882,8 @@ class OriginClient:
             "plot_type_id": plot_type_id,
             "template": template,
             "selected_columns": selected,
+            "command": command,
+            "range_option": range_option,
         }
 
     def plot_matrix_by_id(
@@ -884,8 +898,10 @@ class OriginClient:
         if not data_range.strip():
             raise OriginOperationError("data_range is empty.")
         graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
-        command = "plotm" if plot_type_id in {101, 105, 220, 226} else "plotxyz"
+        command = "plotm" if plot_type_id in MATRIX_PLOTM_IDS else "plotxyz"
         range_option = "im" if command == "plotm" else "iz"
+        if command == "plotm":
+            self._activate_range_window(data_range)
         script = self._plot_command(
             command=command,
             range_option=range_option,
@@ -906,6 +922,85 @@ class OriginClient:
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
         return GraphRef(graph_name=graph_name_actual, export_path=exported)
+
+    @staticmethod
+    def _table_plot_command_options(plot_type_id: int) -> tuple[str, str]:
+        if plot_type_id in TABLE_WORKSHEET_PLOT_IDS:
+            return "worksheet", "selection"
+        if plot_type_id in TABLE_PLOTXYZ_IDS:
+            return "plotxyz", "iz"
+        return "plotxy", "iy"
+
+    @staticmethod
+    def _worksheet_plot_command(
+        columns: list[str],
+        selected: list[str],
+        plot_type_id: int,
+        template: str,
+    ) -> str:
+        indexes = [columns.index(column) + 1 for column in selected]
+        if indexes != list(range(indexes[0], indexes[0] + len(indexes))):
+            raise OriginOperationError(
+                f"Plot type {plot_type_id} requires a contiguous worksheet selection."
+            )
+        safe_template = OriginClient._escape_labtalk(template)
+        return (
+            f"worksheet -s {indexes[0]} 0 {indexes[-1]} 0; "
+            f"worksheet -p {plot_type_id} {safe_template};"
+        )
+
+    def _activate_range_window(self, data_range: str) -> None:
+        if not data_range.startswith("[") or "]" not in data_range:
+            return
+        window_name = data_range[1:].split("]", 1)[0].strip()
+        if not window_name:
+            return
+        try:
+            self.run_labtalk(f'win -a "{self._escape_labtalk(window_name)}";')
+        except OriginOperationError:
+            pass
+
+    def _set_plotxyz_designations(
+        self,
+        wks: Any,
+        columns: list[str],
+        selected: list[str],
+        plot_type_id: int,
+    ) -> None:
+        if len(selected) < 3:
+            return
+        type_pattern = self._plotxyz_type_pattern(plot_type_id, len(selected))
+        indexes = [columns.index(column) for column in selected[: len(type_pattern)]]
+        cols_axis = getattr(wks, "cols_axis", None)
+        if callable(cols_axis) and indexes == list(range(indexes[0], indexes[0] + len(indexes))):
+            try:
+                cols_axis(
+                    self._plotxyz_axis_spec(type_pattern),
+                    c1=indexes[0],
+                    c2=indexes[-1],
+                    repeat=False,
+                )
+                return
+            except Exception:
+                pass
+        script = " ".join(
+            f"wks.col{index + 1}.type={column_type};"
+            for index, column_type in zip(indexes, type_pattern, strict=True)
+        )
+        self._execute_on_worksheet(wks, script)
+
+    @staticmethod
+    def _plotxyz_type_pattern(plot_type_id: int, selected_count: int) -> tuple[int, ...]:
+        if plot_type_id == 183 and selected_count >= 6:
+            return (4, 1, 6, 4, 1, 6)
+        if plot_type_id == 184 and selected_count >= 4:
+            return (4, 1, 6, 6)
+        return (4, 1, 6)
+
+    @staticmethod
+    def _plotxyz_axis_spec(type_pattern: tuple[int, ...]) -> str:
+        symbols = {1: "Y", 4: "X", 6: "Z"}
+        return "".join(symbols.get(column_type, "Y") for column_type in type_pattern)
 
     def create_sample_matrix_range(
         self,
@@ -1760,27 +1855,66 @@ class OriginClient:
         include_output: bool = False,
         output_max_rows: int = 100,
     ) -> dict[str, Any]:
+        origin_version = self.capabilities(show=False).get("origin_version")
+        adapter = resolve_analysis_adapter(analysis, origin_version)
+        analysis_name = adapter.name
+        options_for_script = dict(options or {})
+        output_target = output_sheet
+        polynomial_outputs: dict[str, str] = {}
+        if output_sheet and analysis_name in ANALYSIS_XY_OUTPUTS:
+            output_target = self._prepare_analysis_xy_output(output_sheet)
+        if analysis_name == "polynomial_fit":
+            polynomial_outputs = self._polynomial_output_variables()
+            for key, value in polynomial_outputs.items():
+                options_for_script.setdefault(key, value)
         script = self._analysis_script(
             analysis=analysis,
             worksheet=worksheet,
             x_col=x_col,
             y_col=y_col,
-            output_sheet=output_sheet,
-            options=options or {},
+            output_sheet=output_target,
+            options=options_for_script,
         )
         result = self.run_labtalk(script)
         executed = bool(result.get("result"))
+        warning = "" if executed else "Origin returned false for this analysis command."
+        warnings = [warning] if warning else []
         response = {
+            "analysis": analysis_name,
             "script": script,
             "executed": executed,
-            "warning": "" if executed else "Origin returned false for this analysis command.",
+            "parameters": [],
+            "metrics": {},
+            "sections": {},
+            "warnings": warnings,
+            "raw_result": self._serialize_analysis_value(result),
+            "warning": warning,
             **result,
         }
+        if output_target and output_target != output_sheet:
+            response["output_target"] = output_target
         if include_output:
             if not output_sheet:
-                response["output_warning"] = "include_output requires output_sheet."
+                output_warning = "include_output requires output_sheet."
+                response["output_warning"] = output_warning
+                response["warnings"].append(output_warning)
             else:
-                response["output"] = self._analysis_output(output_sheet, output_max_rows)
+                output = self._analysis_output(output_sheet, output_max_rows)
+                response["output"] = output
+                structured = self._structure_analysis_output(analysis_name, output)
+                response["parameters"] = structured["parameters"]
+                response["metrics"] = structured["metrics"]
+                response["sections"] = structured["sections"]
+                if polynomial_outputs:
+                    polynomial = self._structure_polynomial_outputs(
+                        polynomial_outputs,
+                        options_for_script,
+                    )
+                    if polynomial["parameters"]:
+                        response["parameters"] = polynomial["parameters"]
+                    response["metrics"].update(polynomial["metrics"])
+                if not output.get("found", True) and output.get("error"):
+                    response["warnings"].append(str(output["error"]))
         return response
 
     def format_graph(
@@ -2158,6 +2292,215 @@ class OriginClient:
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             }
+
+    def _prepare_analysis_xy_output(self, output_sheet: str) -> str:
+        output_sheet = output_sheet.strip()
+        if "!" in output_sheet:
+            return output_sheet
+        if output_sheet.startswith("[") and "]" in output_sheet:
+            return f"{output_sheet}!(1,2)"
+        wks = self._new_sheet(book_name=output_sheet, sheet_name="Result")
+        ref = self._worksheet_ref(wks)
+        return f"[{ref.book_name}]{ref.sheet_name}!(1,2)"
+
+    @staticmethod
+    def _polynomial_output_variables() -> dict[str, str]:
+        prefix = f"op{uuid.uuid4().hex[:6]}"
+        return {
+            "coef": f"{prefix}c",
+            "err": f"{prefix}e",
+            "N": f"{prefix}n",
+            "AdjRSq": f"{prefix}a",
+            "RSqCOD": f"{prefix}r",
+        }
+
+    def _structure_polynomial_outputs(
+        self,
+        variables: dict[str, str],
+        options: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized_options = resolve_analysis_adapter(
+            "polynomial_fit",
+            self.capabilities(show=False).get("origin_version"),
+        ).normalize_options(options)
+        try:
+            order = int(normalized_options.get("polyorder", 2))
+        except (TypeError, ValueError):
+            order = 2
+
+        parameters = []
+        for index in range(order + 1):
+            value = self._safe_eval(f"{variables['coef']}[{index + 1}]")
+            if self._is_analysis_number(value):
+                parameter = {
+                    "name": "Intercept" if index == 0 else f"B{index}",
+                    "path": f"{variables['coef']}[{index + 1}]",
+                    "value": value,
+                }
+                stderr = self._safe_eval(f"{variables['err']}[{index + 1}]")
+                if self._is_analysis_number(stderr):
+                    parameter["stderr"] = stderr
+                parameters.append(parameter)
+
+        metrics: dict[str, Any] = {}
+        for key in ("N", "AdjRSq", "RSqCOD"):
+            value = self._safe_eval(variables[key])
+            if self._is_analysis_number(value):
+                metrics[key] = value
+        return {"parameters": parameters, "metrics": metrics}
+
+    def _structure_analysis_output(self, analysis: str, output: Any) -> dict[str, Any]:
+        if analysis not in {"linear_fit", "polynomial_fit", "nonlinear_fit"}:
+            return {"parameters": [], "metrics": {}, "sections": {}}
+
+        rows = self._analysis_output_rows(output)
+        parameters: list[dict[str, Any]] = []
+        metrics: dict[str, Any] = {}
+
+        for index, row in enumerate(rows):
+            row_metrics = self._analysis_row_metrics(row)
+            metrics.update(row_metrics)
+            parameter = self._analysis_row_parameter(row, index)
+            if parameter is not None and parameter["name"] not in row_metrics:
+                parameters.append(parameter)
+
+        return {"parameters": parameters, "metrics": metrics, "sections": {}}
+
+    def _analysis_output_rows(self, output: Any) -> list[dict[str, Any]]:
+        data = self._serialize_analysis_value(output)
+        if not isinstance(data, dict):
+            return []
+        rows = data.get("rows")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+        return []
+
+    def _analysis_row_metrics(self, row: dict[str, Any]) -> dict[str, Any]:
+        metrics: dict[str, Any] = {}
+        label = self._analysis_row_label(row)
+        value = self._analysis_row_value(row)
+        if label and self._is_analysis_metric_name(label) and self._is_analysis_number(value):
+            metrics[label] = value
+
+        for key, candidate in row.items():
+            if self._is_analysis_metric_name(str(key)) and self._is_analysis_number(candidate):
+                metrics[str(key)] = candidate
+        return metrics
+
+    def _analysis_row_parameter(
+        self,
+        row: dict[str, Any],
+        index: int,
+    ) -> dict[str, Any] | None:
+        name = self._analysis_row_label(row)
+        value = self._analysis_row_value(row)
+        if not name or not self._is_analysis_number(value):
+            return None
+        if self._is_analysis_metric_name(name):
+            return None
+
+        parameter = {
+            "name": name,
+            "path": f"output.rows.{index}",
+            "value": value,
+        }
+        stderr = self._analysis_row_named_value(
+            row,
+            {
+                "stderr",
+                "standarderror",
+                "standarderr",
+                "stddev",
+                "se",
+            },
+        )
+        if self._is_analysis_number(stderr):
+            parameter["stderr"] = stderr
+        return parameter
+
+    @staticmethod
+    def _analysis_row_label(row: dict[str, Any]) -> str | None:
+        label_keys = {
+            "parameter",
+            "parameters",
+            "param",
+            "name",
+            "term",
+            "coefficient",
+            "coef",
+            "quantity",
+            "item",
+        }
+        for key, value in row.items():
+            if OriginClient._analysis_key(key) in label_keys and value not in (None, ""):
+                return str(value)
+        return None
+
+    @staticmethod
+    def _analysis_row_value(row: dict[str, Any]) -> Any:
+        value_keys = {
+            "value",
+            "estimate",
+            "estimatedvalue",
+            "fitvalue",
+            "coefficientvalue",
+            "coefvalue",
+            "result",
+        }
+        named = OriginClient._analysis_row_named_value(row, value_keys)
+        if named is not None:
+            return named
+        for key, value in row.items():
+            normalized = OriginClient._analysis_key(key)
+            if normalized not in {"parameter", "parameters", "param", "name", "term", "item"}:
+                if OriginClient._is_analysis_number(value):
+                    return value
+        return None
+
+    @staticmethod
+    def _analysis_row_named_value(row: dict[str, Any], keys: set[str]) -> Any:
+        for key, value in row.items():
+            if OriginClient._analysis_key(key) in keys:
+                return value
+        return None
+
+    @staticmethod
+    def _analysis_key(value: Any) -> str:
+        return "".join(ch for ch in str(value).lower() if ch.isalnum())
+
+    @staticmethod
+    def _is_analysis_metric_name(value: str) -> bool:
+        key = OriginClient._analysis_key(value)
+        return key in {
+            "r",
+            "rsquare",
+            "rsquared",
+            "r2",
+            "adjrsquare",
+            "adjrsquared",
+            "adjustedrsquare",
+            "adjustedrsquared",
+            "chisqr",
+            "chisquare",
+            "reducedchisqr",
+            "reducedchisquare",
+            "rss",
+            "residualsumofsquares",
+            "rmse",
+            "mse",
+            "dof",
+            "n",
+            "pvalue",
+            "prob",
+        }
+
+    @staticmethod
+    def _is_analysis_number(value: Any) -> bool:
+        return (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        )
 
     def _structure_fit_result(self, raw: Any) -> dict[str, Any]:
         data = self._serialize_analysis_value(raw)
@@ -2798,6 +3141,10 @@ class OriginClient:
             wks = self._find_sheet_by_book_label(book_name, sheet_name)
             if wks is not None:
                 return wks
+        elif ref:
+            wks = self._find_sheet_by_book_label(ref, None)
+            if wks is not None:
+                return wks
         raise OriginOperationError(f"Worksheet not found: {ref or '<active worksheet>'}")
 
     def _find_sheet_from_ref(self, worksheet: str | None = None) -> Any:
@@ -2810,8 +3157,10 @@ class OriginClient:
             clean = worksheet.strip()
             if clean.startswith("[") and "]" in clean:
                 book_name, sheet_name = clean[1:].split("]", 1)
-                sheet_name = sheet_name.strip("! ") or None
+                sheet_name = sheet_name.split("!", 1)[0].strip() or None
                 wks = self._find_sheet_by_book_label(book_name, sheet_name)
+            else:
+                wks = self._find_sheet_by_book_label(clean, None)
         if wks is None:
             raise OriginOperationError(f"Worksheet not found: {worksheet or '<active worksheet>'}")
         return wks
