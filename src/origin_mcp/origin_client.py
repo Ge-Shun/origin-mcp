@@ -116,11 +116,20 @@ class OriginClient:
         book_name: str | None = None,
         sheet_name: str | None = None,
     ) -> WorksheetRef:
+        return self.import_table(path=path, book_name=book_name, sheet_name=sheet_name)
+
+    def import_table(
+        self,
+        path: Path,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+    ) -> WorksheetRef:
         path = path.expanduser().resolve()
         self._validate_file(path)
-        df = pd.read_csv(path)
+        df = self._read_table(path, excel_sheet=excel_sheet)
         if df.empty:
-            raise OriginOperationError(f"CSV contains no rows: {path}")
+            raise OriginOperationError(f"Data file contains no rows: {path}")
 
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         if hasattr(wks, "from_df"):
@@ -148,11 +157,39 @@ class OriginClient:
         graph_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
+        return self.plot_table(
+            path=path,
+            kind=kind,
+            x_col=x_col,
+            y_cols=y_cols,
+            book_name=book_name,
+            sheet_name=sheet_name,
+            graph_name=graph_name,
+            export_path=export_path,
+        )
+
+    def plot_table(
+        self,
+        path: Path,
+        kind: str,
+        x_col: str | int | None = None,
+        y_cols: list[str | int] | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        graph_name: str | None = None,
+        template: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        show_legend: bool = True,
+        export_path: Path | None = None,
+    ) -> tuple[WorksheetRef, GraphRef]:
         path = path.expanduser().resolve()
         self._validate_file(path)
-        df = pd.read_csv(path)
+        df = self._read_table(path, excel_sheet=excel_sheet)
         if df.empty:
-            raise OriginOperationError(f"CSV contains no rows: {path}")
+            raise OriginOperationError(f"Data file contains no rows: {path}")
 
         columns = [str(col) for col in df.columns]
         x_name = self._resolve_column(columns, x_col, default_index=0)
@@ -161,13 +198,20 @@ class OriginClient:
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         wks.from_df(df)
 
-        graph = self._new_graph(kind=kind, graph_name=graph_name)
+        graph = self._new_graph(kind=kind, graph_name=graph_name, template=template)
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
 
         for y_name in y_names:
             self._add_plot(layer, wks, x_name=x_name, y_name=y_name, kind=kind)
 
-        self._rescale(layer)
+        self.format_graph(
+            graph=graph,
+            title=title,
+            x_label=x_label or x_name,
+            y_label=y_label or ", ".join(y_names),
+            show_legend=show_legend,
+            rescale=True,
+        )
 
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
         exported: str | None = None
@@ -181,6 +225,36 @@ class OriginClient:
             rows=len(df),
         )
         return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
+
+    def format_graph(
+        self,
+        graph_name: str | None = None,
+        graph: Any | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        show_legend: bool | None = None,
+        rescale: bool = True,
+    ) -> dict[str, Any]:
+        target = graph if graph is not None else self._find_or_active_graph(graph_name)
+        layer = target[0] if hasattr(target, "__getitem__") else target
+
+        if x_label:
+            layer.axis("x").title = self._labtalk_text(x_label)
+        if y_label:
+            layer.axis("y").title = self._labtalk_text(y_label)
+        if title:
+            self._set_graph_title(layer, title)
+
+        if show_legend is not None:
+            self._set_legend(layer, show=show_legend)
+        if rescale:
+            self._rescale(layer)
+
+        return {
+            "graph_name": self._object_name(target, default=graph_name or "Graph"),
+            "formatted": True,
+        }
 
     def export_graph(
         self,
@@ -222,24 +296,26 @@ class OriginClient:
                 try:
                     wks.lname = sheet_name
                 except Exception as exc:
-                    raise OriginOperationError(f"Could not rename worksheet to {sheet_name!r}.") from exc
+                    raise OriginOperationError(
+                        f"Could not rename worksheet to {sheet_name!r}."
+                    ) from exc
         return wks
 
-    def _new_graph(self, kind: str, graph_name: str | None) -> Any:
+    def _new_graph(self, kind: str, graph_name: str | None, template: str | None = None) -> Any:
         op = self.op
         new_graph = getattr(op, "new_graph", None)
         if not callable(new_graph):
             raise OriginOperationError("originpro.new_graph is not available.")
 
-        template = "line" if kind == "line" else "scatter"
-        kwargs: dict[str, Any] = {"template": template}
+        graph_template = template or ("line" if kind == "line" else "scatter")
+        kwargs: dict[str, Any] = {"template": graph_template}
         if graph_name:
             kwargs["lname"] = graph_name
 
         try:
             return new_graph(**kwargs)
         except TypeError:
-            return new_graph(template)
+            return new_graph(graph_template)
 
     def _find_or_active_graph(self, graph_name: str | None) -> Any:
         op = self.op
@@ -279,6 +355,51 @@ class OriginClient:
                 func()
                 return
         self.run_labtalk("layer -a;")
+
+    def _set_legend(self, layer: Any, show: bool) -> None:
+        if show:
+            lt_exec = getattr(getattr(layer, "obj", None), "LT_execute", None)
+            if callable(lt_exec):
+                lt_exec("legend -r;")
+            else:
+                self.run_labtalk("legend -r;")
+            return
+
+        label = getattr(layer, "label", lambda _name: None)("Legend")
+        if label is not None:
+            remove = getattr(label, "remove", None)
+            if callable(remove):
+                remove()
+
+    def _set_graph_title(self, layer: Any, title: str) -> None:
+        label = getattr(layer, "label", lambda _name: None)("title")
+        if label is None:
+            add_label = getattr(layer, "add_label", None)
+            if callable(add_label):
+                label = add_label(title)
+        if label is not None:
+            try:
+                label.name = "title"
+            except Exception:
+                pass
+            label.text = title
+
+    @staticmethod
+    def _read_table(path: Path, excel_sheet: str | int | None = 0) -> pd.DataFrame:
+        suffix = path.suffix.lower()
+        if suffix in {".xls", ".xlsx", ".xlsm"}:
+            return pd.read_excel(path, sheet_name=excel_sheet if excel_sheet is not None else 0)
+        if suffix == ".tsv":
+            return pd.read_csv(path, sep="\t")
+        if suffix in {".txt", ".dat"}:
+            return pd.read_csv(path, sep=None, engine="python")
+        if suffix == ".csv":
+            return pd.read_csv(path)
+        raise OriginOperationError(f"Unsupported data file extension: {path.suffix}")
+
+    @staticmethod
+    def _labtalk_text(text: str) -> str:
+        return text.replace("\r", " ").replace("\n", " ")
 
     def _safe_eval(self, expression: str) -> Any:
         op = self.op
