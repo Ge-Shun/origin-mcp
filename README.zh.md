@@ -1,6 +1,6 @@
 # origin-mcp
 
-[English README](README.md)
+[English](README.md)
 
 `origin-mcp` 是一个本地 Model Context Protocol (MCP) 服务器，用于让 AI
 助手在 Windows 上控制 Origin/OriginPro。它通过 OriginLab 的 Python 自动化接口连接

@@ -1,6 +1,6 @@
 # origin-mcp
 
-[中文 README](README.zh.md)
+[简体中文](README.zh.md)
 
 `origin-mcp` is a local Model Context Protocol (MCP) server that lets AI
 assistants control Origin/OriginPro on Windows. It connects through OriginLab's
