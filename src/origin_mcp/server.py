@@ -13,6 +13,7 @@ from .models import (
     CsvImportRequest,
     GraphFormatRequest,
     PlotKind,
+    PlotStyleMode,
     PlotStyleRequest,
     PlotTableRequest,
     ProjectObjectRequest,
@@ -20,6 +21,7 @@ from .models import (
     ToolResult,
 )
 from .origin_client import OriginClient
+from .plot_matrix import run_plot_matrix
 
 mcp = FastMCP("origin-mcp")
 client = OriginClient()
@@ -44,6 +46,16 @@ def _wrap(func: Any) -> dict[str, Any]:
         return _error(exc)
     except Exception as exc:
         return _error(exc)
+
+
+def _export_inspection(graph: dict[str, Any]) -> dict[str, Any] | None:
+    export_path = graph.get("export_path")
+    if not export_path:
+        return None
+    try:
+        return client.inspect_export(Path(str(export_path)))
+    except Exception as exc:
+        return {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
 
 
 @mcp.tool()
@@ -80,6 +92,61 @@ def origin_plot_type_coverage(
                 origin_version=origin_version,
                 show=show,
                 refresh=refresh,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_run_plot_matrix(
+    output_dir: str | None = None,
+    project_path: str | None = None,
+    data_path: str | None = None,
+    matrix_range: str | None = None,
+    limit: int | None = None,
+    only: list[int] | None = None,
+    show: bool = True,
+    detach: bool = False,
+) -> dict[str, Any]:
+    """Run the Plot Type ID regression matrix inside the active MCP server process."""
+
+    def run() -> dict[str, Any]:
+        result = run_plot_matrix(
+            client=client,
+            output_dir=Path(output_dir) if output_dir else None,
+            project_path=Path(project_path) if project_path else None,
+            data_path=Path(data_path) if data_path else None,
+            matrix_range=matrix_range,
+            show=show,
+            detach=detach,
+            limit=limit,
+            only=only,
+            backend="mcp_server",
+        )
+        if result.get("ok"):
+            return _ok("Ran Origin plot regression matrix.", **result)
+        return ToolResult(
+            ok=False,
+            message=str(result.get("error") or "Origin plot regression matrix failed."),
+            data=result,
+        ).model_dump()
+
+    return _wrap(run)
+
+
+@mcp.tool()
+def origin_get_default_plot_config(
+    template_dir: str | None = None,
+    max_templates: int = 200,
+) -> dict[str, Any]:
+    """Inspect Origin default plot template/style settings visible to origin-mcp."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin default plot configuration.",
+            **client.default_plot_config(
+                template_dir=Path(template_dir) if template_dir else None,
+                max_templates=max_templates,
             ),
         )
     )
@@ -507,6 +574,7 @@ def origin_plot_line(
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line graph."""
@@ -533,6 +601,7 @@ def origin_plot_line(
         y_error_col=y_error_col,
         x_error_col=x_error_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -559,6 +628,7 @@ def origin_plot_scatter(
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a scatter graph."""
@@ -585,6 +655,7 @@ def origin_plot_scatter(
         y_error_col=y_error_col,
         x_error_col=x_error_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -611,6 +682,7 @@ def origin_plot_line_symbol(
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line+symbol graph."""
@@ -637,6 +709,7 @@ def origin_plot_line_symbol(
         y_error_col=y_error_col,
         x_error_col=x_error_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -662,6 +735,7 @@ def origin_plot_column(
     y_label: str | None = None,
     y_error_col: str | int | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a column/bar-style graph."""
@@ -687,6 +761,7 @@ def origin_plot_column(
         y_label=y_label,
         y_error_col=y_error_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -712,6 +787,7 @@ def origin_plot_contour(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a contour graph."""
@@ -737,6 +813,7 @@ def origin_plot_contour(
         y_label=y_label,
         z_col=z_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -763,6 +840,7 @@ def origin_plot_errorbar(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line+symbol plot with error bars."""
@@ -789,6 +867,7 @@ def origin_plot_errorbar(
         y_error_col=y_error_col,
         x_error_col=x_error_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -813,6 +892,7 @@ def origin_plot_histogram(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a histogram graph."""
@@ -837,6 +917,7 @@ def origin_plot_histogram(
         x_label=x_label,
         y_label=y_label,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -861,6 +942,7 @@ def origin_plot_box(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a box plot."""
@@ -885,6 +967,7 @@ def origin_plot_box(
         x_label=x_label,
         y_label=y_label,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -910,6 +993,7 @@ def origin_plot_heatmap(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a heatmap graph."""
@@ -935,6 +1019,7 @@ def origin_plot_heatmap(
         y_label=y_label,
         z_col=z_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -960,6 +1045,7 @@ def origin_plot_3d_scatter(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D scatter graph."""
@@ -985,6 +1071,7 @@ def origin_plot_3d_scatter(
         y_label=y_label,
         z_col=z_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -1010,6 +1097,7 @@ def origin_plot_3d_surface(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D surface graph."""
@@ -1035,6 +1123,7 @@ def origin_plot_3d_surface(
         y_label=y_label,
         z_col=z_col,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -1059,6 +1148,7 @@ def origin_plot_polar(
     x_label: str | None = None,
     y_label: str | None = None,
     show_legend: bool = True,
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a polar graph."""
@@ -1083,6 +1173,7 @@ def origin_plot_polar(
         x_label=x_label,
         y_label=y_label,
         show_legend=show_legend,
+        style_mode=style_mode,
         export_path=export_path,
     )
 
@@ -1143,19 +1234,23 @@ def origin_plot_matrix_id(
 ) -> dict[str, Any]:
     """Create a graph from an existing matrix/XYZ Origin range using a Plot Type ID."""
 
-    return _wrap(
-        lambda: _ok(
-            "Created Origin graph from range and Plot Type ID.",
-            graph=client.plot_matrix_by_id(
-                data_range=data_range,
-                plot_type_id=plot_type_id,
-                template=template,
-                graph_name=graph_name,
-                title=title,
-                export_path=Path(export_path) if export_path else None,
-            ).as_dict(),
+    def run() -> dict[str, Any]:
+        graph = client.plot_matrix_by_id(
+            data_range=data_range,
+            plot_type_id=plot_type_id,
+            template=template,
+            graph_name=graph_name,
+            title=title,
+            export_path=Path(export_path) if export_path else None,
         )
-    )
+        graph_data = graph.as_dict()
+        return _ok(
+            "Created Origin graph from range and Plot Type ID.",
+            graph=graph_data,
+            export_inspection=_export_inspection(graph_data),
+        )
+
+    return _wrap(run)
 
 
 @mcp.tool()
@@ -1567,7 +1662,12 @@ def origin_plot_from_range(
             y_label=y_label,
             export_path=Path(export_path) if export_path else None,
         )
-        return _ok("Created graph from Origin range.", graph=graph.as_dict())
+        graph_data = graph.as_dict()
+        return _ok(
+            "Created graph from Origin range.",
+            graph=graph_data,
+            export_inspection=_export_inspection(graph_data),
+        )
 
     return _wrap(run)
 
@@ -1643,12 +1743,15 @@ def origin_export_graph(
 ) -> dict[str, Any]:
     """Export the active or named Origin graph to an image/PDF file."""
 
-    return _wrap(
-        lambda: _ok(
+    def run() -> dict[str, Any]:
+        exported = client.export_graph(Path(path), graph_name=graph_name, overwrite=overwrite)
+        return _ok(
             "Exported Origin graph.",
-            **client.export_graph(Path(path), graph_name=graph_name, overwrite=overwrite),
+            **exported,
+            inspection=client.inspect_export(Path(exported["path"])),
         )
-    )
+
+    return _wrap(run)
 
 
 @mcp.tool()
@@ -1697,7 +1800,7 @@ def origin_export_preview(
 
 @mcp.tool()
 def origin_inspect_export(path: str) -> dict[str, Any]:
-    """Inspect an exported graph file for size and image dimensions."""
+    """Inspect an exported graph file for size, dimensions, hash, and image quality."""
 
     return _wrap(
         lambda: _ok(
@@ -2452,6 +2555,7 @@ def _plot_csv(
     x_label: str | None,
     y_label: str | None,
     show_legend: bool,
+    style_mode: str,
     export_path: str | None,
     z_col: str | int | None = None,
     y_error_col: str | int | None = None,
@@ -2480,6 +2584,7 @@ def _plot_csv(
             y_error_col=y_error_col,
             x_error_col=x_error_col,
             show_legend=show_legend,
+            style_mode=PlotStyleMode(style_mode),
             export_path=Path(export_path) if export_path else None,
         )
         worksheet, graph = client.plot_table(
@@ -2505,12 +2610,14 @@ def _plot_csv(
             y_error_col=req.y_error_col,
             x_error_col=req.x_error_col,
             show_legend=req.show_legend,
+            style_mode=req.style_mode.value,
             export_path=req.export_path,
         )
         return _ok(
             f"Created {kind.value} plot from table data.",
             worksheet=worksheet.as_dict(),
             graph=graph.as_dict(),
+            export_inspection=_export_inspection(graph.as_dict()),
         )
 
     return _wrap(run)
@@ -2562,6 +2669,7 @@ def _plot_table_id(
             worksheet=worksheet.as_dict(),
             graph=graph.as_dict(),
             command=command,
+            export_inspection=_export_inspection(graph.as_dict()),
         )
 
     return _wrap(run)

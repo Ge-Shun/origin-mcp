@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
+import math
 import os
 import struct
 import tempfile
 import uuid
+import zlib
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +18,8 @@ import pandas as pd
 from .analysis_adapters import resolve_analysis_adapter
 from .compat import collect_capabilities, feature_available, plot_type_coverage
 from .errors import OriginDependencyError, OriginOperationError
+from .runtime import python_runtime_profile
+from .text_format import normalize_label_text, origin_rich_text
 
 
 @dataclass(frozen=True)
@@ -36,9 +42,128 @@ class WorksheetRef:
 class GraphRef:
     graph_name: str
     export_path: str | None = None
+    template: str | None = None
+    style_mode: str = "origin_default"
 
     def as_dict(self) -> dict[str, Any]:
-        return {"graph_name": self.graph_name, "export_path": self.export_path}
+        return {
+            "graph_name": self.graph_name,
+            "export_path": self.export_path,
+            "template": self.template,
+            "style_mode": self.style_mode,
+        }
+
+
+@dataclass
+class _ImageQualityStats:
+    pixels: int = 0
+    transparent_pixels: int = 0
+    non_white_pixels: int = 0
+    background_diff_pixels: int = 0
+    luma_sum: float = 0.0
+    luma_sum_squares: float = 0.0
+    min_x: int | None = None
+    min_y: int | None = None
+    max_x: int | None = None
+    max_y: int | None = None
+
+    def __post_init__(self) -> None:
+        self.colors: Counter[tuple[int, int, int, int]] = Counter()
+        self.background: tuple[int, int, int, int] | None = None
+
+    def add(self, x: int, y: int, rgba: tuple[int, int, int, int]) -> None:
+        if self.background is None:
+            self.background = rgba
+        self.pixels += 1
+        self.colors[rgba] += 1
+        red, green, blue, alpha = rgba
+        if alpha == 0:
+            self.transparent_pixels += 1
+        luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        self.luma_sum += luma
+        self.luma_sum_squares += luma * luma
+        differs_from_white = alpha > 0 and min(red, green, blue) < 245
+        differs_from_background = self._differs_from_background(rgba)
+        if differs_from_white:
+            self.non_white_pixels += 1
+        if differs_from_background:
+            self.background_diff_pixels += 1
+        if differs_from_white or differs_from_background:
+            self._extend_bbox(x, y)
+
+    def as_dict(self, width: int, height: int, total_pixels: int) -> dict[str, Any]:
+        non_transparent_pixels = self.pixels - self.transparent_pixels
+        non_white_ratio = self._ratio(self.non_white_pixels)
+        non_background_ratio = self._ratio(self.background_diff_pixels)
+        non_transparent_ratio = self._ratio(non_transparent_pixels)
+        mean_luma = self.luma_sum / self.pixels if self.pixels else 0.0
+        variance = max(self.luma_sum_squares / self.pixels - mean_luma * mean_luma, 0.0)
+        luma_stddev = variance**0.5
+        has_visual_content = (
+            non_transparent_pixels > 0
+            and (self.background_diff_pixels >= max(8, int(self.pixels * 0.001)))
+            and (luma_stddev >= 0.5 or len(self.colors) > 2)
+        )
+        issues = []
+        if non_transparent_pixels == 0:
+            issues.append("all_pixels_transparent")
+        if len(self.colors) <= 1:
+            issues.append("single_color_image")
+        if not has_visual_content:
+            issues.append("blank_or_near_blank")
+        elif len(self.colors) <= 4 and non_background_ratio < 0.005:
+            issues.append("low_color_complexity")
+        return {
+            "format": "png",
+            "decoded": True,
+            "width": width,
+            "height": height,
+            "pixel_count": total_pixels,
+            "pixels_sampled": self.pixels,
+            "unique_colors": len(self.colors),
+            "top_colors": [
+                {"rgba": list(color), "count": count}
+                for color, count in self.colors.most_common(5)
+            ],
+            "non_white_ratio": round(non_white_ratio, 6),
+            "non_background_ratio": round(non_background_ratio, 6),
+            "non_transparent_ratio": round(non_transparent_ratio, 6),
+            "mean_luma": round(mean_luma, 3),
+            "luma_stddev": round(luma_stddev, 3),
+            "content_bbox": self._bbox(),
+            "has_visual_content": has_visual_content,
+            "issues": issues,
+        }
+
+    def _differs_from_background(self, rgba: tuple[int, int, int, int]) -> bool:
+        if self.background is None:
+            return False
+        if rgba[3] == 0 and self.background[3] == 0:
+            return False
+        delta = sum(
+            abs(value - base)
+            for value, base in zip(rgba, self.background, strict=True)
+        )
+        return delta > 24
+
+    def _extend_bbox(self, x: int, y: int) -> None:
+        self.min_x = x if self.min_x is None else min(self.min_x, x)
+        self.min_y = y if self.min_y is None else min(self.min_y, y)
+        self.max_x = x if self.max_x is None else max(self.max_x, x)
+        self.max_y = y if self.max_y is None else max(self.max_y, y)
+
+    def _bbox(self) -> dict[str, int] | None:
+        if self.min_x is None or self.min_y is None or self.max_x is None or self.max_y is None:
+            return None
+        return {
+            "x_min": self.min_x,
+            "y_min": self.min_y,
+            "x_max": self.max_x,
+            "y_max": self.max_y,
+        }
+
+    def _ratio(self, value: int) -> float:
+        return value / self.pixels if self.pixels else 0.0
 
 
 class OriginClient:
@@ -66,15 +191,13 @@ class OriginClient:
         return self._op
 
     def connect(self, show: bool = True) -> dict[str, Any]:
-        op = self.op
-        if hasattr(op, "set_show"):
-            op.set_show(show)
-
+        show_result = self._try_set_show(show)
         version = self._safe_eval("@V")
         return {
             "connected": True,
             "visible": show,
             "origin_version": version,
+            **show_result,
         }
 
     def capabilities(self, show: bool = False, refresh: bool = False) -> dict[str, Any]:
@@ -113,9 +236,8 @@ class OriginClient:
 
     def new_project(self, show: bool = True) -> dict[str, Any]:
         op = self.op
-        if hasattr(op, "set_show"):
-            op.set_show(show)
-        self._call_first_available(op, ["new", "new_project"])
+        self._try_set_show(show)
+        self._call_first_available(op, ["new", "new_project"], operation="create a new project")
         return {"created": True}
 
     def open_project(
@@ -556,6 +678,7 @@ class OriginClient:
         sheet_name: str | None = None,
         excel_sheet: str | int | None = 0,
         graph_name: str | None = None,
+        style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         return self.plot_table(
@@ -567,6 +690,7 @@ class OriginClient:
             sheet_name=sheet_name,
             excel_sheet=excel_sheet,
             graph_name=graph_name,
+            style_mode=style_mode,
             export_path=export_path,
         )
 
@@ -594,6 +718,7 @@ class OriginClient:
         y_error_col: str | int | None = None,
         x_error_col: str | int | None = None,
         show_legend: bool = True,
+        style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = path.expanduser().resolve()
@@ -633,7 +758,9 @@ class OriginClient:
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         wks.from_df(df)
 
-        graph = self._new_graph(kind=kind, graph_name=graph_name, template=template)
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        graph_template = self._resolve_graph_template(kind=kind, template=template)
+        graph = self._new_graph(kind=kind, graph_name=graph_name, template=graph_template)
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
 
         for y_name in y_names:
@@ -656,14 +783,20 @@ class OriginClient:
             show_legend=show_legend,
             rescale=True,
         )
-
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
+        if style_mode_actual == "publication":
+            self.apply_publication_style(graph_name=actual_graph_name)
         exported: str | None = None
         if export_path is not None:
             exported = self.export_graph(export_path, graph=graph)["path"]
 
         worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
-        return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
+        return worksheet, GraphRef(
+            graph_name=actual_graph_name,
+            export_path=exported,
+            template=graph_template,
+            style_mode=style_mode_actual,
+        )
 
     def plot_table_by_id(
         self,
@@ -729,7 +862,7 @@ class OriginClient:
                 pass
         exported = None
         if export_path is not None:
-            exported = self.export_graph(export_path, graph_name=graph_name_actual)["path"]
+            exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
         worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
         return worksheet, GraphRef(graph_name=graph_name_actual, export_path=exported), {
             "script": script,
@@ -771,8 +904,59 @@ class OriginClient:
                 pass
         exported = None
         if export_path is not None:
-            exported = self.export_graph(export_path, graph_name=graph_name_actual)["path"]
+            exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
         return GraphRef(graph_name=graph_name_actual, export_path=exported)
+
+    def create_sample_matrix_range(
+        self,
+        book_name: str = "OriginMcpMatrix",
+        sheet_name: str = "MatrixData",
+        rows: int = 12,
+        cols: int = 12,
+    ) -> dict[str, Any]:
+        if rows < 2 or cols < 2:
+            raise OriginOperationError("Matrix sample rows and cols must be at least 2.")
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise OriginDependencyError("numpy is required to create sample matrix data.") from exc
+
+        op = self.op
+        new_sheet = getattr(op, "new_sheet", None)
+        if not callable(new_sheet):
+            raise OriginOperationError("originpro.new_sheet is not available.")
+        msheet = new_sheet("m")
+        data = np.fromfunction(
+            lambda row, col: np.sin(row / 2.0) + np.cos(col / 3.0) + row * col / 80.0,
+            (rows, cols),
+            dtype=float,
+        )
+        from_np = getattr(msheet, "from_np", None)
+        if not callable(from_np):
+            raise OriginOperationError("Matrix sheet does not support from_np().")
+        from_np(data)
+        if book_name:
+            try:
+                msheet.get_book().lname = book_name
+            except Exception:
+                pass
+        if sheet_name:
+            try:
+                msheet.name = sheet_name
+            except Exception:
+                try:
+                    msheet.lname = sheet_name
+                except Exception:
+                    pass
+        range_base = msheet.lt_range(False)
+        data_range = f"{range_base}!1"
+        return {
+            "book_name": self._object_name(msheet.get_book(), default=book_name),
+            "sheet_name": self._object_name(msheet, default=sheet_name),
+            "rows": rows,
+            "cols": cols,
+            "data_range": data_range,
+        }
 
     def list_project(self) -> dict[str, Any]:
         self.ensure_feature("pages", "Project object listing")
@@ -847,7 +1031,7 @@ class OriginClient:
         if start is not None or end is not None or step is not None:
             ax.limits = (start, end, step)
         if title:
-            ax.title = self._labtalk_text(title)
+            ax.title = self._label_text(title)
         self._rescale(layer) if start is None and end is None else None
         return {"graph_name": self._object_name(graph, default=graph_name or ""), "axis": axis}
 
@@ -1153,7 +1337,8 @@ class OriginClient:
         add_label = getattr(layer, "add_label", None)
         if not callable(add_label):
             raise OriginOperationError("Graph layer does not support add_label().")
-        label = add_label(text)
+        formatted_text = self._label_text(text)
+        label = add_label(formatted_text)
         if name:
             try:
                 label.name = name
@@ -1170,6 +1355,7 @@ class OriginClient:
             "layer_index": layer_index,
             "label_name": self._object_name(label, default=name or ""),
             "text": text,
+            "formatted_text": formatted_text,
         }
 
     def add_reference_line(
@@ -1192,8 +1378,9 @@ class OriginClient:
             f"draw -n {line_name} -l {orientation} {value};",
         ]
         if label:
+            formatted_label = self._label_text(label)
             script_parts.append(
-                f'label -s -sa -n ref_label "{self._escape_labtalk(label)}";'
+                f'label -s -sa -n ref_label "{self._escape_labtalk(formatted_label)}";'
             )
         script = " ".join(script_parts)
         result = self.run_labtalk(script)
@@ -1215,7 +1402,7 @@ class OriginClient:
         offset: int = 0,
     ) -> dict[str, Any]:
         wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
-        wks.set_labels(labels, label_type, offset=offset)
+        wks.set_labels([self._label_text(label) for label in labels], label_type, offset=offset)
         return self._worksheet_ref(wks).as_dict()
 
     def set_column_designations(
@@ -1386,20 +1573,7 @@ class OriginClient:
         return {"count": len(graphs), "graphs": graphs}
 
     def list_graph_templates(self, template_dir: Path | None = None) -> dict[str, Any]:
-        builtin = [
-            "line",
-            "scatter",
-            "linesymbol",
-            "column",
-            "bar",
-            "histogram",
-            "box",
-            "contour",
-            "heatmap",
-            "surface",
-            "polar",
-            "ternary",
-        ]
+        builtin = sorted(set(self._default_graph_templates().values()) | {"bar", "ternary"})
         discovered: list[dict[str, str]] = []
         if template_dir is not None:
             template_dir = template_dir.expanduser().resolve()
@@ -1413,6 +1587,71 @@ class OriginClient:
             "builtin": builtin,
             "discovered": discovered,
             "count": len(builtin) + len(discovered),
+        }
+
+    def default_plot_config(
+        self,
+        template_dir: Path | None = None,
+        max_templates: int = 200,
+    ) -> dict[str, Any]:
+        if max_templates < 1:
+            raise OriginOperationError("max_templates must be at least 1.")
+        capabilities = self.capabilities(show=False)
+        origin_paths = self._origin_template_paths()
+        search_dirs = [Path(path) for path in origin_paths.values() if path]
+        if template_dir is not None:
+            template_dir = template_dir.expanduser().resolve()
+            self._check_path_allowed(template_dir)
+            search_dirs.insert(0, template_dir)
+        discovered = self._discover_template_files(search_dirs, max_templates=max_templates)
+        return {
+            "style_mode_default": "origin_default",
+            "preserves_origin_defaults": True,
+            "origin_version": capabilities.get("origin_version"),
+            "originpro_version": capabilities.get("originpro_version"),
+            "originext_version": capabilities.get("originext_version"),
+            "python_version": capabilities.get("python_version"),
+            "default_templates": self._default_graph_templates(),
+            "template_search_paths": {key: str(path) for key, path in origin_paths.items()},
+            "templates": {
+                "builtin": self.list_graph_templates().get("builtin", []),
+                "discovered": discovered,
+                "discovered_count": len(discovered),
+                "truncated": len(discovered) >= max_templates,
+            },
+            "style_modes": {
+                "origin_default": (
+                    "Use the resolved Origin graph template and preserve the user's Origin "
+                    "template/theme defaults. This is the default."
+                ),
+                "template": "Alias for origin_default; pass template to force a template.",
+                "theme": "Alias for origin_default; Origin applies its configured theme/template.",
+                "none": (
+                    "Alias for origin_default; origin-mcp does not apply extra style overrides."
+                ),
+                "publication": (
+                    "Apply origin-mcp publication styling after Origin creates the graph."
+                ),
+            },
+            "mcp_overrides": {
+                "origin_default": ["title", "axis titles", "legend refresh", "axis rescale"],
+                "publication": [
+                    "title",
+                    "axis titles",
+                    "legend refresh",
+                    "axis rescale",
+                    "axis/title font sizes",
+                    "tick lengths",
+                    "line width",
+                    "symbol size",
+                    "legend font size",
+                ],
+            },
+            "notes": [
+                "origin-mcp does not parse every Origin theme preference file directly.",
+                "Origin itself resolves template names against user and system template folders.",
+                "Pass template explicitly when a user has a preferred custom template.",
+            ],
         }
 
     def get_graph_info(self, graph_name: str | None = None) -> dict[str, Any]:
@@ -1558,9 +1797,9 @@ class OriginClient:
         layer = target[0] if hasattr(target, "__getitem__") else target
 
         if x_label:
-            layer.axis("x").title = self._labtalk_text(x_label)
+            layer.axis("x").title = self._label_text(x_label)
         if y_label:
-            layer.axis("y").title = self._labtalk_text(y_label)
+            layer.axis("y").title = self._label_text(y_label)
         if title:
             self._set_graph_title(layer, title)
 
@@ -1618,6 +1857,19 @@ class OriginClient:
             "preview": self.inspect_export(Path(exported["path"])),
         }
 
+    def _export_plot_command_graph(self, path: Path, graph_name: str) -> dict[str, Any]:
+        try:
+            return self.export_graph(path, graph_name=graph_name)
+        except OriginOperationError as exc:
+            if "Graph not found" not in str(exc):
+                raise
+            exported = self.export_graph(path)
+            exported["warning"] = (
+                f"Origin did not expose plot command output as {graph_name!r}; "
+                "exported the active graph instead."
+            )
+            return exported
+
     def inspect_export(self, path: Path) -> dict[str, Any]:
         path = path.expanduser().resolve()
         self._check_path_allowed(path)
@@ -1630,11 +1882,18 @@ class OriginClient:
             "exists": True,
             "size_bytes": path.stat().st_size,
             "suffix": path.suffix.lower(),
+            "sha256": self._file_sha256(path),
         }
         dimensions = self._image_dimensions(path)
         if dimensions:
             info.update(dimensions)
-        info["looks_nonempty"] = info["size_bytes"] > 0
+        quality = self._image_quality(path)
+        if quality:
+            info["image_quality"] = quality
+        quality_issues = self._export_quality_issues(info)
+        info["quality_issues"] = quality_issues
+        info["quality_passed"] = not quality_issues
+        info["looks_nonempty"] = self._export_looks_nonempty(info)
         return info
 
     def _new_sheet(self, book_name: str | None, sheet_name: str | None) -> Any:
@@ -1672,10 +1931,22 @@ class OriginClient:
         if not callable(new_graph):
             raise OriginOperationError("originpro.new_graph is not available.")
 
-        default_templates = {
+        graph_template = self._resolve_graph_template(kind=kind, template=template)
+        kwargs: dict[str, Any] = {"template": graph_template}
+        if graph_name:
+            kwargs["lname"] = graph_name
+
+        try:
+            return new_graph(**kwargs)
+        except TypeError:
+            return new_graph(graph_template)
+
+    @staticmethod
+    def _default_graph_templates() -> dict[str, str]:
+        return {
             "line": "line",
             "scatter": "scatter",
-            "line_symbol": "linesymbol",
+            "line_symbol": "line",
             "column": "column",
             "contour": "contour",
             "histogram": "histogram",
@@ -1685,15 +1956,74 @@ class OriginClient:
             "surface3d": "surface",
             "polar": "polar",
         }
-        graph_template = template or default_templates.get(kind, "line")
-        kwargs: dict[str, Any] = {"template": graph_template}
-        if graph_name:
-            kwargs["lname"] = graph_name
 
+    def _resolve_graph_template(self, kind: str, template: str | None = None) -> str:
+        return template or self._default_graph_templates().get(kind, "line")
+
+    @staticmethod
+    def _normalize_style_mode(style_mode: str | None) -> str:
+        value = (style_mode or "origin_default").strip().lower()
+        aliases = {
+            "default": "origin_default",
+            "origin": "origin_default",
+            "origin_default": "origin_default",
+            "template": "origin_default",
+            "theme": "origin_default",
+            "none": "origin_default",
+            "publication": "publication",
+        }
         try:
-            return new_graph(**kwargs)
-        except TypeError:
-            return new_graph(graph_template)
+            return aliases[value]
+        except KeyError as exc:
+            supported = ", ".join(sorted(aliases))
+            raise OriginOperationError(
+                f"Unsupported style_mode: {style_mode!r}. Supported: {supported}."
+            ) from exc
+
+    def _origin_template_paths(self) -> dict[str, str]:
+        paths: dict[str, str] = {}
+        op = self.op
+        path_func = getattr(op, "path", None)
+        if not callable(path_func):
+            return paths
+        for key, label in (("u", "user_files"), ("e", "program")):
+            try:
+                value = path_func(key)
+            except Exception:
+                continue
+            if value:
+                paths[label] = str(Path(value).expanduser())
+        return paths
+
+    def _discover_template_files(
+        self,
+        directories: list[Path],
+        max_templates: int,
+    ) -> list[dict[str, str]]:
+        suffixes = {".otp", ".otpu", ".otm", ".otmu"}
+        discovered: list[dict[str, str]] = []
+        seen: set[Path] = set()
+        for directory in directories:
+            directory = directory.expanduser()
+            if not directory.exists() or not directory.is_dir():
+                continue
+            for path in directory.rglob("*"):
+                if len(discovered) >= max_templates:
+                    return discovered
+                if not path.is_file() or path.suffix.lower() not in suffixes:
+                    continue
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                discovered.append(
+                    {
+                        "name": path.stem,
+                        "path": str(resolved),
+                        "source_dir": str(directory.resolve()),
+                    }
+                )
+        return discovered
 
     def _find_or_active_graph(self, graph_name: str | None) -> Any:
         op = self.op
@@ -1785,17 +2115,18 @@ class OriginClient:
                 remove()
 
     def _set_graph_title(self, layer: Any, title: str) -> None:
+        formatted_title = self._label_text(title)
         label = getattr(layer, "label", lambda _name: None)("title")
         if label is None:
             add_label = getattr(layer, "add_label", None)
             if callable(add_label):
-                label = add_label(title)
+                label = add_label(formatted_title)
         if label is not None:
             try:
                 label.name = "title"
             except Exception:
                 pass
-            label.text = title
+            label.text = formatted_title
 
     def _worksheet_to_df(self, wks: Any) -> pd.DataFrame:
         to_df = getattr(wks, "to_df", None)
@@ -2100,6 +2431,163 @@ class OriginClient:
             return None
 
     @staticmethod
+    def _file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _image_quality(path: Path) -> dict[str, Any] | None:
+        if path.suffix.lower() != ".png":
+            return None
+        try:
+            return OriginClient._png_quality(path)
+        except (OSError, struct.error, zlib.error, ValueError):
+            return None
+
+    @staticmethod
+    def _png_quality(path: Path) -> dict[str, Any] | None:
+        with path.open("rb") as handle:
+            if handle.read(8) != b"\x89PNG\r\n\x1a\n":
+                return None
+            width = height = bit_depth = color_type = interlace = None
+            palette: list[tuple[int, int, int]] = []
+            idat = bytearray()
+            while True:
+                length_bytes = handle.read(4)
+                if not length_bytes:
+                    break
+                length = struct.unpack(">I", length_bytes)[0]
+                chunk_type = handle.read(4)
+                data = handle.read(length)
+                handle.read(4)
+                if chunk_type == b"IHDR":
+                    width, height, bit_depth, color_type, _compression, _filter, interlace = (
+                        struct.unpack(">IIBBBBB", data)
+                    )
+                elif chunk_type == b"PLTE":
+                    palette = [
+                        tuple(data[index : index + 3])
+                        for index in range(0, len(data) - 2, 3)
+                    ]
+                elif chunk_type == b"IDAT":
+                    idat.extend(data)
+                elif chunk_type == b"IEND":
+                    break
+
+        if width is None or height is None or bit_depth != 8 or interlace != 0:
+            return None
+        channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
+        if channels is None:
+            return None
+        raw = zlib.decompress(bytes(idat))
+        stride = int(width) * channels
+        expected = (stride + 1) * int(height)
+        if len(raw) < expected:
+            return None
+
+        previous = bytearray(stride)
+        offset = 0
+        stats = _ImageQualityStats()
+        total_pixels = int(width) * int(height)
+        sample_step = max(1, math.ceil((total_pixels / 500_000) ** 0.5))
+        for row_index in range(int(height)):
+            filter_type = raw[offset]
+            offset += 1
+            row = bytearray(raw[offset : offset + stride])
+            offset += stride
+            OriginClient._png_unfilter(row, previous, channels, filter_type)
+            if row_index % sample_step == 0:
+                for column in range(0, int(width), sample_step):
+                    rgba = OriginClient._png_pixel_rgba(
+                        row,
+                        column * channels,
+                        color_type,
+                        palette,
+                    )
+                    stats.add(column, row_index, rgba)
+            previous = row
+        return stats.as_dict(int(width), int(height), total_pixels)
+
+    @staticmethod
+    def _png_unfilter(row: bytearray, previous: bytearray, bpp: int, filter_type: int) -> None:
+        if filter_type == 0:
+            return
+        for index, value in enumerate(row):
+            left = row[index - bpp] if index >= bpp else 0
+            up = previous[index] if previous else 0
+            up_left = previous[index - bpp] if previous and index >= bpp else 0
+            if filter_type == 1:
+                row[index] = (value + left) & 0xFF
+            elif filter_type == 2:
+                row[index] = (value + up) & 0xFF
+            elif filter_type == 3:
+                row[index] = (value + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                row[index] = (value + OriginClient._png_paeth(left, up, up_left)) & 0xFF
+            else:
+                raise ValueError(f"Unsupported PNG filter type: {filter_type}")
+
+    @staticmethod
+    def _png_paeth(left: int, up: int, up_left: int) -> int:
+        estimate = left + up - up_left
+        left_distance = abs(estimate - left)
+        up_distance = abs(estimate - up)
+        up_left_distance = abs(estimate - up_left)
+        if left_distance <= up_distance and left_distance <= up_left_distance:
+            return left
+        if up_distance <= up_left_distance:
+            return up
+        return up_left
+
+    @staticmethod
+    def _png_pixel_rgba(
+        row: bytearray,
+        offset: int,
+        color_type: int | None,
+        palette: list[tuple[int, int, int]],
+    ) -> tuple[int, int, int, int]:
+        if color_type == 0:
+            gray = row[offset]
+            return gray, gray, gray, 255
+        if color_type == 2:
+            return row[offset], row[offset + 1], row[offset + 2], 255
+        if color_type == 3:
+            red, green, blue = palette[row[offset]]
+            return red, green, blue, 255
+        if color_type == 4:
+            gray = row[offset]
+            return gray, gray, gray, row[offset + 1]
+        if color_type == 6:
+            return row[offset], row[offset + 1], row[offset + 2], row[offset + 3]
+        raise ValueError(f"Unsupported PNG color type: {color_type}")
+
+    @staticmethod
+    def _export_quality_issues(info: dict[str, Any]) -> list[str]:
+        issues = []
+        if info["size_bytes"] <= 0:
+            issues.append("empty_file")
+        width = info.get("width")
+        height = info.get("height")
+        if isinstance(width, int) and isinstance(height, int) and (width < 64 or height < 64):
+            issues.append("dimensions_too_small")
+        quality = info.get("image_quality")
+        if isinstance(quality, dict):
+            issues.extend(quality.get("issues", []))
+        return issues
+
+    @staticmethod
+    def _export_looks_nonempty(info: dict[str, Any]) -> bool:
+        if info["size_bytes"] <= 0:
+            return False
+        quality = info.get("image_quality")
+        if isinstance(quality, dict):
+            return bool(quality.get("has_visual_content"))
+        return True
+
+    @staticmethod
     def _read_table(
         path: Path,
         excel_sheet: str | int | None = 0,
@@ -2138,7 +2626,11 @@ class OriginClient:
 
     @staticmethod
     def _labtalk_text(text: str) -> str:
-        return text.replace("\r", " ").replace("\n", " ")
+        return normalize_label_text(text)
+
+    @staticmethod
+    def _label_text(text: str) -> str:
+        return origin_rich_text(text)
 
     def _safe_eval(self, expression: str) -> Any:
         op = self.op
@@ -2149,6 +2641,31 @@ class OriginClient:
             return func(expression)
         except Exception:
             return None
+
+    def _try_set_show(self, show: bool) -> dict[str, Any]:
+        op = self.op
+        set_show = getattr(op, "set_show", None)
+        if not callable(set_show):
+            return {"show_set": False, "show_warning": "originpro.set_show is unavailable."}
+        try:
+            set_show(show)
+        except (RuntimeError, SystemError) as exc:
+            return {
+                "show_set": False,
+                "show_warning": self._automation_failure_message("set Origin visibility", exc),
+            }
+        return {"show_set": True}
+
+    @staticmethod
+    def _automation_failure_message(operation: str, exc: BaseException) -> str:
+        runtime = python_runtime_profile()
+        return (
+            f"Origin automation failed while trying to {operation}: {exc}. "
+            f"Python {runtime.version} is running at {runtime.executable}. "
+            f"Runtime tier: {runtime.origin_ext_tier}; recommended backend: "
+            f"{runtime.recommended_backend}. {runtime.note} Make sure no other process is "
+            "holding the Origin automation session."
+        )
 
     @staticmethod
     def _validate_file(path: Path) -> None:
@@ -2415,9 +2932,20 @@ class OriginClient:
         return f"({x_col},{y_col})" if x_col is not None else f"({y_col})"
 
     @staticmethod
-    def _call_first_available(obj: Any, names: list[str]) -> Any:
+    def _call_first_available(
+        obj: Any,
+        names: list[str],
+        operation: str | None = None,
+    ) -> Any:
         for name in names:
             func = getattr(obj, name, None)
             if callable(func):
-                return func()
+                try:
+                    return func()
+                except (RuntimeError, SystemError) as exc:
+                    if operation:
+                        raise OriginOperationError(
+                            OriginClient._automation_failure_message(operation, exc)
+                        ) from exc
+                    raise
         raise OriginOperationError(f"None of these functions is available: {names}")

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from importlib import metadata
 from typing import Any
 
+from .runtime import python_runtime_profile
+
 PLOT_TYPE_CATALOG: list[dict[str, Any]] = [
     {
         "id": 101,
@@ -406,6 +408,7 @@ def is_origin_version_at_least(version: float | int | None, minimum: float) -> b
 
 
 def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[str, Any]:
+    runtime = python_runtime_profile()
     feature_checks = [
         FeatureCheck("labtalk", hasattr(op, "lt_exec"), note="Required for fallback commands."),
         FeatureCheck("project_open", hasattr(op, "open")),
@@ -441,6 +444,9 @@ def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[st
         "origin_version": origin_version,
         "originpro_version": package_version("originpro"),
         "originext_version": package_version("OriginExt"),
+        "python_version": runtime.version,
+        "python_executable": runtime.executable,
+        "python_runtime": runtime.as_dict(),
         "features": {feature.name: feature.as_dict() for feature in feature_checks},
         "plot_type_coverage": plot_type_coverage(origin_version),
     }

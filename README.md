@@ -85,6 +85,12 @@ For broader verification:
 .\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
 ```
 
+To regression-check documented Origin Plot Type IDs:
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix --limit 10
+```
+
 ## Example Prompt
 
 ```text
@@ -98,6 +104,7 @@ to D:\origin-mcp\output\sample_labeled.png.
 - [Tool and compatibility reference](docs/tools.md)
 - [MCP client configuration](docs/mcp-config.md)
 - [Smoke test](examples/smoke-test.md)
+- [Plot matrix regression check](examples/plot-matrix.md)
 
 ## Safety
 

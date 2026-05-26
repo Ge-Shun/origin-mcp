@@ -1,3 +1,5 @@
+import struct
+import zlib
 from pathlib import Path
 
 import pandas as pd
@@ -68,6 +70,38 @@ def test_allowed_roots_blocks_paths_outside_root(
 
     with pytest.raises(OriginOperationError):
         OriginClient._validate_file(blocked)
+
+
+def test_connect_records_set_show_warning() -> None:
+    client = OriginClient()
+
+    class FakeOrigin:
+        def set_show(self, _show: bool) -> None:
+            raise SystemError("bad automation state")
+
+    client._op = FakeOrigin()
+
+    result = client.connect(show=True)
+
+    assert result["connected"] is True
+    assert result["show_set"] is False
+    assert "bad automation state" in result["show_warning"]
+
+
+def test_new_project_wraps_automation_failure() -> None:
+    client = OriginClient()
+
+    class FakeOrigin:
+        def set_show(self, _show: bool) -> None:
+            return None
+
+        def new(self) -> None:
+            raise SystemError("bad automation state")
+
+    client._op = FakeOrigin()
+
+    with pytest.raises(OriginOperationError, match="create a new project"):
+        client.new_project()
 
 
 def test_analysis_script_linear_fit() -> None:
@@ -226,6 +260,9 @@ class FakeWorksheet:
             return ["s", "N"][: len(self.df.columns)]
         return []
 
+    def set_labels(self, labels: list[str], label_type: str, offset: int = 0) -> None:
+        self.labels = {"labels": labels, "label_type": label_type, "offset": offset}
+
 
 def test_read_worksheet_returns_window_and_nulls(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
@@ -298,9 +335,17 @@ class FakePlot:
 
 
 class FakeAxis:
-    title = "Axis"
-    scale = "linear"
-    limits = None
+    def __init__(self) -> None:
+        self.title = "Axis"
+        self.scale = "linear"
+        self.limits = None
+
+
+class FakeLabel:
+    name = "Label1"
+
+    def __init__(self, text: str) -> None:
+        self.text = text
 
 
 class FakeLayer:
@@ -309,16 +354,26 @@ class FakeLayer:
     def __init__(self, plots: list[FakePlot] | None = None) -> None:
         self.plots = plots if plots is not None else []
         self.added = []
+        self.labels = {}
+        self.axes = {"x": FakeAxis(), "y": FakeAxis(), "z": FakeAxis()}
 
     def plot_list(self) -> list[FakePlot]:
         return self.plots
 
-    def axis(self, _name: str) -> FakeAxis:
-        return FakeAxis()
+    def axis(self, name: str) -> FakeAxis:
+        return self.axes[name]
 
     def add_plot(self, wks: FakeWorksheet, **kwargs: object) -> None:
         self.added.append((wks, kwargs))
         self.plots.append(FakePlot())
+
+    def add_label(self, text: str) -> FakeLabel:
+        label = FakeLabel(text)
+        self.labels[label.name] = label
+        return label
+
+    def label(self, name: str) -> FakeLabel | None:
+        return self.labels.get(name)
 
 
 def test_set_graph_page_updates_fake_graph(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -379,6 +434,133 @@ def test_get_graph_info_reports_layers_and_plots(monkeypatch: pytest.MonkeyPatch
     assert result["layers_count"] == 1
     assert result["layers"][0]["plots_count"] == 1
     assert result["layers"][0]["axes"]["x"]["scale"] == "linear"
+
+
+def test_format_graph_formats_axis_titles_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+
+    client.format_graph(
+        "Graph1",
+        title="CO_2 response",
+        x_label="time (s)",
+        y_label="rate m^-2",
+        rescale=True,
+    )
+
+    assert layer.axis("x").title == "time (s)"
+    assert layer.axis("y").title == "rate m\\+(-2)"
+    assert next(iter(layer.labels.values())).text == "CO\\-(2) response"
+
+
+def test_add_graph_label_formats_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.add_graph_label("H₂O <sup>18</sup>O", graph_name="Graph1")
+
+    assert result["formatted_text"] == "H\\-(2)O \\+(18)O"
+    assert layer.labels["Label1"].text == "H\\-(2)O \\+(18)O"
+
+
+def test_set_column_labels_formats_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"co2": [1]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.set_column_labels(["CO_2", "m^2"], label_type="L")
+
+    assert wks.labels["labels"] == ["CO\\-(2)", "m\\+(2)"]
+
+
+def test_plot_table_reports_origin_default_style(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    graph = FakeGraph(FakeLayer())
+    publication_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(
+        client,
+        "apply_publication_style",
+        lambda **kwargs: publication_calls.append(kwargs) or {"styled": True},
+    )
+
+    worksheet, graph_ref = client.plot_table(path=path, kind="scatter", show_legend=False)
+
+    assert worksheet.rows == 1
+    assert graph_ref.template == "scatter"
+    assert graph_ref.style_mode == "origin_default"
+    assert publication_calls == []
+
+
+def test_plot_table_publication_style_applies_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    graph = FakeGraph(FakeLayer())
+    publication_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(
+        client,
+        "apply_publication_style",
+        lambda **kwargs: publication_calls.append(kwargs) or {"styled": True},
+    )
+
+    _, graph_ref = client.plot_table(
+        path=path,
+        kind="line",
+        show_legend=False,
+        style_mode="publication",
+    )
+
+    assert graph_ref.style_mode == "publication"
+    assert publication_calls == [{"graph_name": "Graph1"}]
+
+
+def test_default_plot_config_discovers_user_templates(tmp_path: Path) -> None:
+    (tmp_path / "CustomLine.otpu").write_text("placeholder", encoding="utf-8")
+    client = OriginClient()
+    client._capabilities = {
+        "origin_version": 10.3,
+        "originpro_version": "1.1.15",
+        "originext_version": "1.2.5",
+        "python_version": "3.12.0",
+    }
+
+    class FakeOrigin:
+        def path(self, path_type: str = "u") -> str:
+            if path_type == "u":
+                return str(tmp_path)
+            if path_type == "e":
+                return str(tmp_path / "missing")
+            return ""
+
+    client._op = FakeOrigin()
+
+    config = client.default_plot_config(max_templates=10)
+
+    assert config["style_mode_default"] == "origin_default"
+    assert config["default_templates"]["scatter"] == "scatter"
+    assert config["template_search_paths"]["user_files"] == str(tmp_path)
+    assert config["templates"]["discovered"][0]["name"] == "CustomLine"
 
 
 def test_apply_publication_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -450,6 +632,22 @@ def test_new_graph_uses_extended_templates(monkeypatch: pytest.MonkeyPatch) -> N
     assert created["lname"] == "Heatmap"
 
 
+def test_line_symbol_uses_compatible_line_template(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    created = {}
+
+    class FakeOrigin:
+        def new_graph(self, **kwargs: object) -> FakeGraph:
+            created.update(kwargs)
+            return FakeGraph()
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    client._new_graph(kind="line_symbol", graph_name="LineSymbol")
+
+    assert created["template"] == "line"
+
+
 def test_add_plot_supports_extended_plot_types() -> None:
     client = OriginClient()
     wks = FakeWorksheet(pd.DataFrame({"x": [0], "y": [1], "z": [2]}))
@@ -488,6 +686,40 @@ def test_plot_table_by_id_builds_labtalk_command(
     assert graph.graph_name == "Bubble"
     assert command["plot_type_id"] == 193
     assert "plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in scripts[-1]
+
+
+def test_plot_table_by_id_exports_active_graph_when_named_graph_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    export_path = tmp_path / "plot.png"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    calls = []
+
+    def fake_export(path_arg: Path, graph_name: str | None = None) -> dict[str, str]:
+        calls.append(graph_name)
+        if graph_name:
+            raise OriginOperationError(f"Graph not found: {graph_name}")
+        return {"path": str(path_arg)}
+
+    monkeypatch.setattr(client, "export_graph", fake_export)
+
+    _worksheet, graph, _command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=200,
+        template="line",
+        selected_cols=["x", "y"],
+        graph_name="Line",
+        export_path=export_path,
+    )
+
+    assert graph.export_path == str(export_path)
+    assert calls == ["Line", None]
 
 
 def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -539,3 +771,49 @@ def test_inspect_export_reads_png_dimensions(tmp_path: Path) -> None:
     assert result["width"] == 2
     assert result["height"] == 3
     assert result["looks_nonempty"] is True
+
+
+def test_inspect_export_detects_blank_png(tmp_path: Path) -> None:
+    path = tmp_path / "blank.png"
+    _write_png(path, width=8, height=8, pixels=[(255, 255, 255)] * 64)
+
+    result = OriginClient().inspect_export(path)
+
+    assert result["image_quality"]["decoded"] is True
+    assert result["image_quality"]["has_visual_content"] is False
+    assert "blank_or_near_blank" in result["image_quality"]["issues"]
+    assert result["looks_nonempty"] is False
+
+
+def test_inspect_export_detects_visual_content(tmp_path: Path) -> None:
+    path = tmp_path / "line.png"
+    pixels = [(255, 255, 255)] * 100
+    for index in range(10):
+        pixels[index * 10 + index] = (0, 0, 0)
+    _write_png(path, width=10, height=10, pixels=pixels)
+
+    result = OriginClient().inspect_export(path)
+
+    assert result["image_quality"]["decoded"] is True
+    assert result["image_quality"]["has_visual_content"] is True
+    assert result["looks_nonempty"] is True
+
+
+def _write_png(path: Path, width: int, height: int, pixels: list[tuple[int, int, int]]) -> None:
+    rows = []
+    for row_index in range(height):
+        row = bytearray([0])
+        for red, green, blue in pixels[row_index * width : (row_index + 1) * width]:
+            row.extend([red, green, blue])
+        rows.append(bytes(row))
+    raw = zlib.compress(b"".join(rows))
+    data = bytearray(b"\x89PNG\r\n\x1a\n")
+    data.extend(_png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)))
+    data.extend(_png_chunk(b"IDAT", raw))
+    data.extend(_png_chunk(b"IEND", b""))
+    path.write_bytes(data)
+
+
+def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
+    checksum = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+    return struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", checksum)

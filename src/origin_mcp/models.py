@@ -21,6 +21,14 @@ class PlotKind(str, Enum):
     polar = "polar"
 
 
+class PlotStyleMode(str, Enum):
+    origin_default = "origin_default"
+    template = "template"
+    theme = "theme"
+    none = "none"
+    publication = "publication"
+
+
 class TableImportRequest(BaseModel):
     path: Path = Field(description="Absolute path to a CSV, TSV, TXT, DAT, XLS, or XLSX file.")
     book_name: str | None = Field(default=None, description="Optional Origin workbook name.")
@@ -93,6 +101,13 @@ class PlotTableRequest(TableImportRequest):
     x_label: str | None = Field(default=None, description="Optional X axis title.")
     y_label: str | None = Field(default=None, description="Optional Y axis title.")
     show_legend: bool = Field(default=True, description="Whether to refresh/show the graph legend.")
+    style_mode: PlotStyleMode = Field(
+        default=PlotStyleMode.origin_default,
+        description=(
+            "Graph styling policy. origin_default/template/theme/none preserve Origin template "
+            "defaults; publication applies origin-mcp publication styling after plotting."
+        ),
+    )
     export_path: Path | None = Field(default=None, description="Optional graph export path.")
 
 

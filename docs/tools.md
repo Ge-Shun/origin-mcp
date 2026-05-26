@@ -7,6 +7,7 @@ plotting, graph formatting, analysis, export, and lifecycle control.
 
 - `origin_ping`
 - `origin_capabilities`
+- `origin_get_default_plot_config`
 - `origin_plot_type_coverage`
 - `origin_new_project`
 - `origin_open_project`
@@ -51,6 +52,13 @@ Common plot wrappers:
 - `origin_plot_3d_scatter`
 - `origin_plot_3d_surface`
 - `origin_plot_polar`
+
+Common plot wrappers accept `style_mode`. The default is `origin_default`, which
+lets Origin resolve the graph template from the user's Origin/system template
+folders and avoids origin-mcp style overrides. `publication` applies the compact
+origin-mcp publication style after Origin creates the graph. `template`, `theme`,
+and `none` are accepted aliases for preserving Origin defaults; pass `template`
+when you want a specific custom template.
 
 Origin Plot Type ID wrappers:
 
@@ -111,6 +119,13 @@ Template/range plotting:
 - `origin_add_reference_line`
 - `origin_format_legend`
 
+Text shown on graphs is normalized for Origin rich text automatically. Axis
+titles, graph titles, graph labels, reference-line labels, and column label rows
+convert common notation such as `CO_2`, `x_{max}`, `m^2`, `E^{1/2}`, `H₂O`,
+`m⁻²`, `<sub>2</sub>`, and `<sup>-1</sup>` to Origin escape sequences for
+subscript and superscript rendering. Plain identifier underscores such as
+`signal_a` are left unchanged unless braces are used.
+
 ## Analysis Tools
 
 - `origin_run_analysis`
@@ -164,6 +179,13 @@ issuing a separate worksheet read.
 - `origin_release`
 - `origin_force_quit`
 
+When a plotting tool receives `export_path`, it returns `export_inspection`
+alongside the graph reference. `origin_export_graph`, `origin_export_preview`,
+and `origin_inspect_export` also return the same diagnostics. PNG exports are
+decoded when possible to report hash, dimensions, sampled pixel complexity,
+near-blank detection, and content bounds. Plot creation without `export_path`
+does not run image decoding.
+
 ## Plot Type Coverage
 
 Origin has 100+ built-in graph types through system templates. The documented
@@ -196,12 +218,30 @@ output readback:
 .\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
 ```
 
+Use the real-Origin plot matrix for broader Plot Type ID regression coverage:
+
+```powershell
+.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix
+```
+
+It creates minimal data, attempts each documented Origin Plot Type ID, exports
+PNG previews, performs image quality checks, and writes
+`output/plot_matrix/report.json` plus `output/plot_matrix/report.md`. The report
+flags empty exports, near-blank images, undersized previews, missing plotted
+data, and exact duplicate PNG exports. Use `--limit` or `--only` for focused
+checks.
+Inside a running MCP server, use `origin_run_plot_matrix` to execute the same
+matrix through the already-active MCP/Origin automation session. Matrix-only
+plot types get an auto-created sample Origin matrix unless `matrix_range` is
+provided explicitly.
+
 ## Version Compatibility
 
 Use `origin_capabilities` after configuring the MCP server. It reports:
 
 - Origin version from LabTalk `@V`
 - installed `originpro` and `OriginExt` package versions
+- Python runtime profile and recommended Origin automation backend
 - important API availability, including project listing, batch export,
   Data Connector import, and structured fitting APIs
 - plot type coverage
@@ -210,3 +250,11 @@ The code prefers official `originpro` APIs and falls back to LabTalk commands
 where reasonable. Advanced analysis X-Functions can differ by Origin version; in
 those cases tools return structured errors instead of silently doing the wrong
 thing.
+
+Python runtime handling:
+
+- Python 3.10-3.12: preferred external `OriginExt/originpro` automation range.
+- Python 3.13: treated as experimental; prefer a 3.10-3.12 MCP server.
+- Python 3.14+: treated as unsupported for direct external Origin automation in
+  this project; route work through a compatible MCP server or Origin-embedded
+  Python path.
