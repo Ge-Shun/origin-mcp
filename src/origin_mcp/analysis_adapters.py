@@ -14,8 +14,10 @@ class AnalysisAdapter:
     aliases: tuple[str, ...] = ()
     minimum_origin_version: float | None = None
     range_required: bool = False
+    input_option: str = "iy"
     output_option: str = "oy"
     option_aliases: dict[str, str] = field(default_factory=dict)
+    symbol_options: tuple[str, ...] = ()
     note: str = ""
 
     def supports(self, origin_version: float | int | None) -> bool:
@@ -28,6 +30,17 @@ class AnalysisAdapter:
         for key, value in options.items():
             normalized[self.option_aliases.get(key, key)] = value
         return normalized
+
+    def command(self, range_expr: str, output_sheet: str | None, options: dict[str, Any]) -> str:
+        parts = [self.x_function]
+        if range_expr:
+            parts.append(f"{self.input_option}:={range_expr}")
+        if output_sheet:
+            parts.append(f"{self.output_option}:={output_sheet}")
+        option_text = xf_options(self.normalize_options(options), self.symbol_options)
+        if option_text:
+            parts.append(option_text)
+        return " ".join(parts) + ";"
 
 
 ANALYSIS_ADAPTERS = {
@@ -42,8 +55,15 @@ ANALYSIS_ADAPTERS = {
         name="polynomial_fit",
         x_function="fitpoly",
         aliases=("fitpoly", "polynomial-fit"),
+        minimum_origin_version=9.0,
         range_required=True,
-        option_aliases={"order": "polyorder"},
+        option_aliases={
+            "order": "polyorder",
+            "degree": "polyorder",
+            "fix_intercept": "fixint",
+            "fixed_intercept": "intercept",
+            "coefficients": "coef",
+        },
     ),
     "nonlinear_fit": AnalysisAdapter(
         name="nonlinear_fit",
@@ -57,7 +77,13 @@ ANALYSIS_ADAPTERS = {
         x_function="smooth",
         aliases=("smoothing",),
         range_required=True,
-        option_aliases={"method": "method", "points": "npts"},
+        option_aliases={
+            "points": "npts",
+            "window_points": "npts",
+            "polynomial_order": "polyorder",
+            "percentile": "percent",
+        },
+        symbol_options=("method", "boundary", "prop"),
     ),
     "differentiate": AnalysisAdapter(
         name="differentiate",
@@ -76,7 +102,23 @@ ANALYSIS_ADAPTERS = {
         x_function="pkFind",
         aliases=("pkfind", "find_peaks", "peak-find"),
         range_required=True,
-        option_aliases={"threshold": "threshold", "max_peaks": "npeaks"},
+        option_aliases={
+            "smooth_points": "smooth",
+            "direction": "dir",
+            "local_points": "npts",
+            "size_option": "option",
+            "threshold": "value",
+            "max_peaks": "value",
+            "filter_by": "filter",
+            "max_half_width": "hwidth",
+            "foot_height": "fheight",
+            "center_indices": "ocenter",
+            "center_x": "ocenter_x",
+            "center_y": "ocenter_y",
+            "left_indices": "oleft",
+            "right_indices": "oright",
+        },
+        symbol_options=("method", "dir", "option", "filter"),
     ),
     "descriptive_stats": AnalysisAdapter(
         name="descriptive_stats",
@@ -110,12 +152,14 @@ def resolve_analysis_adapter(name: str, origin_version: float | int | None) -> A
     return adapter
 
 
-def xf_options(options: dict[str, Any]) -> str:
+def xf_options(options: dict[str, Any], symbol_options: tuple[str, ...] = ()) -> str:
     parts = []
     for key, value in options.items():
         if isinstance(value, bool):
             value = int(value)
-        if isinstance(value, str):
+        if isinstance(value, str) and key in symbol_options:
+            parts.append(f"{key}:={value}")
+        elif isinstance(value, str):
             escaped = value.replace('"', r"\"")
             parts.append(f'{key}:="{escaped}"')
         else:

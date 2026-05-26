@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from .analysis_adapters import resolve_analysis_adapter, xf_options
+from .analysis_adapters import resolve_analysis_adapter
 from .compat import collect_capabilities, feature_available
 from .errors import OriginDependencyError, OriginOperationError
 
@@ -1123,20 +1123,27 @@ class OriginClient:
         range_expr = self._analysis_range(worksheet, x_col, y_col)
         if adapter.range_required and not range_expr:
             raise OriginOperationError(f"Analysis '{adapter.name}' requires an input range.")
-        normalized_options = adapter.normalize_options(options)
-        option_text = xf_options(normalized_options)
-        output_text = f' {adapter.output_option}:="{output_sheet}"' if output_sheet else ""
-        command = f"{adapter.x_function} {range_expr}{output_text} {option_text};"
-        return " ".join(command.split())
+        return " ".join(adapter.command(range_expr, output_sheet, options).split())
 
-    @staticmethod
     def _analysis_range(
+        self,
         worksheet: str | None,
         x_col: str | int | None,
         y_col: str | int | None,
     ) -> str:
         if worksheet is None and x_col is None and y_col is None:
             return ""
+        if worksheet:
+            try:
+                wks = self._find_sheet_from_ref(worksheet)
+                if x_col is not None and y_col is not None:
+                    return wks.to_xy_range(x_col, y_col, "")
+                if y_col is not None:
+                    return wks.to_col_range(y_col)
+                return wks.lt_range(False)
+            except OriginOperationError:
+                if x_col is not None or y_col is not None:
+                    raise
         if worksheet and x_col is not None and y_col is not None:
             return f"{worksheet}!({x_col},{y_col})"
         if worksheet and y_col is not None:

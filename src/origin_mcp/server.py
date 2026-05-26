@@ -42,6 +42,8 @@ def _wrap(func: Any) -> dict[str, Any]:
         return func()
     except (OriginMcpError, ValidationError, ValueError) as exc:
         return _error(exc)
+    except Exception as exc:
+        return _error(exc)
 
 
 @mcp.tool()

@@ -73,6 +73,7 @@ def test_allowed_roots_blocks_paths_outside_root(
 def test_analysis_script_linear_fit() -> None:
     client = OriginClient()
     client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,force)"  # type: ignore[method-assign]
     script = client._analysis_script(
         analysis="linear_fit",
         worksheet="[Book1]Sheet1",
@@ -82,8 +83,8 @@ def test_analysis_script_linear_fit() -> None:
         options={"intercept": False},
     )
 
-    assert "fitlr [Book1]Sheet1!(time,force)" in script
-    assert 'oy:="FitOut"' in script
+    assert "fitlr iy:=[Book1]Sheet1!(time,force)" in script
+    assert "oy:=FitOut" in script
     assert "fixintercept:=0" in script
 
 
@@ -98,6 +99,7 @@ def test_analysis_script_requires_range() -> None:
 def test_run_analysis_marks_false_labtalk_result() -> None:
     client = OriginClient()
     client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,signal)"  # type: ignore[method-assign]
     client.run_labtalk = lambda _script: {"result": False}  # type: ignore[method-assign]
 
     result = client.run_analysis(
