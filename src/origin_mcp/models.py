@@ -163,6 +163,14 @@ class AnalysisRequest(BaseModel):
         default_factory=dict,
         description="Extra LabTalk/X-Function options.",
     )
+    include_output: bool = Field(
+        default=False,
+        description="Read output worksheet rows back into the response when possible.",
+    )
+    output_max_rows: int = Field(
+        default=100,
+        description="Maximum rows to read from an output worksheet.",
+    )
 
 
 class ToolResult(BaseModel):

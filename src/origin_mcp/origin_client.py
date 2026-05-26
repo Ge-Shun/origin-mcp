@@ -1283,8 +1283,20 @@ class OriginClient:
             fit.fix_slope(options["fix_slope"])
         if options.get("report"):
             report, curves = fit.report(int(options.get("band", 0)))
-            return {"mode": "report", "report_sheet": report, "curve_sheet": curves}
-        return {"mode": "result", "result": fit.result()}
+            result = {"mode": "report", "report_sheet": report, "curve_sheet": curves}
+            if options.get("include_report_data") and report:
+                result["report_data"] = self._analysis_output(
+                    str(report),
+                    options.get("max_rows", 100),
+                )
+            return result
+        raw_result = fit.result()
+        structured = self._structure_fit_result(raw_result)
+        return {
+            "mode": "result",
+            "result": structured,
+            "raw_result": self._serialize_analysis_value(raw_result),
+        }
 
     def export_all_graphs(
         self,
@@ -1495,6 +1507,7 @@ class OriginClient:
             y_col=y_col,
             output_sheet=output_sheet,
             options=options,
+            include_output=bool(output_sheet),
         )
 
     def run_analysis(
@@ -1505,6 +1518,8 @@ class OriginClient:
         y_col: str | int | None = None,
         output_sheet: str | None = None,
         options: dict[str, Any] | None = None,
+        include_output: bool = False,
+        output_max_rows: int = 100,
     ) -> dict[str, Any]:
         script = self._analysis_script(
             analysis=analysis,
@@ -1516,12 +1531,18 @@ class OriginClient:
         )
         result = self.run_labtalk(script)
         executed = bool(result.get("result"))
-        return {
+        response = {
             "script": script,
             "executed": executed,
             "warning": "" if executed else "Origin returned false for this analysis command.",
             **result,
         }
+        if include_output:
+            if not output_sheet:
+                response["output_warning"] = "include_output requires output_sheet."
+            else:
+                response["output"] = self._analysis_output(output_sheet, output_max_rows)
+        return response
 
     def format_graph(
         self,
@@ -1788,6 +1809,106 @@ class OriginClient:
                 except TypeError:
                     continue
         raise OriginOperationError("The worksheet object does not support to_df().")
+
+    def _analysis_output(self, output_sheet: str, max_rows: int = 100) -> dict[str, Any]:
+        if max_rows < 1:
+            raise OriginOperationError("max_rows must be at least 1.")
+        try:
+            wks = self._find_sheet_from_ref(output_sheet)
+            return self.read_worksheet(
+                book_name=self._object_name(wks.get_book(), default=""),
+                sheet_name=self._object_name(wks, default=""),
+                max_rows=max_rows,
+            )
+        except Exception as exc:
+            return {
+                "found": False,
+                "output_sheet": output_sheet,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+
+    def _structure_fit_result(self, raw: Any) -> dict[str, Any]:
+        data = self._serialize_analysis_value(raw)
+        flattened = list(self._flatten_mapping(data))
+        parameters = []
+        metrics: dict[str, Any] = {}
+        sections: dict[str, Any] = {}
+
+        for path, value in flattened:
+            key = path[-1].lower() if path else ""
+            joined = ".".join(path).lower()
+            if self._looks_like_fit_parameter(path, value):
+                parameters.append({"name": path[-1], "path": ".".join(path), "value": value})
+            elif key in {"r", "r-square", "r_squared", "rsquare", "adjrsquare", "reducedchisqr"}:
+                metrics[path[-1]] = value
+            elif key in {"slope", "intercept"} and isinstance(value, int | float):
+                parameters.append({"name": path[-1], "path": ".".join(path), "value": value})
+            elif "anova" in joined or "statistics" in joined or "summary" in joined:
+                sections[".".join(path)] = value
+
+        return {
+            "parameters": parameters,
+            "metrics": metrics,
+            "sections": sections,
+            "data": data,
+        }
+
+    @staticmethod
+    def _serialize_analysis_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): OriginClient._serialize_analysis_value(val)
+                for key, val in value.items()
+            }
+        if isinstance(value, list | tuple):
+            return [OriginClient._serialize_analysis_value(item) for item in value]
+        if hasattr(value, "items"):
+            try:
+                return {
+                    str(key): OriginClient._serialize_analysis_value(val)
+                    for key, val in value.items()
+                }
+            except Exception:
+                pass
+        if hasattr(value, "__dict__") and not isinstance(value, type):
+            public = {
+                key: val
+                for key, val in vars(value).items()
+                if not key.startswith("_")
+            }
+            if public:
+                return OriginClient._serialize_analysis_value(public)
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return value
+
+    def _flatten_mapping(
+        self,
+        value: Any,
+        path: tuple[str, ...] = (),
+    ) -> list[tuple[tuple[str, ...], Any]]:
+        if isinstance(value, dict):
+            rows = []
+            for key, child in value.items():
+                rows.extend(self._flatten_mapping(child, (*path, str(key))))
+            return rows
+        if isinstance(value, list):
+            rows = []
+            for index, child in enumerate(value):
+                rows.extend(self._flatten_mapping(child, (*path, str(index))))
+            return rows
+        return [(path, value)]
+
+    @staticmethod
+    def _looks_like_fit_parameter(path: tuple[str, ...], value: Any) -> bool:
+        if not isinstance(value, int | float):
+            return False
+        joined = ".".join(path).lower()
+        return any(token in joined for token in ("parameter", "param", "coef", "coefficient"))
 
     @staticmethod
     def _write_dataframe_to_worksheet(

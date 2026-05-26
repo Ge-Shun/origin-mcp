@@ -113,6 +113,47 @@ def test_run_analysis_marks_false_labtalk_result() -> None:
     assert "warning" in result
 
 
+def test_run_analysis_reads_output_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,signal)"  # type: ignore[method-assign]
+    client.run_labtalk = lambda _script: {"result": True}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        client,
+        "_analysis_output",
+        lambda output_sheet, max_rows: {"output_sheet": output_sheet, "max_rows": max_rows},
+    )
+
+    result = client.run_analysis(
+        analysis="smooth",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="signal",
+        output_sheet="SmoothOut",
+        include_output=True,
+        output_max_rows=5,
+    )
+
+    assert result["executed"] is True
+    assert result["output"] == {"output_sheet": "SmoothOut", "max_rows": 5}
+
+
+def test_structure_fit_result_extracts_parameters_and_metrics() -> None:
+    client = OriginClient()
+
+    structured = client._structure_fit_result(
+        {
+            "Parameters": {"Slope": 2.0, "Intercept": 1.0},
+            "Statistics": {"RSquare": 0.99},
+        }
+    )
+
+    assert {"name": "Slope", "path": "Parameters.Slope", "value": 2.0} in structured[
+        "parameters"
+    ]
+    assert structured["metrics"]["RSquare"] == 0.99
+
+
 def test_origin_name_matches_truncated_short_name() -> None:
     assert OriginClient._origin_name_matches("OfficialImport", {"OfficialImpor"})
     assert OriginClient._origin_name_matches("Book1", {"Book1"})

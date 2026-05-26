@@ -20,6 +20,8 @@ directly instead of only generating standalone plotting code.
   plot styles, and publication-style formatting.
 - Run common Origin analysis commands, including fitting, smoothing, integration,
   differentiation, peak finding, and descriptive statistics.
+- Read analysis output worksheets back as JSON and normalize fit parameters and
+  metrics where possible.
 - Export figures, preview exported images, save projects, and release or close
   Origin safely.
 

@@ -2155,6 +2155,8 @@ def origin_run_analysis(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run a named Origin analysis X-Function through LabTalk."""
 
@@ -2166,6 +2168,8 @@ def origin_run_analysis(
             y_col=y_col,
             output_sheet=output_sheet,
             options=options or {},
+            include_output=include_output,
+            output_max_rows=output_max_rows,
         )
         return _ok("Ran Origin analysis.", **client.run_analysis(**req.model_dump()))
 
@@ -2179,6 +2183,8 @@ def origin_linear_fit(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin linear fitting."""
 
@@ -2195,7 +2201,16 @@ def origin_linear_fit(
                 ),
             )
         )
-    return origin_run_analysis("linear_fit", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "linear_fit",
+        worksheet,
+        x_col,
+        y_col,
+        output_sheet,
+        options,
+        include_output,
+        output_max_rows,
+    )
 
 
 @mcp.tool()
@@ -2205,10 +2220,21 @@ def origin_polynomial_fit(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin polynomial fitting."""
 
-    return origin_run_analysis("polynomial_fit", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "polynomial_fit",
+        worksheet,
+        x_col,
+        y_col,
+        output_sheet,
+        options,
+        include_output,
+        output_max_rows,
+    )
 
 
 @mcp.tool()
@@ -2218,10 +2244,14 @@ def origin_smooth(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin smoothing."""
 
-    return origin_run_analysis("smooth", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "smooth", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    )
 
 
 @mcp.tool()
@@ -2231,10 +2261,14 @@ def origin_peak_find(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin peak finding."""
 
-    return origin_run_analysis("peak_find", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "peak_find", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    )
 
 
 @mcp.tool()
@@ -2244,10 +2278,21 @@ def origin_differentiate(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin differentiation."""
 
-    return origin_run_analysis("differentiate", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "differentiate",
+        worksheet,
+        x_col,
+        y_col,
+        output_sheet,
+        options,
+        include_output,
+        output_max_rows,
+    )
 
 
 @mcp.tool()
@@ -2257,10 +2302,14 @@ def origin_integrate(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin integration."""
 
-    return origin_run_analysis("integrate", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "integrate", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    )
 
 
 @mcp.tool()
@@ -2270,10 +2319,21 @@ def origin_descriptive_stats(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin descriptive statistics."""
 
-    return origin_run_analysis("descriptive_stats", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "descriptive_stats",
+        worksheet,
+        x_col,
+        y_col,
+        output_sheet,
+        options,
+        include_output,
+        output_max_rows,
+    )
 
 
 @mcp.tool()
@@ -2283,10 +2343,21 @@ def origin_nonlinear_fit(
     y_col: str | int | None = None,
     output_sheet: str | None = None,
     options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
 ) -> dict[str, Any]:
     """Run Origin nonlinear fitting."""
 
-    return origin_run_analysis("nonlinear_fit", worksheet, x_col, y_col, output_sheet, options)
+    return origin_run_analysis(
+        "nonlinear_fit",
+        worksheet,
+        x_col,
+        y_col,
+        output_sheet,
+        options,
+        include_output,
+        output_max_rows,
+    )
 
 
 @mcp.tool()

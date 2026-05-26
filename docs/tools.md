@@ -125,6 +125,33 @@ Template/range plotting:
 - `origin_peak_find`
 - `origin_descriptive_stats`
 
+Analysis tools accept `include_output=true` and `output_max_rows` when an
+`output_sheet` is supplied. When enabled, the MCP response attempts to read the
+output worksheet back as structured JSON rows:
+
+```json
+{
+  "output_sheet": "SmoothOut",
+  "include_output": true,
+  "output_max_rows": 50
+}
+```
+
+`origin_linear_fit` returns a normalized `result` object when it can use
+`originpro.LinearFit`. The normalized result includes:
+
+- `parameters`: extracted fit parameters such as slope, intercept, coefficients,
+  or named nonlinear parameters when present
+- `metrics`: common fit metrics such as `RSquare`
+- `sections`: summary/statistics/ANOVA-like sections when they are present in the
+  Origin result tree
+- `raw_result`: a serialized copy of the original Origin result object for
+  debugging and version-specific fields
+
+For analysis tools that create output worksheets, prefer setting `output_sheet`
+and `include_output=true` so the AI client can inspect the produced table without
+issuing a separate worksheet read.
+
 ## Export and Lifecycle Tools
 
 - `origin_export_graph`
