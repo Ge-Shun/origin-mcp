@@ -150,3 +150,129 @@ def test_detach_clears_cached_capabilities(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert result == {"detached": True, "closed": False}
     assert client._capabilities is None
+
+
+class FakeBook:
+    name = "Book1"
+    lname = "Book1"
+
+
+class FakeWorksheet:
+    name = "Sheet1"
+    lname = "Sheet1"
+
+    def __init__(self, df: pd.DataFrame | None = None) -> None:
+        self.df = df if df is not None else pd.DataFrame()
+        self.rows = len(self.df)
+        self.cols = len(self.df.columns)
+
+    def get_book(self) -> FakeBook:
+        return FakeBook()
+
+    def to_df(self) -> pd.DataFrame:
+        return self.df.copy()
+
+    def from_df(self, df: pd.DataFrame, c1: str | int = 0) -> None:
+        self.df = df.copy()
+        self.rows = len(df)
+        self.cols = len(df.columns)
+        self.start_col = c1
+
+    def get_labels(self, label_type: str) -> list[str]:
+        if label_type == "L":
+            return [str(column) for column in self.df.columns]
+        if label_type == "U":
+            return ["s", "N"][: len(self.df.columns)]
+        return []
+
+
+def test_read_worksheet_returns_window_and_nulls(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"time": [0, 1, 2], "force": [1.0, None, 3.0]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.read_worksheet(start_row=1, max_rows=2)
+
+    assert result["columns"] == ["time", "force"]
+    assert result["returned_rows"] == 2
+    assert result["rows"][0] == {"time": 1, "force": None}
+
+
+def test_write_worksheet_uses_rows_and_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet()
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.write_worksheet(
+        rows=[[1, 2], [3, 4]],
+        columns=["x", "y"],
+        start_col=1,
+    )
+
+    assert result["worksheet"]["columns"] == ["x", "y"]
+    assert wks.df["y"].tolist() == [2, 4]
+    assert wks.start_col == 1
+
+
+def test_worksheet_info_returns_label_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"time": [0], "force": [1]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.worksheet_info(label_types=["L", "U"])
+
+    assert result["columns_count"] == 2
+    assert result["labels"]["L"] == ["time", "force"]
+    assert result["labels"]["U"] == ["s", "N"]
+
+
+class FakeGraph:
+    name = "Graph1"
+
+
+def test_set_graph_page_updates_fake_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    graph = FakeGraph()
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.set_graph_page(graph_name="Graph1", width=6.0, height=4.0)
+
+    assert result["page"]["width"] == 6.0
+    assert graph.width == 6.0
+    assert graph.height == 4.0
+
+
+def test_add_reference_line_selects_layer(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    graph = FakeGraph()
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.add_reference_line(value=2.5, axis="y", graph_name="Graph1", layer_index=1)
+
+    assert result["result"] is True
+    assert "layer -s 2;" in scripts[-1]
+    assert "draw -n ref_y_2_5 -l y 2.5;" in scripts[-1]
+
+
+def test_inspect_export_reads_png_dimensions(tmp_path: Path) -> None:
+    path = tmp_path / "preview.png"
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR"
+        b"\x00\x00\x00\x02\x00\x00\x00\x03"
+        b"\x08\x02\x00\x00\x00"
+        b"\x00\x00\x00\x00"
+    )
+    path.write_bytes(png)
+
+    result = OriginClient().inspect_export(path)
+
+    assert result["width"] == 2
+    assert result["height"] == 3
+    assert result["looks_nonempty"] is True

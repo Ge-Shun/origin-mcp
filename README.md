@@ -10,12 +10,16 @@ The first version focuses on a practical plotting loop:
 - import CSV, TSV, TXT, DAT, XLS, and XLSX data into worksheets
 - import files through Origin's official Data Connector path
 - append data into existing worksheets
+- read worksheet data back as JSON rows and write structured rows into worksheets
+- inspect worksheet metadata and add calculated columns
 - create line, scatter, line+symbol, error bar, column, contour, and template plots
 - set graph title, axis labels, legends, and templates
 - set plot color, line width, symbol style, axis scale, and axis limits
+- adjust graph page size, arrange layers, add graph labels, and add reference lines
 - run common analysis X-Functions such as fitting, smoothing, integration, and peak finding
 - run linear fitting through `originpro.LinearFit` when X/Y columns are provided
 - export graphs to image/PDF files
+- export preview images with file-size and image-dimension diagnostics
 - export all graphs in a project
 - run LabTalk commands directly when a higher-level tool is not enough
 
@@ -85,6 +89,11 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_import_excel`: import an Excel sheet into a worksheet
 - `origin_import_file`: import through Origin's Data Connector / `WSheet.from_file`
 - `origin_append_table`: append table data to an existing worksheet
+- `origin_get_worksheet_info`: get row/column counts and worksheet label rows
+- `origin_read_worksheet`: read worksheet data as structured JSON rows
+- `origin_write_worksheet`: write structured rows to a new or existing worksheet
+- `origin_add_calculated_column`: add a column filled by a LabTalk formula
+- `origin_sort_worksheet`: sort worksheet rows by a column
 - `origin_plot_line`: import table data and create a line plot
 - `origin_plot_scatter`: import table data and create a scatter plot
 - `origin_plot_line_symbol`: create a line+symbol plot
@@ -96,11 +105,17 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_format_graph`: set graph title, axis labels, legend visibility, and rescale
 - `origin_set_axis`: set axis scale, limits, tick step, and title
 - `origin_set_plot_style`: set color, line width, line style, symbol, and transparency
+- `origin_set_graph_page`: set graph page size and page placement properties
+- `origin_arrange_layers`: arrange graph layers into a panel layout
+- `origin_add_graph_label`: add text labels to a graph layer
+- `origin_add_reference_line`: add horizontal or vertical reference lines
 - `origin_set_column_labels`: set worksheet Long Name, Units, Comments, or custom labels
 - `origin_set_column_designations`: set worksheet plotting designations such as `XYY`
 - `origin_format_legend`: set legend text, font size, frame, and position
 - `origin_export_graph`: export the active or named graph
 - `origin_export_all_graphs`: export every graph in the project
+- `origin_export_preview`: export a graph preview and return diagnostics
+- `origin_inspect_export`: inspect an exported image/PDF file
 - `origin_list_project`: list workbooks, worksheets, graphs, and images
 - `origin_rename_object`: rename a graph, workbook, matrix book, or worksheet
 - `origin_delete_object`: delete a graph, workbook, matrix book, or worksheet
@@ -139,6 +154,27 @@ D:\origin-mcp\output\sample_labeled.png.
 For Excel files, use `origin_import_excel` or pass an `.xlsx` path to
 `origin_plot_line` / `origin_plot_scatter`. The `excel_sheet` argument accepts a
 zero-based sheet index or a sheet name.
+
+## Worksheet Editing
+
+Use `origin_get_worksheet_info` before editing to inspect row counts, column counts,
+Long Name (`L`), Units (`U`), and Comments (`C`) label rows. Use
+`origin_read_worksheet` with `start_row` and `max_rows` to keep responses small.
+Use `origin_write_worksheet` for structured rows and `origin_add_calculated_column`
+for formulas such as `col(B)-col(A)` or `col(A)*1000`.
+
+## Graph Refinement
+
+Use `origin_set_graph_page` for page sizing, `origin_arrange_layers` for panel
+layouts, `origin_add_graph_label` for annotations, and `origin_add_reference_line`
+for threshold or baseline markers. For lower-level styling that is not yet wrapped,
+use `origin_run_labtalk` after selecting the target graph.
+
+## Preview Loop
+
+Use `origin_export_preview` after plotting or formatting. It writes a temporary PNG
+by default and returns path, file size, and PNG/JPEG dimensions when available.
+Use `origin_inspect_export` to verify an existing export without re-exporting it.
 
 ## Safety
 

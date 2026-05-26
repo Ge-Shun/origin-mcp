@@ -244,6 +244,120 @@ def origin_append_table(
 
 
 @mcp.tool()
+def origin_get_worksheet_info(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    label_types: list[str] | None = None,
+) -> dict[str, Any]:
+    """Get worksheet row/column counts and column label rows."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin worksheet information.",
+            **client.worksheet_info(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                label_types=label_types,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_read_worksheet(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    start_row: int = 0,
+    max_rows: int = 100,
+    columns: list[str | int] | None = None,
+) -> dict[str, Any]:
+    """Read a window of Origin worksheet data as structured rows."""
+
+    return _wrap(
+        lambda: _ok(
+            "Read Origin worksheet data.",
+            **client.read_worksheet(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                start_row=start_row,
+                max_rows=max_rows,
+                columns=columns,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_write_worksheet(
+    rows: list[dict[str, Any]] | list[list[Any]],
+    columns: list[str] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    start_col: str | int = 0,
+    create: bool = False,
+) -> dict[str, Any]:
+    """Write structured rows into a new or existing Origin worksheet."""
+
+    return _wrap(
+        lambda: _ok(
+            "Wrote Origin worksheet data.",
+            **client.write_worksheet(
+                rows=rows,
+                columns=columns,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                start_col=start_col,
+                create=create,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_add_calculated_column(
+    column_name: str,
+    formula: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Add a worksheet column and fill it with a LabTalk column formula."""
+
+    return _wrap(
+        lambda: _ok(
+            "Added calculated Origin worksheet column.",
+            **client.add_calculated_column(
+                column_name=column_name,
+                formula=formula,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_sort_worksheet(
+    by: str | int,
+    ascending: bool = True,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Sort worksheet rows by a column through a pandas round trip."""
+
+    return _wrap(
+        lambda: _ok(
+            "Sorted Origin worksheet data.",
+            **client.sort_worksheet(
+                by=by,
+                ascending=ascending,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@mcp.tool()
 def origin_plot_line(
     path: str,
     x_col: str | int | None = None,
@@ -643,6 +757,40 @@ def origin_export_all_graphs(
 
 
 @mcp.tool()
+def origin_export_preview(
+    graph_name: str | None = None,
+    output_dir: str | None = None,
+    file_type: str = "png",
+    overwrite: bool = True,
+) -> dict[str, Any]:
+    """Export a graph preview image and return file diagnostics."""
+
+    return _wrap(
+        lambda: _ok(
+            "Exported Origin graph preview.",
+            **client.export_preview(
+                graph_name=graph_name,
+                output_dir=Path(output_dir) if output_dir else None,
+                file_type=file_type,
+                overwrite=overwrite,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_inspect_export(path: str) -> dict[str, Any]:
+    """Inspect an exported graph file for size and image dimensions."""
+
+    return _wrap(
+        lambda: _ok(
+            "Inspected exported graph file.",
+            **client.inspect_export(Path(path)),
+        )
+    )
+
+
+@mcp.tool()
 def origin_format_graph(
     graph_name: str | None = None,
     title: str | None = None,
@@ -731,6 +879,108 @@ def origin_set_plot_style(
         return _ok("Updated Origin plot style.", **client.set_plot_style(**req.model_dump()))
 
     return _wrap(run)
+
+
+@mcp.tool()
+def origin_set_graph_page(
+    graph_name: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    unit: str = "inch",
+    left: float | None = None,
+    top: float | None = None,
+) -> dict[str, Any]:
+    """Set graph page size and page placement properties."""
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin graph page.",
+            **client.set_graph_page(
+                graph_name=graph_name,
+                width=width,
+                height=height,
+                unit=unit,
+                left=left,
+                top=top,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_arrange_layers(
+    graph_name: str | None = None,
+    rows: int = 1,
+    columns: int = 1,
+    gap_x: float | None = None,
+    gap_y: float | None = None,
+) -> dict[str, Any]:
+    """Arrange graph layers into a panel layout."""
+
+    return _wrap(
+        lambda: _ok(
+            "Arranged Origin graph layers.",
+            **client.arrange_layers(
+                graph_name=graph_name,
+                rows=rows,
+                columns=columns,
+                gap_x=gap_x,
+                gap_y=gap_y,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_add_graph_label(
+    text: str,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+    name: str | None = None,
+    left: int | None = None,
+    top: int | None = None,
+    font_size: int | None = None,
+) -> dict[str, Any]:
+    """Add a text label to a graph layer."""
+
+    return _wrap(
+        lambda: _ok(
+            "Added Origin graph label.",
+            **client.add_graph_label(
+                text=text,
+                graph_name=graph_name,
+                layer_index=layer_index,
+                name=name,
+                left=left,
+                top=top,
+                font_size=font_size,
+            ),
+        )
+    )
+
+
+@mcp.tool()
+def origin_add_reference_line(
+    value: float,
+    axis: str = "y",
+    graph_name: str | None = None,
+    layer_index: int = 0,
+    label: str | None = None,
+) -> dict[str, Any]:
+    """Add a horizontal or vertical reference line to a graph layer."""
+
+    return _wrap(
+        lambda: _ok(
+            "Added Origin graph reference line.",
+            **client.add_reference_line(
+                value=value,
+                axis=axis,
+                graph_name=graph_name,
+                layer_index=layer_index,
+                label=label,
+            ),
+        )
+    )
 
 
 @mcp.tool()

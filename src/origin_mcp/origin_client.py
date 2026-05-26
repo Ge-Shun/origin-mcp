@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import importlib
 import os
+import struct
+import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -300,6 +303,138 @@ class OriginClient:
         wks.from_df(df, c1=start_col)
         return self._worksheet_ref(wks, columns=[str(col) for col in df.columns], rows=len(df))
 
+    def worksheet_info(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        label_types: list[str] | None = None,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        labels: dict[str, list[str]] = {}
+        get_labels = getattr(wks, "get_labels", None)
+        if callable(get_labels):
+            for label_type in label_types or ["L", "U", "C"]:
+                labels[label_type] = [str(value) for value in get_labels(label_type)]
+        ref = self._worksheet_ref(wks).as_dict()
+        return {
+            **ref,
+            "columns_count": int(getattr(wks, "cols", len(ref["columns"]) or 0)),
+            "labels": labels,
+        }
+
+    def read_worksheet(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        start_row: int = 0,
+        max_rows: int = 100,
+        columns: list[str | int] | None = None,
+    ) -> dict[str, Any]:
+        if start_row < 0:
+            raise OriginOperationError("start_row must be non-negative.")
+        if max_rows < 1:
+            raise OriginOperationError("max_rows must be at least 1.")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        if columns:
+            available = [str(col) for col in df.columns]
+            selected = [self._resolve_column(available, col, default_index=0) for col in columns]
+            df = df[selected]
+        total_rows = len(df)
+        window = df.iloc[start_row : start_row + max_rows]
+        rows = self._dataframe_records(window)
+        worksheet = self._worksheet_ref(
+            wks,
+            columns=[str(col) for col in df.columns],
+        ).as_dict()
+        return {
+            "worksheet": worksheet,
+            "columns": [str(col) for col in df.columns],
+            "start_row": start_row,
+            "returned_rows": len(rows),
+            "total_rows": total_rows,
+            "rows": rows,
+        }
+
+    def write_worksheet(
+        self,
+        rows: list[dict[str, Any]] | list[list[Any]],
+        columns: list[str] | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        start_col: str | int = 0,
+        create: bool = False,
+    ) -> dict[str, Any]:
+        df = self._rows_to_dataframe(rows, columns)
+        if df.empty:
+            raise OriginOperationError("No worksheet rows were provided.")
+        wks = (
+            self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+            if create
+            else self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        )
+        from_df = getattr(wks, "from_df", None)
+        if not callable(from_df):
+            raise OriginOperationError("The worksheet object does not support from_df().")
+        try:
+            from_df(df, c1=start_col)
+        except TypeError:
+            from_df(df)
+        worksheet = self._worksheet_ref(wks, columns=[str(col) for col in df.columns]).as_dict()
+        return {"worksheet": worksheet}
+
+    def add_calculated_column(
+        self,
+        column_name: str,
+        formula: str,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        if not column_name.strip():
+            raise OriginOperationError("column_name is empty.")
+        if not formula.strip():
+            raise OriginOperationError("formula is empty.")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        add_col = getattr(wks, "add_col", None)
+        if callable(add_col):
+            add_col(column_name)
+        else:
+            self._execute_on_worksheet(wks, f'wks.addcol("{self._escape_labtalk(column_name)}");')
+        self._execute_on_worksheet(
+            wks,
+            f'col("{self._escape_labtalk(column_name)}")={formula};',
+        )
+        return {
+            "worksheet": self._worksheet_ref(wks).as_dict(),
+            "column_name": column_name,
+            "formula": formula,
+        }
+
+    def sort_worksheet(
+        self,
+        by: str | int,
+        ascending: bool = True,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        column = self._resolve_column([str(col) for col in df.columns], by, default_index=0)
+        sorted_df = df.sort_values(by=column, ascending=ascending, kind="mergesort")
+        from_df = getattr(wks, "from_df", None)
+        if not callable(from_df):
+            raise OriginOperationError("The worksheet object does not support from_df().")
+        from_df(sorted_df.reset_index(drop=True))
+        worksheet = self._worksheet_ref(
+            wks,
+            columns=[str(col) for col in sorted_df.columns],
+        ).as_dict()
+        return {
+            "worksheet": worksheet,
+            "sorted_by": column,
+            "ascending": ascending,
+        }
+
     def plot_csv(
         self,
         path: Path,
@@ -527,6 +662,134 @@ class OriginClient:
         return {
             "graph_name": self._object_name(graph, default=graph_name or ""),
             "styled_plots": len(selected),
+        }
+
+    def set_graph_page(
+        self,
+        graph_name: str | None = None,
+        width: float | None = None,
+        height: float | None = None,
+        unit: str = "inch",
+        left: float | None = None,
+        top: float | None = None,
+    ) -> dict[str, Any]:
+        graph = self._find_or_active_graph(graph_name)
+        updates: dict[str, Any] = {}
+        if width is not None:
+            self._set_origin_property(graph, "width", width)
+            updates["width"] = width
+        if height is not None:
+            self._set_origin_property(graph, "height", height)
+            updates["height"] = height
+        if left is not None:
+            self._set_origin_property(graph, "left", left)
+            updates["left"] = left
+        if top is not None:
+            self._set_origin_property(graph, "top", top)
+            updates["top"] = top
+        if unit:
+            updates["unit"] = unit
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "page": updates,
+        }
+
+    def arrange_layers(
+        self,
+        graph_name: str | None = None,
+        rows: int = 1,
+        columns: int = 1,
+        gap_x: float | None = None,
+        gap_y: float | None = None,
+    ) -> dict[str, Any]:
+        if rows < 1 or columns < 1:
+            raise OriginOperationError("rows and columns must be at least 1.")
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        self._activate_graph(graph, graph_name_actual)
+        args = [f"row:={rows}", f"col:={columns}"]
+        if gap_x is not None:
+            args.append(f"vgap:={gap_x}")
+        if gap_y is not None:
+            args.append(f"hgap:={gap_y}")
+        script = "layarrange " + " ".join(args) + ";"
+        result = self.run_labtalk(script)
+        return {
+            "graph_name": graph_name_actual,
+            "rows": rows,
+            "columns": columns,
+            "script": script,
+            **result,
+        }
+
+    def add_graph_label(
+        self,
+        text: str,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+        name: str | None = None,
+        left: int | None = None,
+        top: int | None = None,
+        font_size: int | None = None,
+    ) -> dict[str, Any]:
+        if not text.strip():
+            raise OriginOperationError("Label text is empty.")
+        graph = self._find_or_active_graph(graph_name)
+        layer = self._graph_layer(graph, layer_index)
+        add_label = getattr(layer, "add_label", None)
+        if not callable(add_label):
+            raise OriginOperationError("Graph layer does not support add_label().")
+        label = add_label(text)
+        if name:
+            try:
+                label.name = name
+            except Exception:
+                pass
+        if left is not None:
+            self._set_origin_property(label, "left", left)
+        if top is not None:
+            self._set_origin_property(label, "top", top)
+        if font_size is not None:
+            self._set_origin_property(label, "fsize", font_size)
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
+            "label_name": self._object_name(label, default=name or ""),
+            "text": text,
+        }
+
+    def add_reference_line(
+        self,
+        value: float,
+        axis: str = "y",
+        graph_name: str | None = None,
+        layer_index: int = 0,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        if axis.lower() not in {"x", "y"}:
+            raise OriginOperationError("Reference lines currently support only x or y axes.")
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        self._activate_graph(graph, graph_name_actual)
+        orientation = "x" if axis.lower() == "x" else "y"
+        line_name = f"ref_{orientation}_{str(value).replace('.', '_')}"
+        script_parts = [
+            f"layer -s {layer_index + 1};",
+            f"draw -n {line_name} -l {orientation} {value};",
+        ]
+        if label:
+            script_parts.append(
+                f'label -s -sa -n ref_label "{self._escape_labtalk(label)}";'
+            )
+        script = " ".join(script_parts)
+        result = self.run_labtalk(script)
+        return {
+            "graph_name": graph_name_actual,
+            "layer_index": layer_index,
+            "axis": axis.lower(),
+            "value": value,
+            "script": script,
+            **result,
         }
 
     def set_column_labels(
@@ -775,6 +1038,46 @@ class OriginClient:
 
         return {"path": str(path)}
 
+    def export_preview(
+        self,
+        graph_name: str | None = None,
+        output_dir: Path | None = None,
+        file_type: str = "png",
+        overwrite: bool = True,
+    ) -> dict[str, Any]:
+        suffix = file_type.lower().lstrip(".") or "png"
+        if output_dir is None:
+            output_dir = Path(tempfile.gettempdir()) / "origin-mcp-previews"
+        output_dir = output_dir.expanduser().resolve()
+        self._check_path_allowed(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = self._safe_filename(graph_name or "active_graph")
+        path = output_dir / f"{safe_name}_{uuid.uuid4().hex[:8]}.{suffix}"
+        exported = self.export_graph(path, graph_name=graph_name, overwrite=overwrite)
+        return {
+            **exported,
+            "preview": self.inspect_export(Path(exported["path"])),
+        }
+
+    def inspect_export(self, path: Path) -> dict[str, Any]:
+        path = path.expanduser().resolve()
+        self._check_path_allowed(path)
+        if not path.exists():
+            raise OriginOperationError(f"Export file does not exist: {path}")
+        if not path.is_file():
+            raise OriginOperationError(f"Export path is not a file: {path}")
+        info: dict[str, Any] = {
+            "path": str(path),
+            "exists": True,
+            "size_bytes": path.stat().st_size,
+            "suffix": path.suffix.lower(),
+        }
+        dimensions = self._image_dimensions(path)
+        if dimensions:
+            info.update(dimensions)
+        info["looks_nonempty"] = info["size_bytes"] > 0
+        return info
+
     def _new_sheet(self, book_name: str | None, sheet_name: str | None) -> Any:
         op = self.op
         new_sheet = getattr(op, "new_sheet", None)
@@ -917,6 +1220,136 @@ class OriginClient:
             except Exception:
                 pass
             label.text = title
+
+    def _worksheet_to_df(self, wks: Any) -> pd.DataFrame:
+        to_df = getattr(wks, "to_df", None)
+        if callable(to_df):
+            for kwargs in ({}, {"c1": 0}, {"head": "L"}):
+                try:
+                    df = to_df(**kwargs)
+                    if isinstance(df, pd.DataFrame):
+                        df.columns = [str(col) for col in df.columns]
+                        return df
+                except TypeError:
+                    continue
+        raise OriginOperationError("The worksheet object does not support to_df().")
+
+    @staticmethod
+    def _rows_to_dataframe(
+        rows: list[dict[str, Any]] | list[list[Any]],
+        columns: list[str] | None,
+    ) -> pd.DataFrame:
+        if not rows:
+            return pd.DataFrame(columns=columns or [])
+        first = rows[0]
+        if isinstance(first, dict):
+            df = pd.DataFrame(rows)
+            if columns:
+                missing = [column for column in columns if column not in df.columns]
+                if missing:
+                    raise OriginOperationError(f"Rows are missing columns: {missing}")
+                df = df[columns]
+            return df
+        if columns is None:
+            width = max(len(row) for row in rows)  # type: ignore[arg-type]
+            columns = [f"Col{i + 1}" for i in range(width)]
+        return pd.DataFrame(rows, columns=columns)
+
+    @staticmethod
+    def _dataframe_records(df: pd.DataFrame) -> list[dict[str, Any]]:
+        records = df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
+        return [{str(key): value for key, value in row.items()} for row in records]
+
+    def _execute_on_worksheet(self, wks: Any, script: str) -> dict[str, Any]:
+        activate = getattr(wks, "activate", None)
+        if callable(activate):
+            activate()
+        lt_exec = getattr(wks, "lt_exec", None)
+        if callable(lt_exec):
+            return {"result": lt_exec(script)}
+        obj = getattr(wks, "obj", None)
+        obj_exec = getattr(obj, "LT_execute", None)
+        if callable(obj_exec):
+            return {"result": obj_exec(script)}
+        return self.run_labtalk(script)
+
+    def _activate_graph(self, graph: Any, graph_name: str) -> None:
+        activate = getattr(graph, "activate", None)
+        if callable(activate):
+            activate()
+            return
+        if graph_name:
+            self.run_labtalk(f"win -a {graph_name};")
+
+    @staticmethod
+    def _set_origin_property(obj: Any, name: str, value: Any) -> None:
+        setter = getattr(obj, "set_int", None)
+        if callable(setter) and isinstance(value, int):
+            setter(name, value)
+            return
+        setter = getattr(obj, "set_float", None)
+        if callable(setter) and isinstance(value, float):
+            setter(name, value)
+            return
+        try:
+            setattr(obj, name, value)
+        except Exception as exc:
+            raise OriginOperationError(f"Could not set Origin property {name!r}.") from exc
+
+    @staticmethod
+    def _graph_layer(graph: Any, layer_index: int) -> Any:
+        if layer_index < 0:
+            raise OriginOperationError("layer_index must be non-negative.")
+        if hasattr(graph, "__getitem__"):
+            try:
+                return graph[layer_index]
+            except IndexError as exc:
+                raise OriginOperationError(
+                    f"Graph layer index out of range: {layer_index}"
+                ) from exc
+        if layer_index == 0:
+            return graph
+        raise OriginOperationError("Graph object does not expose multiple layers.")
+
+    @staticmethod
+    def _escape_labtalk(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    @staticmethod
+    def _image_dimensions(path: Path) -> dict[str, int] | None:
+        suffix = path.suffix.lower()
+        try:
+            with path.open("rb") as handle:
+                header = handle.read(32)
+                if suffix == ".png" and header.startswith(b"\x89PNG\r\n\x1a\n"):
+                    width, height = struct.unpack(">II", header[16:24])
+                    return {"width": width, "height": height}
+                if suffix in {".jpg", ".jpeg"} and header.startswith(b"\xff\xd8"):
+                    return OriginClient._jpeg_dimensions(path)
+        except OSError:
+            return None
+        return None
+
+    @staticmethod
+    def _jpeg_dimensions(path: Path) -> dict[str, int] | None:
+        try:
+            with path.open("rb") as handle:
+                handle.read(2)
+                while True:
+                    marker_prefix = handle.read(1)
+                    if marker_prefix != b"\xff":
+                        return None
+                    marker = handle.read(1)
+                    while marker == b"\xff":
+                        marker = handle.read(1)
+                    if marker in {b"\xc0", b"\xc1", b"\xc2", b"\xc3"}:
+                        handle.read(3)
+                        height, width = struct.unpack(">HH", handle.read(4))
+                        return {"width": width, "height": height}
+                    segment_length = struct.unpack(">H", handle.read(2))[0]
+                    handle.seek(segment_length - 2, 1)
+        except (OSError, struct.error):
+            return None
 
     @staticmethod
     def _read_table(
