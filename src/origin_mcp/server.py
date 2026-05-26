@@ -1000,6 +1000,27 @@ def origin_quit() -> dict[str, Any]:
     return _wrap(lambda: _ok("Closed Origin.", **client.quit()))
 
 
+@mcp.tool()
+def origin_detach() -> dict[str, Any]:
+    """Release the external Origin automation connection without closing Origin."""
+
+    return _wrap(lambda: _ok("Released Origin automation connection.", **client.detach()))
+
+
+@mcp.tool()
+def origin_release() -> dict[str, Any]:
+    """Alias for origin_detach."""
+
+    return origin_detach()
+
+
+@mcp.tool()
+def origin_force_quit() -> dict[str, Any]:
+    """Force OriginExt to close Origin/OriginPro."""
+
+    return _wrap(lambda: _ok("Force-closed Origin.", **client.force_quit()))
+
+
 def _plot_csv(
     kind: PlotKind,
     path: str,

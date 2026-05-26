@@ -134,3 +134,19 @@ def test_ensure_feature_reports_detected_version() -> None:
 
     with pytest.raises(OriginOperationError, match="Detected Origin version: 9.5"):
         client.ensure_feature("graph_list", "Batch graph export")
+
+
+def test_detach_clears_cached_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3}
+
+    class FakeOrigin:
+        def detach(self) -> None:
+            return None
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    result = client.detach()
+
+    assert result == {"detached": True, "closed": False}
+    assert client._capabilities is None

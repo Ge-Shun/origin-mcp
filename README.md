@@ -110,6 +110,16 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 - `origin_peak_find`, `origin_descriptive_stats`
 - `origin_run_labtalk`: execute LabTalk script text
 - `origin_quit`: close Origin
+- `origin_detach`: release the automation connection without closing Origin
+- `origin_release`: alias for `origin_detach`
+- `origin_force_quit`: force OriginExt to close Origin
+
+## Origin Lifecycle
+
+If Origin says it is being controlled by another program, use `origin_detach` first.
+This releases the external automation connection and leaves Origin open for manual
+use. Use `origin_quit` to close Origin normally. Use `origin_force_quit` only after
+confirming there is no unsaved work, because it asks OriginExt to close Origin.
 
 ## Example Prompt
 

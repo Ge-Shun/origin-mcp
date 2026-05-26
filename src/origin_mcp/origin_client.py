@@ -140,9 +140,49 @@ class OriginClient:
             func = getattr(op, name, None)
             if callable(func):
                 func()
+                self._capabilities = None
                 return {"closed": True}
         self.run_labtalk("exit;")
+        self._capabilities = None
         return {"closed": True}
+
+    def detach(self) -> dict[str, Any]:
+        op = self.op
+        detach = getattr(op, "detach", None)
+        if callable(detach):
+            detach()
+            self._capabilities = None
+            return {"detached": True, "closed": False}
+
+        config = importlib.import_module("originpro.config")
+        po = getattr(config, "po", None)
+        release = getattr(po, "Exit", None)
+        if callable(release):
+            release(True)
+            self._capabilities = None
+            return {"detached": True, "closed": False}
+
+        raise OriginOperationError("No Origin detach/release API is available.")
+
+    def force_quit(self) -> dict[str, Any]:
+        op = self.op
+        config = importlib.import_module("originpro.config")
+        po = getattr(config, "po", None)
+        force_exit = getattr(po, "Exit", None)
+        if callable(force_exit):
+            force_exit(False)
+            self._capabilities = None
+            return {"closed": True, "forced": True}
+
+        exit_func = getattr(op, "exit", None)
+        if callable(exit_func):
+            exit_func()
+            self._capabilities = None
+            return {"closed": True, "forced": False}
+
+        self.run_labtalk("exit;")
+        self._capabilities = None
+        return {"closed": True, "forced": False}
 
     def run_labtalk(self, script: str) -> dict[str, Any]:
         if not script.strip():
