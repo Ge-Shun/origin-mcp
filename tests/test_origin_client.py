@@ -89,3 +89,20 @@ def test_origin_name_matches_truncated_short_name() -> None:
     assert OriginClient._origin_name_matches("OfficialImport", {"OfficialImpor"})
     assert OriginClient._origin_name_matches("Book1", {"Book1"})
     assert not OriginClient._origin_name_matches("OtherBook", {"Book1"})
+
+
+def test_ensure_feature_reports_detected_version() -> None:
+    client = OriginClient()
+    client._capabilities = {
+        "origin_version": 9.5,
+        "features": {
+            "graph_list": {
+                "available": False,
+                "minimum_origin_version": None,
+                "note": "Required for export all graphs.",
+            }
+        },
+    }
+
+    with pytest.raises(OriginOperationError, match="Detected Origin version: 9.5"):
+        client.ensure_feature("graph_list", "Batch graph export")

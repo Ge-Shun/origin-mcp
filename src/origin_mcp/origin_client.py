@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from .compat import collect_capabilities, feature_available
 from .errors import OriginDependencyError, OriginOperationError
 
 
@@ -45,6 +46,7 @@ class OriginClient:
 
     def __init__(self) -> None:
         self._op: Any | None = None
+        self._capabilities: dict[str, Any] | None = None
 
     @property
     def op(self) -> Any:
@@ -70,6 +72,30 @@ class OriginClient:
             "visible": show,
             "origin_version": version,
         }
+
+    def capabilities(self, show: bool = False, refresh: bool = False) -> dict[str, Any]:
+        if self._capabilities is not None and not refresh:
+            return self._capabilities
+        connection = self.connect(show=show)
+        self._capabilities = {
+            **connection,
+            **collect_capabilities(self.op, connection.get("origin_version")),
+        }
+        return self._capabilities
+
+    def ensure_feature(self, feature: str, operation: str) -> None:
+        caps = self.capabilities(show=False)
+        if feature_available(caps, feature):
+            return
+        info = caps.get("features", {}).get(feature, {})
+        minimum = info.get("minimum_origin_version")
+        note = info.get("note") or "No compatible API was detected."
+        version = caps.get("origin_version")
+        requirement = f" Requires Origin >= {minimum}." if minimum else ""
+        raise OriginOperationError(
+            f"{operation} is not supported by this Origin/originpro environment. "
+            f"Detected Origin version: {version}.{requirement} {note}"
+        )
 
     def new_project(self, show: bool = True) -> dict[str, Any]:
         op = self.op
@@ -187,6 +213,7 @@ class OriginClient:
     ) -> WorksheetRef:
         path = path.expanduser().resolve()
         self._validate_file(path)
+        self.ensure_feature("worksheet_from_file", "Origin Data Connector import")
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
         from_file = getattr(wks, "from_file", None)
         if not callable(from_file):
@@ -352,6 +379,7 @@ class OriginClient:
         return worksheet, GraphRef(graph_name=actual_graph_name, export_path=exported)
 
     def list_project(self) -> dict[str, Any]:
+        self.ensure_feature("pages", "Project object listing")
         op = self.op
         pages = getattr(op, "pages", None)
         if not callable(pages):
@@ -525,6 +553,7 @@ class OriginClient:
         op = self.op
         linear_fit_cls = getattr(op, "LinearFit", None)
         if not callable(linear_fit_cls):
+            self.ensure_feature("linear_fit_api", "Structured linear fitting")
             raise OriginOperationError("originpro.LinearFit is not available.")
         wks = self._find_sheet_from_ref(worksheet)
         fit = linear_fit_cls()
@@ -550,6 +579,7 @@ class OriginClient:
         self._check_path_allowed(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        self.ensure_feature("graph_list", "Batch graph export")
         op = self.op
         graph_list = getattr(op, "graph_list", None)
         if not callable(graph_list):

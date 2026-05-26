@@ -76,6 +76,7 @@ See [docs/mcp-config.md](docs/mcp-config.md) for more examples.
 ## Available Tools
 
 - `origin_ping`: connect to Origin and report basic status
+- `origin_capabilities`: report Origin/originpro versions and feature availability
 - `origin_new_project`: create a new project
 - `origin_open_project`: open an OPJU/OPJ project
 - `origin_save_project`: save the current project
@@ -162,6 +163,31 @@ The implementation follows OriginLab's documented `originpro` patterns:
 - `new_graph`, `GLayer.add_plot`, `axis(...).title`, `label("Legend")`, and
   `GPage.save_fig` for graph creation, formatting, and export
 - `originpro.LinearFit` for structured linear regression results
+
+## Version Compatibility
+
+Use `origin_capabilities` after configuring the MCP server. It reports:
+
+- Origin version from LabTalk `@V`
+- installed `originpro` and `OriginExt` package versions
+- whether important APIs are available, including project listing, graph batch export,
+  Data Connector import, and structured fitting APIs
+
+The code prefers official `originpro` APIs and falls back to LabTalk commands where
+reasonable. Some advanced analysis X-Functions differ by Origin version; when a
+feature is unavailable, tools return a structured error instead of silently doing
+the wrong thing.
+
+Capability detection is cached after the first check so normal tool calls do not
+pay repeated startup cost. Pass `refresh=true` to `origin_capabilities` after
+upgrading Origin or changing the Python environment.
+
+Version-gated tools currently check their required capabilities before running:
+
+- Data Connector import checks `worksheet_from_file`
+- project listing checks `pages`
+- batch graph export checks `graph_list`
+- structured linear fitting checks `linear_fit_api`
 
 ## Safety Notes
 

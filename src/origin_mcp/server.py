@@ -52,6 +52,18 @@ def origin_ping(show: bool = True) -> dict[str, Any]:
 
 
 @mcp.tool()
+def origin_capabilities(show: bool = False, refresh: bool = False) -> dict[str, Any]:
+    """Report Origin/originpro versions and runtime feature availability."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin compatibility information.",
+            **client.capabilities(show=show, refresh=refresh),
+        )
+    )
+
+
+@mcp.tool()
 def origin_new_project(show: bool = True) -> dict[str, Any]:
     """Create a new Origin project."""
 
