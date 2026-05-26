@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,17 @@ client = OriginClient()
 
 
 def _ok(message: str, **data: Any) -> dict[str, Any]:
-    return ToolResult(ok=True, message=message, data=data).model_dump()
+    return ToolResult(ok=True, message=message, data=_json_safe(data)).model_dump()
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _error(exc: Exception) -> dict[str, Any]:
