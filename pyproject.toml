@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "origin-mcp"
+version = "0.1.0"
+description = "MCP server for controlling Origin/OriginPro on Windows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "origin-mcp contributors" }
+]
+keywords = ["mcp", "origin", "originpro", "plotting", "automation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Win32 (MS Windows)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+  "mcp>=1.8.0",
+  "pydantic>=2.0",
+  "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+origin = [
+  "originpro>=1.1",
+  "pywin32>=306; platform_system == 'Windows'",
+]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+]
+
+[project.scripts]
+origin-mcp = "origin_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/origin_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
