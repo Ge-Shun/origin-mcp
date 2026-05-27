@@ -73,8 +73,6 @@ MCP 客户端配置示例：
 
 - [工具与兼容性参考](docs/tools.md)
 - [MCP 客户端配置](docs/mcp-config.md)
-- [烟测](examples/smoke-test.md)
-- [Plot matrix 回归检查](examples/plot-matrix.md)
 
 ## 安全说明
 

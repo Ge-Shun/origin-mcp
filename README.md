@@ -79,8 +79,6 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 
 - [Tool and compatibility reference](docs/tools.md)
 - [MCP client configuration](docs/mcp-config.md)
-- [Smoke test](examples/smoke-test.md)
-- [Plot matrix regression check](examples/plot-matrix.md)
 
 ## Safety
 

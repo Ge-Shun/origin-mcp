@@ -2329,12 +2329,11 @@ class OriginClient:
                     options.get("max_rows", 100),
                 )
             return result
-        raw_result = fit.result()
-        structured = self._structure_fit_result(raw_result)
+        fit_result = fit.result()
+        structured = self._structure_fit_result(fit_result)
         return {
             "mode": "result",
             "result": structured,
-            "raw_result": self._serialize_analysis_value(raw_result),
         }
 
     def export_all_graphs(
@@ -2655,7 +2654,6 @@ class OriginClient:
             "metrics": {},
             "sections": {},
             "warnings": warnings,
-            "raw_result": self._serialize_analysis_value(result),
             "warning": warning,
             **result,
         }
