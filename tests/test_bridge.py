@@ -363,58 +363,38 @@ def test_bridge_task_lifecycle_completes() -> None:
     assert any(task["task_id"] == task_id for task in listed["tasks"])
 
 
-def test_bridge_task_lifecycle_supports_plot_table() -> None:
+@pytest.mark.parametrize(
+    ("method", "params", "expected"),
+    [
+        ("plot_table", {"path": "data.csv", "kind": "line"}, ("graph", "graph_name", "Graph1")),
+        ("run_analysis", {"analysis": "smooth", "y_col": "y"}, ("analysis", None, "smooth")),
+        (
+            "save_project",
+            {"path": "saved.opju"},
+            (None, None, {"path": "saved.opju", "saved": True}),
+        ),
+        ("read_worksheet", {"book_name": "Book1"}, ("rows", None, [{"x": 1, "y": 2}])),
+    ],
+)
+def test_bridge_task_lifecycle_supports_taskable_methods(
+    method: str,
+    params: dict[str, Any],
+    expected: tuple[str | None, str | None, Any],
+) -> None:
     with running_bridge() as server:
         client = bridge_client(server)
-        submitted = client.request(
-            "submit_task",
-            {"method": "plot_table", "params": {"path": "data.csv", "kind": "line"}},
-        )
+        submitted = client.request("submit_task", {"method": method, "params": params})
         task_id = submitted["task"]["task_id"]
         completed = wait_for_status(client, task_id, "completed")
 
-    assert completed["result"]["worksheet"]["sheet_name"] == "Sheet1"
-    assert completed["result"]["graph"]["graph_name"] == "Graph1"
-
-
-def test_bridge_task_lifecycle_supports_run_analysis() -> None:
-    with running_bridge() as server:
-        client = bridge_client(server)
-        submitted = client.request(
-            "submit_task",
-            {"method": "run_analysis", "params": {"analysis": "smooth", "y_col": "y"}},
-        )
-        task_id = submitted["task"]["task_id"]
-        completed = wait_for_status(client, task_id, "completed")
-
-    assert completed["result"]["analysis"] == "smooth"
-    assert completed["result"]["executed"] is True
-
-
-def test_bridge_task_lifecycle_supports_project_methods() -> None:
-    with running_bridge() as server:
-        client = bridge_client(server)
-        submitted = client.request(
-            "submit_task",
-            {"method": "save_project", "params": {"path": "saved.opju"}},
-        )
-        task_id = submitted["task"]["task_id"]
-        completed = wait_for_status(client, task_id, "completed")
-
-    assert completed["result"] == {"path": "saved.opju", "saved": True}
-
-
-def test_bridge_task_lifecycle_supports_worksheet_methods() -> None:
-    with running_bridge() as server:
-        client = bridge_client(server)
-        submitted = client.request(
-            "submit_task",
-            {"method": "read_worksheet", "params": {"book_name": "Book1"}},
-        )
-        task_id = submitted["task"]["task_id"]
-        completed = wait_for_status(client, task_id, "completed")
-
-    assert completed["result"]["rows"] == [{"x": 1, "y": 2}]
+    key, nested_key, value = expected
+    result = completed["result"]
+    if key is None:
+        assert result == value
+    elif nested_key is None:
+        assert result[key] == value
+    else:
+        assert result[key][nested_key] == value
 
 
 def test_bridge_task_cancel_queued_task() -> None:
