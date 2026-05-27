@@ -23,9 +23,6 @@ RUNTIME_PACKAGES = {
 def _addon_dir() -> Path:
     if "__file__" in globals():
         return Path(__file__).resolve().parent
-    src = os.environ.get("ORIGIN_MCP_SRC")
-    if src:
-        return Path(src).resolve().parent
     return Path.cwd()
 
 
@@ -105,23 +102,61 @@ class _StdioCompat:
         return getattr(self._stream, name)
 
 
-def _default_src_dir() -> Path:
-    try:
-        return Path(__file__).resolve().parent / "src"
-    except NameError:
-        return _addon_dir() / "src"
+def _candidate_src_dirs(src_dir: str | os.PathLike[str] | None = None) -> list[Path]:
+    candidates: list[Path] = []
+    for value in (src_dir, os.environ.get("ORIGIN_MCP_SRC")):
+        if value:
+            candidates.append(Path(value).expanduser())
+
+    addon_dir = _addon_dir()
+    candidates.extend(
+        [
+            addon_dir / "src",
+            addon_dir.parent / "src",
+        ]
+    )
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        key = os.path.normcase(str(resolved))
+        if key not in seen:
+            seen.add(key)
+            unique.append(resolved)
+    return unique
 
 
-def _ensure_origin_mcp_on_path(src_dir: str | os.PathLike[str] | None = None) -> Path:
-    src = Path(src_dir or os.environ.get("ORIGIN_MCP_SRC") or _default_src_dir()).resolve()
-    if not (src / "origin_mcp").is_dir():
-        raise RuntimeError(
-            f"origin_mcp package was not found under {src}. "
-            "Set ORIGIN_MCP_SRC to the checkout src directory."
-        )
-    if str(src) not in sys.path:
-        sys.path.insert(0, str(src))
-    return src
+def _origin_mcp_source() -> str:
+    spec = importlib.util.find_spec("origin_mcp")
+    if spec is None:
+        return "installed"
+    if spec.origin:
+        return str(Path(spec.origin).resolve().parent)
+    locations = spec.submodule_search_locations
+    if locations:
+        return str(Path(next(iter(locations))).resolve())
+    return "installed"
+
+
+def _ensure_origin_mcp_importable(src_dir: str | os.PathLike[str] | None = None) -> str:
+    _ensure_user_site_on_path()
+    importlib.invalidate_caches()
+
+    for src in _candidate_src_dirs(src_dir):
+        if (src / "origin_mcp").is_dir() and str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+
+    importlib.invalidate_caches()
+    if importlib.util.find_spec("origin_mcp.bridge") is not None:
+        return _origin_mcp_source()
+
+    raise RuntimeError(
+        "origin_mcp is not importable in Origin's embedded Python. "
+        "Install origin-mcp into Origin's Python environment, run addon.py from the "
+        "checkout root so its adjacent src directory can be detected, or set "
+        "ORIGIN_MCP_SRC to the checkout src directory."
+    )
 
 
 def _ensure_user_site_on_path() -> None:
@@ -283,7 +318,7 @@ def start_origin_mcp_bridge(
         return {"running": True, "host": actual_host, "port": actual_port, "already_running": True}
 
     _emit("starting inside Origin Python")
-    src = _ensure_origin_mcp_on_path(src_dir)
+    package_source = _ensure_origin_mcp_importable(src_dir)
     if install_missing:
         _install_missing_runtime_packages()
     OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
@@ -296,7 +331,7 @@ def start_origin_mcp_bridge(
         "running": True,
         "host": actual_host,
         "port": actual_port,
-        "src": str(src),
+        "package_source": package_source,
         "max_tasks": max_tasks,
         "background": background,
     }
@@ -305,7 +340,7 @@ def start_origin_mcp_bridge(
         fields={
             "host": actual_host,
             "port": actual_port,
-            "src": str(src),
+            "package_source": package_source,
             "max_tasks": max_tasks,
             "background": background,
         },

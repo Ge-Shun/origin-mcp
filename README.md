@@ -88,9 +88,9 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 - [MCP client configuration](docs/mcp-config.md)
 - [Origin GUI bridge](docs/origin-bridge.md)
 
-After starting the bridge inside Origin with `runpy.run_path()` pointed at your
-local `addon.py`, run `python examples\smoke_bridge.py` to validate a real
-file-to-figure workflow.
+After starting the bridge inside Origin with the root `addon.py`, run
+`python examples\smoke_bridge.py` to validate a real file-to-figure workflow.
+The addon does not require editing a source directory in the file.
 
 ## Knowledge Base
 

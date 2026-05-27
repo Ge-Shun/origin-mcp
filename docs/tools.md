@@ -390,7 +390,8 @@ Python runtime handling:
 
 `origin-mcp` uses a local bridge process for Origin automation. Prefer starting
 it inside Origin's own Python console so `originpro` calls stay in the Origin
-process:
+process. `addon.py` auto-detects an installed package or the adjacent checkout
+`src` directory, so the file itself does not need a machine-specific path:
 
 ```python
 import runpy

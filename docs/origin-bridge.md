@@ -17,7 +17,7 @@ Python version mismatches.
 
 1. Open Origin/OriginPro.
 2. Open the Python console.
-3. Run:
+3. Open or paste `addon.py`, or run it by path:
 
 ```python
 import runpy
@@ -25,6 +25,11 @@ runpy.run_path(r"<path-to-origin-mcp>\addon.py", run_name="__main__")
 ```
 
 Replace `<path-to-origin-mcp>` with the local checkout path.
+
+`addon.py` does not hard-code the checkout directory. It first tries to import
+an installed `origin_mcp` package from Origin's embedded Python. If that is not
+available, it looks for a sibling `src\origin_mcp` directory next to `addon.py`.
+`ORIGIN_MCP_SRC` is only a fallback for unusual launch setups.
 
 The addon shows a Windows message box when the bridge is ready:
 
@@ -53,8 +58,9 @@ connects to the same host and port through `OriginBridgeProxy`.
 To stop the foreground bridge, press `Ctrl+C` in the Origin Python console. If
 Origin does not return to the prompt, close Origin after saving any work.
 
-If `addon.py` cannot infer the checkout location, set `ORIGIN_MCP_SRC` to the
-checkout `src` directory before running the addon.
+No source directory needs to be edited in `addon.py`. If the file was copied
+away from the checkout and `origin-mcp` is not installed in Origin's Python, set
+`ORIGIN_MCP_SRC` to the checkout `src` directory before running the addon.
 
 Use a token when multiple local tools may connect to the same machine:
 
