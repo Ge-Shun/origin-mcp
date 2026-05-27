@@ -197,7 +197,6 @@ include stable machine-readable fields:
 - `metrics`: common fit/statistical metrics when recognized
 - `sections`: reserved for summary/statistics sections
 - `warnings`: non-fatal execution or output-read warnings
-- `raw_result`: serialized LabTalk execution result
 
 ```json
 {
@@ -219,8 +218,6 @@ such as `RSquare` from the output worksheet when `output_sheet` and
 - `metrics`: common fit metrics such as `RSquare`
 - `sections`: summary/statistics/ANOVA-like sections when they are present in the
   Origin result tree
-- `raw_result`: a serialized copy of the original Origin result object for
-  debugging and version-specific fields
 
 For analysis tools that create output worksheets, prefer setting `output_sheet`
 and `include_output=true` so the AI client can inspect the produced table without
@@ -267,34 +264,7 @@ Coverage categories:
 - `not_wrapped`: still missing a wrapper
 
 The current catalog reports the documented Plot Type ID table as direct-tool
-covered. Version-specific edge cases should still be checked with the smoke test
-on the user's actual Origin installation.
-
-Use the broader smoke test to generate a small plot gallery and verify analysis
-output readback:
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.smoke_test --analysis --gallery
-```
-
-Use the real-Origin plot matrix for broader Plot Type ID regression coverage:
-
-```powershell
-.\.venv\Scripts\python.exe -m origin_mcp.plot_matrix
-```
-
-It creates minimal data, attempts each documented Origin Plot Type ID, exports
-PNG previews, performs image quality checks, and writes
-`output/plot_matrix/report.json` plus `output/plot_matrix/report.md`. The report
-flags empty exports, near-blank images, undersized previews, missing plotted
-data, and exact duplicate PNG exports. Use `--limit` or `--only` for focused
-checks.
-The JSON report exposes `total`, `passed`, `failed`, and `skipped` at the top
-level as well as under `summary`, so clients can inspect either shape.
-Inside a running MCP server, use `origin_run_plot_matrix` to execute the same
-matrix through the already-active MCP/Origin automation session. Matrix-only
-plot types get an auto-created sample Origin matrix unless `matrix_range` is
-provided explicitly.
+covered.
 
 ## Version Compatibility
 

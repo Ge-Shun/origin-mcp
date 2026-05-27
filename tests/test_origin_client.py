@@ -148,7 +148,6 @@ def test_run_analysis_marks_false_labtalk_result() -> None:
     assert result["parameters"] == []
     assert result["metrics"] == {}
     assert result["warnings"] == ["Origin returned false for this analysis command."]
-    assert result["raw_result"] == {"result": False}
 
 
 def test_run_analysis_reads_output_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:

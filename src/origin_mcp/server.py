@@ -22,7 +22,6 @@ from .models import (
     ToolResult,
 )
 from .origin_client import OriginClient
-from .plot_matrix import run_plot_matrix
 
 mcp = FastMCP("origin-mcp")
 client = OriginClient()
@@ -141,43 +140,6 @@ def origin_plot_type_coverage(
             ),
         )
     )
-
-
-@mcp.tool()
-def origin_run_plot_matrix(
-    output_dir: str | None = None,
-    project_path: str | None = None,
-    data_path: str | None = None,
-    matrix_range: str | None = None,
-    limit: int | None = None,
-    only: list[int] | None = None,
-    show: bool = True,
-    detach: bool = False,
-) -> dict[str, Any]:
-    """Run the Plot Type ID regression matrix inside the active MCP server process."""
-
-    def run() -> dict[str, Any]:
-        result = run_plot_matrix(
-            client=client,
-            output_dir=Path(output_dir) if output_dir else None,
-            project_path=Path(project_path) if project_path else None,
-            data_path=Path(data_path) if data_path else None,
-            matrix_range=matrix_range,
-            show=show,
-            detach=detach,
-            limit=limit,
-            only=only,
-            backend="mcp_server",
-        )
-        if result.get("ok"):
-            return _ok("Ran Origin plot regression matrix.", **result)
-        return ToolResult(
-            ok=False,
-            message=str(result.get("error") or "Origin plot regression matrix failed."),
-            data=result,
-        ).model_dump()
-
-    return _wrap(run)
 
 
 @mcp.tool()
