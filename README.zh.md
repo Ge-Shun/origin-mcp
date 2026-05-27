@@ -29,6 +29,7 @@ pull request。
 
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
+- 当前主要测试目标是 Origin/OriginPro 2026，其他 Origin 版本暂不保证兼容
 - 推荐 Python 3.11 或 3.12；Python 3.10 受支持，但测试较少
 - Origin 的 `originpro` 包和 `pywin32`
 

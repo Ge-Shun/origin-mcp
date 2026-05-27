@@ -1006,11 +1006,11 @@ def origin_plot_heatmap(
 ) -> dict[str, Any]:
     """Import XYZ table data and create a heatmap graph."""
 
-    return _plot_csv(
-        kind=PlotKind.heatmap,
+    return _plot_table_id(
         path=path,
-        x_col=x_col,
-        y_cols=[y_col],
+        plot_type_id=243,
+        template=template or "Contour",
+        selected_cols=[x_col, y_col, z_col],
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
@@ -1021,12 +1021,9 @@ def origin_plot_heatmap(
         nrows=nrows,
         na_values=na_values,
         graph_name=graph_name,
-        template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
-        z_col=z_col,
-        show_legend=show_legend,
         style_mode=style_mode,
         export_path=export_path,
     )
@@ -1058,11 +1055,11 @@ def origin_plot_3d_scatter(
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D scatter graph."""
 
-    return _plot_csv(
-        kind=PlotKind.scatter3d,
+    return _plot_table_id(
         path=path,
-        x_col=x_col,
-        y_cols=[y_col],
+        plot_type_id=240,
+        template=template or "3d",
+        selected_cols=[x_col, y_col, z_col],
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
@@ -1073,12 +1070,9 @@ def origin_plot_3d_scatter(
         nrows=nrows,
         na_values=na_values,
         graph_name=graph_name,
-        template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
-        z_col=z_col,
-        show_legend=show_legend,
         style_mode=style_mode,
         export_path=export_path,
     )
@@ -1110,11 +1104,11 @@ def origin_plot_3d_surface(
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D surface graph."""
 
-    return _plot_csv(
-        kind=PlotKind.surface3d,
+    return _plot_table_id(
         path=path,
-        x_col=x_col,
-        y_cols=[y_col],
+        plot_type_id=242,
+        template=template or "glmesh",
+        selected_cols=[x_col, y_col, z_col],
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
@@ -1125,12 +1119,9 @@ def origin_plot_3d_surface(
         nrows=nrows,
         na_values=na_values,
         graph_name=graph_name,
-        template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
-        z_col=z_col,
-        show_legend=show_legend,
         style_mode=style_mode,
         export_path=export_path,
     )
@@ -2501,8 +2492,11 @@ def origin_format_legend(
     show_frame: bool | None = None,
     left: int | None = None,
     top: int | None = None,
+    position: str | None = None,
+    margin_percent: float = 2.0,
+    coordinate_mode: str = "auto",
 ) -> dict[str, Any]:
-    """Format the graph legend text, font size, frame, and position."""
+    """Format the graph legend text, font size, frame, and optional position."""
 
     return _wrap(
         lambda: _ok(
@@ -2514,6 +2508,9 @@ def origin_format_legend(
                 show_frame=show_frame,
                 left=left,
                 top=top,
+                position=position,
+                margin_percent=margin_percent,
+                coordinate_mode=coordinate_mode,
             ),
         )
     )

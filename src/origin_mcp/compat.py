@@ -372,7 +372,9 @@ FEATURE_REQUIREMENTS = {
     "data_connector": 9.6,
     "worksheet_from_file": 9.6,
     "origin_2021b_or_newer": 10.1,
-    "origin_2024_or_newer": 10.25,
+    "origin_2024_or_newer": 10.15,
+    "origin_2024b_or_newer": 10.15,
+    "origin_2026_or_newer": 10.3,
 }
 
 
@@ -398,13 +400,38 @@ def package_version(name: str) -> str | None:
         return None
 
 
-def is_origin_version_at_least(version: float | int | None, minimum: float) -> bool:
+def is_origin_version_at_least(version: float | int | str | None, minimum: float | str) -> bool:
+    parsed = _origin_version_tuple(version)
+    minimum_parsed = _origin_version_tuple(minimum)
+    if parsed is None or minimum_parsed is None:
+        return False
+    return parsed >= minimum_parsed
+
+
+def _origin_version_tuple(version: float | int | str | None) -> tuple[int, ...] | None:
     if version is None:
-        return False
-    try:
-        return float(version) >= minimum
-    except (TypeError, ValueError):
-        return False
+        return None
+    text = str(version).strip()
+    if not text:
+        return None
+    parts = text.split(".")
+    parsed: list[int] = []
+    for index, part in enumerate(parts):
+        digits = ""
+        for char in part:
+            if char.isdigit():
+                digits += char
+            else:
+                break
+        if not digits:
+            break
+        value = int(digits)
+        if index == 1 and len(digits) == 1:
+            value *= 10
+        parsed.append(value)
+    if not parsed:
+        return None
+    return tuple(parsed)
 
 
 def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[str, Any]:
@@ -436,8 +463,19 @@ def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[st
         ),
         FeatureCheck(
             "origin_2024_or_newer",
-            is_origin_version_at_least(origin_version, 10.25),
-            10.25,
+            is_origin_version_at_least(origin_version, 10.15),
+            10.15,
+            "Compatibility alias for origin_2024b_or_newer.",
+        ),
+        FeatureCheck(
+            "origin_2024b_or_newer",
+            is_origin_version_at_least(origin_version, 10.15),
+            10.15,
+        ),
+        FeatureCheck(
+            "origin_2026_or_newer",
+            is_origin_version_at_least(origin_version, 10.3),
+            10.3,
         ),
     ]
     return {
@@ -523,20 +561,29 @@ def _plot_version_profile(origin_version: float | int | None) -> dict[str, Any]:
                 "with Origin available."
             ),
         }
-    if is_origin_version_at_least(origin_version, 10.25):
+    if is_origin_version_at_least(origin_version, 10.3):
         return {
-            "name": "Origin 2024 or newer",
+            "name": "Origin 2026 or newer",
             "recommended": True,
             "note": (
-                "Modern originpro automation path; all direct plot wrappers are "
-                "expected to be available."
+                "Primary tested target for origin-mcp. Other Origin versions are "
+                "not currently guaranteed."
+            ),
+        }
+    if is_origin_version_at_least(origin_version, 10.15):
+        return {
+            "name": "Origin 2024b to 2025",
+            "recommended": False,
+            "note": (
+                "Detected as a modern Origin version, but origin-mcp currently "
+                "targets Origin/OriginPro 2026 for active testing."
             ),
         }
     if is_origin_version_at_least(origin_version, 10.1):
         return {
             "name": "Origin 2021b to 2023",
-            "recommended": True,
-            "note": "Supported by this MCP; newer 3D/template edge cases should be smoke-tested.",
+            "recommended": False,
+            "note": "Recognized, but not currently guaranteed by origin-mcp.",
         }
     return {
         "name": "Legacy Origin before 2021b",

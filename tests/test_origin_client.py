@@ -433,6 +433,10 @@ class FakeGraph:
         return self.layer
 
 
+class GPage(FakeGraph):
+    pass
+
+
 class FakePlot:
     name = "Plot1"
 
@@ -461,9 +465,13 @@ class FakeLabel:
     def __init__(self, text: str) -> None:
         self.text = text
         self.removed = False
+        self.properties = {}
 
     def remove(self) -> None:
         self.removed = True
+
+    def set_int(self, name: str, value: int) -> None:
+        self.properties[name] = value
 
 
 class FakeLayer:
@@ -618,6 +626,147 @@ def test_format_graph_removes_template_title_label(monkeypatch: pytest.MonkeyPat
 
     assert title_label.removed is True
     assert layer.labels == {}
+
+
+def test_format_legend_does_not_move_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.format_legend("Graph1", font_size=12, show_frame=True)
+
+    assert legend.properties["fsize"] == 12
+    assert legend.properties["showframe"] == 1
+    assert result["position"] is None
+    assert scripts == []
+
+
+def test_format_legend_positions_inside_layer_anchor_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.format_legend("Graph1", position="inside_upper_left")
+
+    assert result["position"]["mode"] == "layer_anchor"
+    assert result["position"]["position"] == "inside_upper_left"
+    assert "legend.x=layer.x.from+" in scripts[-1]
+    assert "legend.y=layer.y.to-" in scripts[-1]
+    assert "legend.left" not in scripts[-1]
+    assert "legend.top" not in scripts[-1]
+
+
+def test_format_legend_interprets_small_left_top_as_layer_percent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.format_legend("Graph1", left=20, top=10)
+
+    assert result["position"]["mode"] == "layer_percent"
+    assert result["position"]["left_percent"] == 20
+    assert result["position"]["top_percent"] == 10
+    assert "layer.x.from+(layer.x.to-layer.x.from)*0.2+legend.dx/2" in scripts[-1]
+    assert "layer.y.to-(layer.y.to-layer.y.from)*0.1-legend.dy/2" in scripts[-1]
+    assert "left" not in legend.properties
+    assert "top" not in legend.properties
+
+
+def test_format_legend_can_still_use_page_pixels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.format_legend(
+        "Graph1",
+        left=1200,
+        top=620,
+        coordinate_mode="page_pixel",
+    )
+
+    assert result["position"] == {"mode": "page_pixel", "left": 1200, "top": 620}
+    assert legend.properties["left"] == 1200
+    assert legend.properties["top"] == 620
+
+
+def test_format_legend_requires_left_and_top_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    layer.labels["Legend"] = FakeLabel("Legend")
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    with pytest.raises(OriginOperationError, match="left and top must be provided together"):
+        client.format_legend("Graph1", left=20)
+
+    with pytest.raises(OriginOperationError, match="left and top must be provided together"):
+        client.format_legend("Graph1", top=10)
+
+
+def test_format_legend_rejects_invalid_coordinate_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    layer.labels["Legend"] = FakeLabel("Legend")
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    with pytest.raises(OriginOperationError, match="coordinate_mode must be one of"):
+        client.format_legend("Graph1", left=20, top=10, coordinate_mode="screen")
+
+
+def test_format_legend_rejects_invalid_position(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    layer.labels["Legend"] = FakeLabel("Legend")
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    with pytest.raises(OriginOperationError, match="Unsupported legend position"):
+        client.format_legend("Graph1", position="outside")
 
 
 def test_export_graph_prefers_labtalk_when_graph_name_provided(
@@ -782,6 +931,54 @@ def test_plot_table_exports_by_graph_name(
 
     assert graph_ref.export_path == str(export_path)
     assert export_calls == [(export_path, "Graph1")]
+    assert graph_ref.graph_name == "Graph1"
+    assert graph_ref.requested_graph_name == "NamedLine"
+    assert graph_ref.display_name == "NamedLine"
+
+    graph.layer.labels["Legend"] = FakeLabel("Legend")
+
+    class FakeOrigin:
+        def find_graph(self, name: str) -> FakeGraph | None:
+            return graph if name == "Graph1" else None
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    formatted = client.format_legend("NamedLine", position="inside_upper_left")
+
+    assert formatted["graph_name"] == "Graph1"
+
+
+def test_format_legend_finds_graph_by_long_name_when_short_name_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    graph = GPage(FakeLayer())
+    graph.lname = "OriginMcpStdioSmokeLine"
+    graph.layer.labels["Legend"] = FakeLabel("Legend")
+    scripts = []
+
+    class FakeOrigin:
+        def find_graph(self, _name: str) -> None:
+            return None
+
+        def pages(self) -> list[GPage]:
+            return [graph]
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.format_legend(
+        graph_name="OriginMcpStdioSmokeLine",
+        position="inside_lower_right",
+    )
+
+    assert result["graph_name"] == "Graph1"
+    assert result["position"]["mode"] == "layer_anchor"
+    assert 'win -a "Graph1";' in scripts[-1]
 
 
 def test_default_plot_config_discovers_user_templates(tmp_path: Path) -> None:
@@ -1359,6 +1556,53 @@ def test_plot_table_by_id_exports_active_graph_when_named_graph_missing(
 
     assert graph.export_path == str(export_path)
     assert calls == ["Line", None]
+
+
+def test_plot_table_by_id_records_alias_when_origin_uses_different_short_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    graph = GPage(FakeLayer())
+    graph.name = "Graph7"
+    graph.lname = "Generated Graph"
+    graph.layer.labels["Legend"] = FakeLabel("Legend")
+
+    class FakeOrigin:
+        def find_graph(self, name: str) -> GPage | None:
+            return graph if name == "Graph7" else None
+
+        def pages(self) -> list[GPage]:
+            return [graph] if any("plotxyz " in script for script in scripts) else []
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, graph_ref, _command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=243,
+        template="Contour",
+        selected_cols=["x", "y", "z"],
+        graph_name="RequestedHeatmap",
+    )
+
+    assert graph_ref.graph_name == "Graph7"
+    assert graph_ref.requested_graph_name == "RequestedHeatmap"
+    assert graph_ref.display_name == "Generated Graph"
+
+    formatted = client.format_legend("RequestedHeatmap", position="inside_upper_left")
+
+    assert formatted["graph_name"] == "Graph7"
+    assert 'win -a "Graph7";' in scripts[-1]
 
 
 def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch) -> None:

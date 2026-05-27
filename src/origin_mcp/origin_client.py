@@ -51,14 +51,21 @@ class GraphRef:
     export_path: str | None = None
     template: str | None = None
     style_mode: str = "origin_default"
+    requested_graph_name: str | None = None
+    display_name: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "graph_name": self.graph_name,
             "export_path": self.export_path,
             "template": self.template,
             "style_mode": self.style_mode,
         }
+        if self.requested_graph_name is not None:
+            data["requested_graph_name"] = self.requested_graph_name
+        if self.display_name is not None:
+            data["display_name"] = self.display_name
+        return data
 
 
 @dataclass
@@ -180,6 +187,7 @@ class OriginClient:
         self._op: Any | None = None
         self._capabilities: dict[str, Any] | None = None
         self._graph_annotations: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        self._graph_aliases: dict[str, str] = {}
 
     @property
     def op(self) -> Any:
@@ -786,6 +794,7 @@ class OriginClient:
             rescale=True,
         )
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
+        self._remember_graph_alias(graph_name, actual_graph_name)
         if style_mode_actual == "publication":
             self.apply_publication_style(graph_name=actual_graph_name)
         elif style_mode_actual == "nature":
@@ -800,6 +809,8 @@ class OriginClient:
             export_path=exported,
             template=graph_template,
             style_mode=style_mode_actual,
+            requested_graph_name=graph_name,
+            display_name=self._object_long_name(graph, default=graph_name),
         )
 
     def plot_table_by_id(
@@ -848,6 +859,7 @@ class OriginClient:
             self._set_plotxyz_designations(wks, columns, selected, plot_type_id)
         data_range = self._worksheet_range_expr(wks, columns, selected)
         graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
+        existing_graphs = self._graph_page_names()
         if command == "worksheet":
             script = self._worksheet_plot_command(columns, selected, plot_type_id, template)
             result = self._execute_on_worksheet(wks, script)
@@ -861,6 +873,11 @@ class OriginClient:
                 graph_name=graph_name_actual,
             )
             result = self.run_labtalk(script)
+        graph_name_actual = self._created_graph_name(
+            requested_graph_name=graph_name_actual,
+            existing_graphs=existing_graphs,
+        )
+        self._remember_graph_alias(graph_name, graph_name_actual)
         if title or x_label or y_label:
             try:
                 self.format_graph(
@@ -892,6 +909,11 @@ class OriginClient:
                 export_path=exported,
                 template=template,
                 style_mode=style_mode_actual,
+                requested_graph_name=graph_name,
+                display_name=self._graph_display_name(
+                    graph_name_actual,
+                    default=title or graph_name,
+                ),
             ),
             {
                 "script": script,
@@ -2278,9 +2300,13 @@ class OriginClient:
         show_frame: bool | None = None,
         left: int | None = None,
         top: int | None = None,
+        position: str | None = None,
+        margin_percent: float = 2.0,
+        coordinate_mode: str = "auto",
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
         legend = layer.label("Legend")
         if legend is None:
             self._set_legend(layer, show=True)
@@ -2293,11 +2319,21 @@ class OriginClient:
             legend.set_int("fsize", font_size)
         if show_frame is not None:
             legend.set_int("showframe", int(show_frame))
-        if left is not None:
-            legend.set_int("left", left)
-        if top is not None:
-            legend.set_int("top", top)
-        return {"graph_name": self._object_name(graph, default=graph_name or ""), "legend": True}
+        position_result = self._position_legend(
+            graph_name=graph_name_actual,
+            layer_index=0,
+            legend=legend,
+            left=left,
+            top=top,
+            position=position,
+            margin_percent=margin_percent,
+            coordinate_mode=coordinate_mode,
+        )
+        return {
+            "graph_name": graph_name_actual,
+            "legend": True,
+            "position": position_result,
+        }
 
     def linear_fit_result(
         self,
@@ -2874,7 +2910,10 @@ class OriginClient:
         try:
             return new_graph(**kwargs)
         except TypeError:
-            return new_graph(graph_template)
+            graph = new_graph(graph_template)
+            if graph_name:
+                self._set_page_long_name(graph, graph_name)
+            return graph
 
     @staticmethod
     def _default_graph_templates() -> dict[str, str]:
@@ -3361,11 +3400,108 @@ class OriginClient:
             graph = op.find_graph(graph_name or "")
             if graph is not None:
                 return graph
+            alias = self._graph_aliases.get(graph_name or "")
+            if alias:
+                graph = op.find_graph(alias)
+                if graph is not None:
+                    return graph
+        if graph_name:
+            graph = self._find_graph_by_long_name(graph_name)
+            if graph is not None:
+                return graph
 
         if graph_name:
             raise OriginOperationError(f"Graph not found: {graph_name}")
 
         raise OriginOperationError("No active graph found. Create or name a graph first.")
+
+    def _find_graph_by_long_name(self, graph_name: str) -> Any | None:
+        op = self._op
+        if op is None:
+            return None
+        pages = getattr(op, "pages", None)
+        if not callable(pages):
+            return None
+        try:
+            candidates = pages()
+        except Exception:
+            return None
+        try:
+            for page in candidates:
+                cls_name = type(page).__name__.lower()
+                if cls_name and cls_name != "gpage":
+                    continue
+                if self._object_long_name(page, default="") == graph_name:
+                    return page
+        except Exception:
+            return None
+        return None
+
+    def _remember_graph_alias(
+        self,
+        requested_graph_name: str | None,
+        actual_graph_name: str | None,
+    ) -> None:
+        if not requested_graph_name or not actual_graph_name:
+            return
+        self._graph_aliases[requested_graph_name] = actual_graph_name
+
+    def _graph_page_names(self) -> set[str]:
+        op = self._op
+        if op is None:
+            return set()
+        pages = getattr(op, "pages", None)
+        if not callable(pages):
+            return set()
+        try:
+            candidates = pages()
+        except Exception:
+            return set()
+        names = set()
+        try:
+            for page in candidates:
+                if type(page).__name__.lower() != "gpage":
+                    continue
+                name = self._object_name(page, default="")
+                if name:
+                    names.add(name)
+        except Exception:
+            return set()
+        return names
+
+    def _created_graph_name(
+        self,
+        requested_graph_name: str,
+        existing_graphs: set[str],
+    ) -> str:
+        graph = self._find_graph_optional(requested_graph_name)
+        if graph is not None:
+            return self._object_name(graph, default=requested_graph_name)
+
+        created = self._graph_page_names() - existing_graphs
+        if len(created) == 1:
+            return next(iter(created))
+        return requested_graph_name
+
+    def _find_graph_optional(self, graph_name: str) -> Any | None:
+        op = self._op
+        if op is None:
+            return None
+        find_graph = getattr(op, "find_graph", None)
+        if callable(find_graph):
+            try:
+                graph = find_graph(graph_name)
+            except Exception:
+                graph = None
+            if graph is not None:
+                return graph
+        return self._find_graph_by_long_name(graph_name)
+
+    def _graph_display_name(self, graph_name: str, default: str | None = None) -> str | None:
+        graph = self._find_graph_optional(graph_name)
+        if graph is None:
+            return default
+        return self._object_long_name(graph, default=default)
 
     def _add_plot(
         self,
@@ -3443,6 +3579,142 @@ class OriginClient:
             remove = getattr(label, "remove", None)
             if callable(remove):
                 remove()
+
+    def _position_legend(
+        self,
+        graph_name: str,
+        layer_index: int,
+        legend: Any,
+        left: int | None,
+        top: int | None,
+        position: str | None,
+        margin_percent: float,
+        coordinate_mode: str,
+    ) -> dict[str, Any] | None:
+        if left is None and top is None and position is None:
+            return None
+
+        mode = (coordinate_mode or "auto").strip().lower()
+        if mode not in {"auto", "layer_percent", "page_pixel"}:
+            raise OriginOperationError(
+                "coordinate_mode must be one of: auto, layer_percent, page_pixel."
+            )
+
+        if left is not None or top is not None:
+            if left is None or top is None:
+                raise OriginOperationError("left and top must be provided together.")
+            use_layer_percent = mode == "layer_percent" or (
+                mode == "auto" and 0 <= left <= 100 and 0 <= top <= 100
+            )
+            if use_layer_percent:
+                script = self._legend_layer_percent_script(
+                    graph_name=graph_name,
+                    layer_index=layer_index,
+                    left_percent=float(left),
+                    top_percent=float(top),
+                )
+                result = self.run_labtalk(script)
+                return {
+                    "mode": "layer_percent",
+                    "left_percent": left,
+                    "top_percent": top,
+                    "script": script,
+                    **result,
+                }
+
+            legend.set_int("left", int(left))
+            legend.set_int("top", int(top))
+            return {"mode": "page_pixel", "left": left, "top": top}
+
+        normalized = position.strip().lower().replace("-", "_")
+        aliases = {
+            "upper_left": "inside_upper_left",
+            "top_left": "inside_upper_left",
+            "inside_top_left": "inside_upper_left",
+            "upper_right": "inside_upper_right",
+            "top_right": "inside_upper_right",
+            "inside_top_right": "inside_upper_right",
+            "lower_left": "inside_lower_left",
+            "bottom_left": "inside_lower_left",
+            "inside_bottom_left": "inside_lower_left",
+            "lower_right": "inside_lower_right",
+            "bottom_right": "inside_lower_right",
+            "inside_bottom_right": "inside_lower_right",
+        }
+        normalized = aliases.get(normalized, normalized)
+        supported = {
+            "inside_upper_left",
+            "inside_upper_right",
+            "inside_lower_left",
+            "inside_lower_right",
+        }
+        if normalized not in supported:
+            raise OriginOperationError(
+                f"Unsupported legend position: {position!r}. Supported: {sorted(supported)}."
+            )
+
+        script = self._legend_anchor_script(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            position=normalized,
+            margin_percent=margin_percent or 0.0,
+        )
+        result = self.run_labtalk(script)
+        return {
+            "mode": "layer_anchor",
+            "position": normalized,
+            "margin_percent": margin_percent,
+            "script": script,
+            **result,
+        }
+
+    def _legend_anchor_script(
+        self,
+        graph_name: str,
+        layer_index: int,
+        position: str,
+        margin_percent: float,
+    ) -> str:
+        margin = max(float(margin_percent), 0.0) / 100.0
+        x_left = f"layer.x.from+(layer.x.to-layer.x.from)*{margin:.6g}+legend.dx/2"
+        x_right = f"layer.x.to-(layer.x.to-layer.x.from)*{margin:.6g}-legend.dx/2"
+        y_upper = f"layer.y.to-(layer.y.to-layer.y.from)*{margin:.6g}-legend.dy/2"
+        y_lower = f"layer.y.from+(layer.y.to-layer.y.from)*{margin:.6g}+legend.dy/2"
+        x_expr = x_right if position.endswith("_right") else x_left
+        y_expr = y_lower if "_lower_" in position else y_upper
+        return self._legend_position_script(graph_name, layer_index, x_expr, y_expr)
+
+    def _legend_layer_percent_script(
+        self,
+        graph_name: str,
+        layer_index: int,
+        left_percent: float,
+        top_percent: float,
+    ) -> str:
+        x_fraction = left_percent / 100.0
+        y_fraction = top_percent / 100.0
+        x_expr = f"layer.x.from+(layer.x.to-layer.x.from)*{x_fraction:.6g}+legend.dx/2"
+        y_expr = f"layer.y.to-(layer.y.to-layer.y.from)*{y_fraction:.6g}-legend.dy/2"
+        return self._legend_position_script(graph_name, layer_index, x_expr, y_expr)
+
+    def _legend_position_script(
+        self,
+        graph_name: str,
+        layer_index: int,
+        x_expr: str,
+        y_expr: str,
+    ) -> str:
+        parts = []
+        if graph_name:
+            parts.append(f'win -a "{self._escape_labtalk(graph_name)}";')
+        parts.extend(
+            [
+                f"layer -s {layer_index + 1};",
+                f"legend.x={x_expr};",
+                f"legend.y={y_expr};",
+            ]
+        )
+        return " ".join(parts)
 
     def _set_page_long_name(
         self,
@@ -4483,6 +4755,18 @@ class OriginClient:
             if value:
                 return str(value)
         return default
+
+    @staticmethod
+    def _object_long_name(obj: Any, default: str | None = None) -> str | None:
+        if obj is None:
+            return default
+        value = getattr(obj, "lname", None)
+        if callable(value):
+            try:
+                value = value()
+            except Exception:
+                value = None
+        return str(value) if value else default
 
     def _find_sheet(self, book_name: str | None = None, sheet_name: str | None = None) -> Any:
         op = self.op

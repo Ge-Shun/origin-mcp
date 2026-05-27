@@ -35,6 +35,8 @@ directly instead of only generating standalone plotting code.
 
 - Windows
 - Origin or OriginPro installed and licensed
+- Origin/OriginPro 2026 is the primary tested target; other Origin versions are
+  not currently guaranteed
 - Python 3.11 or 3.12 recommended; Python 3.10 is supported but less tested
 - Origin's `originpro` package and `pywin32`
 

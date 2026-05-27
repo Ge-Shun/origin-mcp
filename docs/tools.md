@@ -155,6 +155,13 @@ Template/range plotting:
 - `origin_add_reference_line`
 - `origin_format_legend`
 
+`origin_format_legend` formats legend text, font, and frame without moving the
+legend by default. Pass `position` explicitly, such as
+`position="inside_upper_left"`, to place the legend inside the active layer.
+When `left` and `top` are provided together, values in the 0-100 range are
+interpreted as layer percentages; use `coordinate_mode="page_pixel"` only when
+raw Origin page-pixel coordinates are intended.
+
 Text shown on graphs is normalized for Origin rich text automatically. Axis
 titles, graph labels, reference-line labels, and column label rows
 convert common notation such as `CO_2`, `x_{max}`, `m^2`, `E^{1/2}`, `H₂O`,
