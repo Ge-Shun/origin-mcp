@@ -122,6 +122,10 @@ def main() -> int:
 
     except Exception as exc:
         print(f"SMOKE FAILED: {exc}", file=sys.stderr)
+        try:
+            print_json("doctor", origin.origin_doctor(ping_origin=False))
+        except Exception as doctor_exc:
+            print(f"DOCTOR FAILED: {doctor_exc}", file=sys.stderr)
         return 1
 
     print("SMOKE PASSED")

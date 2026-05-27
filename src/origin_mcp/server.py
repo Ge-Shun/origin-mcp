@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
-from .bridge_client import OriginBridgeProxy, request_bridge
+from .bridge_client import OriginBridgeConfig, OriginBridgeProxy, request_bridge
 from .errors import OriginBridgeError, OriginDependencyError, OriginMcpError, OriginOperationError
 from .knowledge import browse_knowledge, query_knowledge
 from .models import (
@@ -113,6 +115,75 @@ def _export_inspection(graph: dict[str, Any]) -> dict[str, Any] | None:
         return {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
 
 
+def _dedupe_strings(values: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _status_file_candidates(status_path: str | None = None) -> list[Path]:
+    candidates: list[Path] = []
+    for value in (status_path, os.environ.get("ORIGIN_MCP_BRIDGE_STATUS")):
+        if value:
+            candidates.append(Path(value).expanduser())
+    candidates.extend(
+        [
+            Path.cwd() / "origin-bridge.status.txt",
+            Path(__file__).resolve().parents[2] / "origin-bridge.status.txt",
+        ]
+    )
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        key = os.path.normcase(str(resolved))
+        if key not in seen:
+            seen.add(key)
+            unique.append(resolved)
+    return unique
+
+
+def _read_bridge_status(status_path: str | None = None) -> dict[str, Any]:
+    candidates = _status_file_candidates(status_path)
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8")
+        except OSError as exc:
+            return {
+                "path": str(candidate),
+                "exists": True,
+                "readable": False,
+                "error": str(exc),
+                "candidates": [str(path) for path in candidates],
+            }
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = None
+        return {
+            "path": str(candidate),
+            "exists": True,
+            "readable": True,
+            "format": "json" if isinstance(data, dict) else "text",
+            "data": data if isinstance(data, dict) else None,
+            "raw_preview": None if isinstance(data, dict) else text[:1000],
+            "candidates": [str(path) for path in candidates],
+        }
+    return {
+        "path": str(candidates[0]) if candidates else None,
+        "exists": False,
+        "readable": False,
+        "candidates": [str(path) for path in candidates],
+    }
+
+
 @mcp.tool()
 def origin_ping(show: bool = True) -> dict[str, Any]:
     """Connect to Origin/OriginPro and report basic status."""
@@ -153,6 +224,106 @@ def origin_bridge_status(
             ),
         )
     )
+
+
+@mcp.tool()
+def origin_doctor(
+    host: str | None = None,
+    port: int | None = None,
+    token: str | None = None,
+    timeout: float | None = 2.0,
+    status_path: str | None = None,
+    ping_origin: bool = False,
+) -> dict[str, Any]:
+    """Diagnose Origin bridge configuration, status file, and connectivity."""
+
+    def run() -> dict[str, Any]:
+        config = OriginBridgeConfig.from_env(host=host, port=port, token=token, timeout=timeout)
+        status_file = _read_bridge_status(status_path)
+        bridge_check: dict[str, Any] = {"ok": False}
+        origin_check: dict[str, Any] | None = None
+        recommendations: list[str] = []
+
+        try:
+            response = request_bridge(
+                "ping",
+                host=config.host,
+                port=config.port,
+                token=config.token,
+                timeout=config.timeout,
+            )
+            bridge_check = {"ok": True, "response": response}
+        except OriginBridgeError as exc:
+            bridge_check = {
+                "ok": False,
+                "error_code": exc.error_code,
+                "message": str(exc),
+            }
+            recommendations.append(
+                "Start Origin, open the Python Console, and run the root addon.py."
+            )
+            recommendations.append(
+                "If addon.py is already running, compare ORIGIN_MCP_BRIDGE_HOST and "
+                "ORIGIN_MCP_BRIDGE_PORT with the status file."
+            )
+
+        if ping_origin and bridge_check["ok"]:
+            try:
+                origin_check = {
+                    "ok": True,
+                    "response": request_bridge(
+                        "origin_ping",
+                        {"show": True},
+                        host=config.host,
+                        port=config.port,
+                        token=config.token,
+                        timeout=max(float(config.timeout), 10.0),
+                    ),
+                }
+            except OriginBridgeError as exc:
+                origin_check = {
+                    "ok": False,
+                    "error_code": exc.error_code,
+                    "message": str(exc),
+                }
+                recommendations.append(
+                    "The bridge responded, but Origin automation failed. Check the live Origin "
+                    "session and the status file last_error field."
+                )
+
+        status_data = status_file.get("data")
+        if isinstance(status_data, dict) and status_data.get("last_error"):
+            recommendations.append(
+                "addon.py recorded last_error in the status file; inspect that field first."
+            )
+        if not status_file.get("exists"):
+            recommendations.append(
+                "No bridge status file was found. Set ORIGIN_MCP_BRIDGE_STATUS or start addon.py "
+                "from the checkout root."
+            )
+
+        return _ok(
+            "Origin doctor completed.",
+            config={
+                "host": config.host,
+                "port": config.port,
+                "timeout": config.timeout,
+                "token_configured": bool(config.token),
+                "env": {
+                    "ORIGIN_MCP_BRIDGE_HOST": os.environ.get("ORIGIN_MCP_BRIDGE_HOST"),
+                    "ORIGIN_MCP_BRIDGE_PORT": os.environ.get("ORIGIN_MCP_BRIDGE_PORT"),
+                    "ORIGIN_MCP_BRIDGE_TIMEOUT": os.environ.get("ORIGIN_MCP_BRIDGE_TIMEOUT"),
+                    "ORIGIN_MCP_BRIDGE_STATUS": os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
+                    "ORIGIN_MCP_BRIDGE_TOKEN": bool(os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN")),
+                },
+            },
+            status_file=status_file,
+            bridge=bridge_check,
+            origin=origin_check,
+            recommendations=_dedupe_strings(recommendations),
+        )
+
+    return _wrap(run)
 
 
 @mcp.tool()

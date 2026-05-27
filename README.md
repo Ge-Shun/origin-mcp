@@ -91,6 +91,8 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 After starting the bridge inside Origin with the root `addon.py`, run
 `python examples\smoke_bridge.py` to validate a real file-to-figure workflow.
 The addon does not require editing a source directory in the file.
+If bridge startup or connection state is unclear, call `origin_doctor` first;
+it reports the status file, bridge ping result, and recommended next steps.
 
 ## Knowledge Base
 

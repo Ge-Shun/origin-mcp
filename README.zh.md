@@ -83,6 +83,8 @@ MCP 客户端配置示例：
 在 Origin 内用根目录 `addon.py` 启动 bridge 后，可运行
 `python examples\smoke_bridge.py` 验证真实的导入、绘图、导出和保存项目流程。
 `addon.py` 内不需要手动改源码目录。
+如果不确定 bridge 是否启动或为何连不上，先调用 `origin_doctor`；它会返回
+status 文件、bridge ping 结果和建议的下一步。
 
 ## 知识库
 

@@ -476,6 +476,50 @@ def test_server_bridge_status_reports_connection_error(monkeypatch: pytest.Monke
     assert result["error_code"] == "origin_bridge_unavailable"
 
 
+def test_origin_doctor_reports_reachable_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls = []
+    status_path = tmp_path / "origin-bridge.status.txt"
+    status_path.write_text('{"running": true, "host": "127.0.0.1"}', encoding="utf-8")
+
+    def fake_request(method: str, **_kwargs: Any) -> dict[str, Any]:
+        calls.append(method)
+        return {"bridge": "origin-mcp-bridge", "taskable_methods": ["run_labtalk"]}
+
+    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+
+    result = mcp_server.origin_doctor(status_path=str(status_path))
+
+    assert result["ok"] is True
+    assert result["data"]["bridge"]["ok"] is True
+    assert result["data"]["status_file"]["data"]["running"] is True
+    assert result["data"]["recommendations"] == []
+    assert calls == ["ping"]
+
+
+def test_origin_doctor_reports_unavailable_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "origin-bridge.status.txt"
+    status_path.write_text('{"running": false, "last_error": "missing pandas"}', encoding="utf-8")
+
+    def fake_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise OriginBridgeError("bridge unavailable", "origin_bridge_unavailable")
+
+    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+
+    result = mcp_server.origin_doctor(status_path=str(status_path))
+
+    assert result["ok"] is True
+    assert result["data"]["bridge"]["ok"] is False
+    assert result["data"]["bridge"]["error_code"] == "origin_bridge_unavailable"
+    assert result["data"]["status_file"]["data"]["last_error"] == "missing pandas"
+    assert any("last_error" in item for item in result["data"]["recommendations"])
+
+
 def test_server_bridge_submit_task_wraps_response(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
 

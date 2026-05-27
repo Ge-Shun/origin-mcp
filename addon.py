@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import platform
 import site
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +21,7 @@ RUNTIME_PACKAGES = {
     "openpyxl": "openpyxl>=3.1",
     "xlrd": "xlrd>=2.0",
 }
+_STATUS_STATE: dict[str, Any] = {}
 
 
 def _addon_dir() -> Path:
@@ -51,13 +55,26 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _emit(message: str, fields: dict[str, Any] | None = None) -> None:
-    lines = [f"[origin-mcp-bridge] {message}"]
+    _STATUS_STATE.update(
+        {
+            "status_version": 1,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "message": message,
+            "python_executable": sys.executable,
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+        }
+    )
     if fields:
-        lines.extend(f"{key}: {value}" for key, value in fields.items())
+        _STATUS_STATE.update(fields)
     try:
         path = _status_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _STATUS_STATE["status_path"] = str(path)
+        path.write_text(
+            json.dumps(_STATUS_STATE, indent=2, sort_keys=True, default=str) + "\n",
+            encoding="utf-8",
+        )
     except Exception:
         pass
 
@@ -317,13 +334,38 @@ def start_origin_mcp_bridge(
         )
         return {"running": True, "host": actual_host, "port": actual_port, "already_running": True}
 
-    _emit("starting inside Origin Python")
-    package_source = _ensure_origin_mcp_importable(src_dir)
-    if install_missing:
-        _install_missing_runtime_packages()
-    OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
+    _emit(
+        "starting inside Origin Python",
+        fields={
+            "running": False,
+            "host": host,
+            "port": port,
+            "max_tasks": max_tasks,
+            "background": background,
+            "last_error": None,
+        },
+    )
+    try:
+        package_source = _ensure_origin_mcp_importable(src_dir)
+        if install_missing:
+            _install_missing_runtime_packages()
+        OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
+        server = OriginBridgeServer((host, port), token=token, max_tasks=max_tasks)
+    except Exception as exc:
+        _emit(
+            "failed to start inside Origin Python",
+            fields={
+                "running": False,
+                "last_error": str(exc),
+                "last_error_type": type(exc).__name__,
+                "last_traceback": traceback.format_exc(),
+            },
+        )
+        _notify(
+            "Bridge failed to start inside Origin. See the status file for details.",
+        )
+        raise
 
-    server = OriginBridgeServer((host, port), token=token, max_tasks=max_tasks)
     globals()["_origin_mcp_bridge_server"] = server
 
     actual_host, actual_port = server.server_address
@@ -343,6 +385,8 @@ def start_origin_mcp_bridge(
             "package_source": package_source,
             "max_tasks": max_tasks,
             "background": background,
+            "running": True,
+            "last_error": None,
         },
     )
     if background:
@@ -356,9 +400,7 @@ def start_origin_mcp_bridge(
         return result
 
     globals()["_origin_mcp_bridge_thread"] = None
-    _emit(
-        "serving requests cooperatively; keep this Python Console running"
-    )
+    _emit("serving requests cooperatively; keep this Python Console running")
     _serve_foreground_cooperative(server)
     return result
 
@@ -378,7 +420,7 @@ def stop_origin_mcp_bridge() -> dict[str, Any]:
         thread.join(timeout=2)
     globals()["_origin_mcp_bridge_server"] = None
     globals()["_origin_mcp_bridge_thread"] = None
-    _emit("stopped")
+    _emit("stopped", fields={"running": False})
     return {"stopped": True}
 
 

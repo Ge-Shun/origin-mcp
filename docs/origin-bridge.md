@@ -43,9 +43,10 @@ the bridge is active. Keep the Python console running while MCP clients use the
 bridge. `background=True` is available, but Origin embedded Python may leave
 background threads listening without processing requests on some installations.
 
-The addon also writes the latest status to `origin-bridge.status.txt` next to
+The addon also writes JSON status to `origin-bridge.status.txt` next to
 `addon.py` by default. Set `ORIGIN_MCP_BRIDGE_STATUS` to choose another status
-file location.
+file location. The status includes the latest message, host, port, package
+source, Python executable/version, and `last_error` when startup fails.
 
 On first run, the addon installs missing runtime packages such as `pandas`,
 `openpyxl`, `xlrd`, and `originpro` into Origin's embedded Python. To disable
@@ -89,6 +90,8 @@ Existing MCP tools such as `origin_ping`, `origin_import_table`, and
 Bridge-specific tools provide a small diagnostic and execution surface for
 validating and managing the split-process design:
 
+- `origin_doctor`: inspect bridge configuration, status file contents, bridge
+  reachability, optional Origin ping, and recommended next steps.
 - `origin_bridge_status`: check that the bridge process is reachable.
 - `origin_bridge_ping_origin`: ask the bridge to connect to Origin.
 - `origin_bridge_capabilities`: collect Origin/originpro capabilities through
@@ -158,6 +161,21 @@ The bridge keeps a bounded in-memory task history. Completed, failed, and
 cancelled task records are pruned oldest-first when the configured `max_tasks`
 limit is exceeded. Queued and running tasks are not pruned.
 
+## Diagnostics
+
+If a tool cannot connect to Origin, run `origin_doctor` before retrying the
+workflow. It checks the MCP-side bridge settings, reads the addon status file,
+tries a bridge ping, and can optionally ask the bridge to ping Origin:
+
+```json
+{"ping_origin": true}
+```
+
+Read the `recommendations` field first. Typical fixes are starting `addon.py`
+inside Origin, matching `ORIGIN_MCP_BRIDGE_HOST` and `ORIGIN_MCP_BRIDGE_PORT`
+with the status file, or inspecting `last_error` when the addon failed during
+dependency import or installation.
+
 ## High-Level Bridge Workflows
 
 The bridge has enough surface to run a simple file-to-figure workflow without
@@ -209,7 +227,8 @@ python examples\smoke_bridge.py --keep-origin-open
 
 The smoke run creates a new project, imports `examples/sample_data.csv`, reads
 worksheet rows, creates a line plot, exports a PNG, checks that the export looks
-non-empty, and saves an OPJU project under the output directory.
+non-empty, and saves an OPJU project under the output directory. If the smoke
+run fails, it prints `origin_doctor` output before exiting.
 
 ## Current Limits
 

@@ -14,6 +14,7 @@ of parsing the message text.
 
 - `origin_ping`
 - `origin_capabilities`
+- `origin_doctor`
 - `origin_bridge_status`
 - `origin_bridge_ping_origin`
 - `origin_bridge_capabilities`
@@ -412,3 +413,8 @@ through the bridge by default. Current server tools that call public
 `OriginClient` methods are covered by the bridge proxy allowlist; tests compare
 `server.py` client calls against that allowlist to prevent unsupported bridge
 additions. See [origin-bridge.md](origin-bridge.md).
+
+Use `origin_doctor` first when bridge startup or connection state is unclear.
+It reports the active bridge host/port configuration, status file contents,
+bridge ping result, optional Origin ping result, and concrete next-step
+recommendations.
