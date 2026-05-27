@@ -20,13 +20,16 @@ Python version mismatches.
 3. Run:
 
 ```python
-exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())
+import runpy
+runpy.run_path(r"<path-to-origin-mcp>\addon.py", run_name="__main__")
 ```
+
+Replace `<path-to-origin-mcp>` with the local checkout path.
 
 The addon shows a Windows message box when the bridge is ready:
 
 ```text
-Bridge is running inside Origin on 127.0.0.1:47631.
+Bridge is running inside Origin. See the status file for connection details.
 ```
 
 By default the bridge serves requests in the Python console foreground with a
@@ -35,11 +38,9 @@ the bridge is active. Keep the Python console running while MCP clients use the
 bridge. `background=True` is available, but Origin embedded Python may leave
 background threads listening without processing requests on some installations.
 
-The addon also writes the latest status to:
-
-```text
-D:\origin-mcp\origin-bridge.status.txt
-```
+The addon also writes the latest status to `origin-bridge.status.txt` next to
+`addon.py` by default. Set `ORIGIN_MCP_BRIDGE_STATUS` to choose another status
+file location.
 
 On first run, the addon installs missing runtime packages such as `pandas`,
 `openpyxl`, `xlrd`, and `originpro` into Origin's embedded Python. To disable
@@ -52,7 +53,7 @@ connects to the same host and port through `OriginBridgeProxy`.
 To stop the foreground bridge, press `Ctrl+C` in the Origin Python console. If
 Origin does not return to the prompt, close Origin after saving any work.
 
-If the checkout is not under `D:\origin-mcp`, set `ORIGIN_MCP_SRC` to the
+If `addon.py` cannot infer the checkout location, set `ORIGIN_MCP_SRC` to the
 checkout `src` directory before running the addon.
 
 Use a token when multiple local tools may connect to the same machine:
@@ -63,13 +64,13 @@ $env:ORIGIN_MCP_BRIDGE_TOKEN = "replace-with-a-local-secret"
 
 The MCP server reads the same connection settings from environment variables:
 
-- `ORIGIN_MCP_BRIDGE_HOST`, default `127.0.0.1`
-- `ORIGIN_MCP_BRIDGE_PORT`, default `47631`
-- `ORIGIN_MCP_BRIDGE_TOKEN`, optional
-- `ORIGIN_MCP_BRIDGE_TIMEOUT`, default `10`
-- `ORIGIN_MCP_BRIDGE_MAX_TASKS`, default `200`
-- `ORIGIN_MCP_INSTALL_MISSING`, default `1`
-- `ORIGIN_MCP_BRIDGE_BACKGROUND`, default `0`
+- `ORIGIN_MCP_BRIDGE_HOST`
+- `ORIGIN_MCP_BRIDGE_PORT`
+- `ORIGIN_MCP_BRIDGE_TOKEN`
+- `ORIGIN_MCP_BRIDGE_TIMEOUT`
+- `ORIGIN_MCP_BRIDGE_MAX_TASKS`
+- `ORIGIN_MCP_INSTALL_MISSING`
+- `ORIGIN_MCP_BRIDGE_BACKGROUND`
 
 Existing MCP tools such as `origin_ping`, `origin_import_table`, and
 `origin_plot_line` keep their original names and route through an
@@ -190,7 +191,8 @@ directly.
 In the Origin Python console:
 
 ```python
-exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())
+import runpy
+runpy.run_path(r"<path-to-origin-mcp>\addon.py", run_name="__main__")
 ```
 
 Then in another terminal:

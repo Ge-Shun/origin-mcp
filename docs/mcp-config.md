@@ -3,7 +3,7 @@
 Install the project into a virtual environment first:
 
 ```powershell
-cd D:\origin-mcp
+cd <path-to-origin-mcp>
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
@@ -36,8 +36,9 @@ Ask your MCP client:
 
 ```text
 Use the origin MCP server to ping Origin. If it connects, import
-D:\origin-mcp\examples\sample_data.csv, plot signal_a and signal_b against time
-as lines, and export the graph to D:\origin-mcp\output\sample_plot.png.
+<path-to-origin-mcp>\examples\sample_data.csv, plot signal_a and signal_b
+against time as lines, and export the graph to
+<path-to-origin-mcp>\output\sample_plot.png.
 ```
 
 ## Troubleshooting

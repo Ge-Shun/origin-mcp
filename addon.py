@@ -12,15 +12,28 @@ from typing import Any
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 47631
 DEFAULT_MAX_TASKS = 200
-STATUS_PATH = Path(
-    os.environ.get("ORIGIN_MCP_BRIDGE_STATUS", r"D:\origin-mcp\origin-bridge.status.txt")
-)
 RUNTIME_PACKAGES = {
     "originpro": "originpro>=1.1",
     "pandas": "pandas>=2.0",
     "openpyxl": "openpyxl>=3.1",
     "xlrd": "xlrd>=2.0",
 }
+
+
+def _addon_dir() -> Path:
+    if "__file__" in globals():
+        return Path(__file__).resolve().parent
+    src = os.environ.get("ORIGIN_MCP_SRC")
+    if src:
+        return Path(src).resolve().parent
+    return Path.cwd()
+
+
+def _status_path() -> Path:
+    configured = os.environ.get("ORIGIN_MCP_BRIDGE_STATUS")
+    if configured:
+        return Path(configured).expanduser()
+    return _addon_dir() / "origin-bridge.status.txt"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -40,17 +53,20 @@ def _env_int(name: str, default: int) -> int:
         raise RuntimeError(f"{name} must be an integer, got {value!r}.") from exc
 
 
-def _emit(message: str) -> None:
-    text = f"[origin-mcp-bridge] {message}"
+def _emit(message: str, fields: dict[str, Any] | None = None) -> None:
+    lines = [f"[origin-mcp-bridge] {message}"]
+    if fields:
+        lines.extend(f"{key}: {value}" for key, value in fields.items())
     try:
-        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATUS_PATH.write_text(text + "\n", encoding="utf-8")
+        path = _status_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     except Exception:
         pass
 
 
-def _notify(message: str) -> None:
-    _emit(message)
+def _notify(message: str, fields: dict[str, Any] | None = None) -> None:
+    _emit(message, fields=fields)
     if os.name != "nt":
         return
     try:
@@ -93,7 +109,7 @@ def _default_src_dir() -> Path:
     try:
         return Path(__file__).resolve().parent / "src"
     except NameError:
-        return Path(os.environ.get("ORIGIN_MCP_SRC", r"D:\origin-mcp\src"))
+        return _addon_dir() / "src"
 
 
 def _ensure_origin_mcp_on_path(src_dir: str | os.PathLike[str] | None = None) -> Path:
@@ -260,7 +276,10 @@ def start_origin_mcp_bridge(
         thread is None or getattr(thread, "is_alive", lambda: False)()
     ):
         actual_host, actual_port = existing.server_address
-        _notify(f"Bridge is already running on {actual_host}:{actual_port}.")
+        _notify(
+            "Bridge is already running inside Origin. See the status file for connection details.",
+            fields={"host": actual_host, "port": actual_port},
+        )
         return {"running": True, "host": actual_host, "port": actual_port, "already_running": True}
 
     _emit("starting inside Origin Python")
@@ -281,7 +300,16 @@ def start_origin_mcp_bridge(
         "max_tasks": max_tasks,
         "background": background,
     }
-    _notify(f"Bridge is running inside Origin on {actual_host}:{actual_port}.")
+    _notify(
+        "Bridge is running inside Origin. See the status file for connection details.",
+        fields={
+            "host": actual_host,
+            "port": actual_port,
+            "src": str(src),
+            "max_tasks": max_tasks,
+            "background": background,
+        },
+    )
     if background:
         thread = threading.Thread(
             target=server.serve_forever,
