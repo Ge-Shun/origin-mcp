@@ -10,3 +10,5 @@ dist/
 output/
 *.opju
 *.opj
+origin-bridge.status.txt
+origin-bridge.*.log

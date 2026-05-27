@@ -14,6 +14,24 @@ of parsing the message text.
 
 - `origin_ping`
 - `origin_capabilities`
+- `origin_bridge_status`
+- `origin_bridge_ping_origin`
+- `origin_bridge_capabilities`
+- `origin_bridge_new_project`
+- `origin_bridge_open_project`
+- `origin_bridge_save_project`
+- `origin_bridge_list_project`
+- `origin_bridge_get_worksheet_info`
+- `origin_bridge_read_worksheet`
+- `origin_bridge_write_worksheet`
+- `origin_bridge_import_table`
+- `origin_bridge_plot_table`
+- `origin_bridge_export_graph`
+- `origin_bridge_run_analysis`
+- `origin_bridge_submit_task`
+- `origin_bridge_task_status`
+- `origin_bridge_cancel_task`
+- `origin_bridge_list_tasks`
 - `origin_get_default_plot_config`
 - `origin_plot_type_coverage`
 - `origin_browse_knowledge`
@@ -305,6 +323,7 @@ issuing a separate worksheet read.
 - `origin_export_preview`
 - `origin_inspect_export`
 - `origin_run_labtalk`
+- `origin_bridge_run_labtalk`
 - `origin_quit`
 - `origin_detach`
 - `origin_release`
@@ -347,7 +366,7 @@ Use `origin_capabilities` after configuring the MCP server. It reports:
 
 - Origin version from LabTalk `@V`
 - installed `originpro` and `OriginExt` package versions
-- Python runtime profile and recommended Origin automation backend
+- Python runtime profile and Origin automation route
 - important API availability, including project listing, batch export,
   Data Connector import, and structured fitting APIs
 - plot type coverage
@@ -359,8 +378,35 @@ thing.
 
 Python runtime handling:
 
-- Python 3.10-3.12: preferred external `OriginExt/originpro` automation range.
-- Python 3.13: treated as experimental; prefer a 3.10-3.12 MCP server.
-- Python 3.14+: treated as unsupported for direct external Origin automation in
-  this project; route work through a compatible MCP server or Origin-embedded
-  Python path.
+- Preferred route: start the bridge inside Origin's embedded Python console so
+  `originpro` calls run in the Origin GUI process.
+- Python 3.10-3.12: acceptable for external automation when `OriginExt` works on
+  the local installation, but no longer required for the MCP server process.
+- Python 3.13+: avoid external Origin automation packages in this project; keep
+  using the Origin-embedded bridge and run the MCP server on any supported
+  runtime.
+
+## Origin GUI Bridge
+
+`origin-mcp` uses a local bridge process for Origin automation. Prefer starting
+it inside Origin's own Python console so `originpro` calls stay in the Origin
+process:
+
+```python
+exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())
+```
+
+The MCP server can then call `origin_bridge_status`,
+`origin_bridge_ping_origin`, `origin_bridge_capabilities`, and
+`origin_bridge_run_labtalk`. For longer bridge calls, use
+`origin_bridge_submit_task`, then poll `origin_bridge_task_status`. Queued tasks
+can be cancelled; running Origin calls can only be marked with
+`cancel_requested=true`. The bridge also includes high-level
+`origin_bridge_import_table`, `origin_bridge_plot_table`, and
+`origin_bridge_export_graph` tools for validating a file-to-figure workflow, and
+`origin_bridge_run_analysis` for analysis workflows, without `originpro` calls in
+the MCP server process. Existing tools keep their original names and route
+through the bridge by default. Current server tools that call public
+`OriginClient` methods are covered by the bridge proxy allowlist; tests compare
+`server.py` client calls against that allowlist to prevent unsupported bridge
+additions. See [origin-bridge.md](origin-bridge.md).

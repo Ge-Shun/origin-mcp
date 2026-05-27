@@ -39,25 +39,25 @@ def python_runtime_profile() -> PythonRuntimeProfile:
         note = "OriginExt/originpro external automation expects CPython 3."
     elif 10 <= minor <= 12:
         tier = "preferred"
-        backend = "originpro_external"
+        backend = "origin_embedded_bridge"
         note = (
-            "Preferred range for external OriginExt/originpro automation. If LabTalk "
-            "still fails, use a live MCP server or Origin-embedded Python path."
+            "This Python version is compatible with external Origin automation, "
+            "but the preferred origin-mcp route is the bridge running inside "
+            "Origin's embedded Python session."
         )
     elif minor == 13:
         tier = "experimental"
-        backend = "mcp_server_or_origin_embedded"
+        backend = "origin_embedded_bridge"
         note = (
             "Python 3.13 is newer than the commonly validated OriginExt range; prefer "
-            "running the MCP server from Python 3.10-3.12."
+            "starting the bridge inside Origin's embedded Python."
         )
     else:
         tier = "unsupported_external"
-        backend = "mcp_server_or_origin_embedded"
+        backend = "origin_embedded_bridge"
         note = (
             "Python 3.14+ is not a safe external OriginExt automation target here. "
-            "Use Python 3.10-3.12 for the MCP server, or route work through an already "
-            "running MCP/Origin session."
+            "Start the bridge inside Origin's embedded Python session."
         )
     return PythonRuntimeProfile(
         version=platform.python_version(),

@@ -33,6 +33,8 @@ directly instead of only generating standalone plotting code.
   LabTalk/X-Function routes.
 - Export figures, preview exported images, save projects, and release or close
   Origin safely.
+- Route Origin operations through a local Origin GUI bridge so the MCP server
+  runtime can be separated from the Origin automation runtime.
 
 ## Requirements
 
@@ -84,6 +86,12 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 
 - [Tool and compatibility reference](docs/tools.md)
 - [MCP client configuration](docs/mcp-config.md)
+- [Origin GUI bridge](docs/origin-bridge.md)
+
+After starting the bridge inside Origin with
+`exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())`,
+run `python examples\smoke_bridge.py` to validate a real file-to-figure
+workflow.
 
 ## Knowledge Base
 

@@ -26,6 +26,8 @@ pull request。
 - 搜索和浏览本地 Origin 知识库，覆盖 MCP 工具、Plot Type ID、图形格式化、
   分析适配器、OriginPro API 笔记和 LabTalk/X-Function 路由。
 - 导出图形、预览导出图像、保存项目，并安全释放或关闭 Origin。
+- 通过本地 Origin GUI bridge 路由 Origin 操作，把 MCP server 运行环境与 Origin
+  自动化运行环境分离。
 
 ## 环境要求
 
@@ -76,6 +78,12 @@ MCP 客户端配置示例：
 
 - [工具与兼容性参考](docs/tools.md)
 - [MCP 客户端配置](docs/mcp-config.md)
+- [Origin GUI bridge](docs/origin-bridge.md)
+
+在 Origin 内用
+`exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())`
+启动 bridge 后，可运行 `python examples\smoke_bridge.py` 验证真实的导入、绘图、
+导出和保存项目流程。
 
 ## 知识库
 

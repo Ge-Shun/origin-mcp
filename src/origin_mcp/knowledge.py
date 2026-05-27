@@ -213,11 +213,13 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="reference",
         path="compatibility/runtime",
         title="Runtime compatibility",
-        summary="Origin 2026 plus Python 3.11/3.12 is the primary tested automation target.",
+        summary="Origin 2026 plus its embedded Python bridge is the primary automation target.",
         body=(
-            "Use origin_capabilities after configuring the server. Python 3.10-3.12 are the "
-            "preferred external OriginExt/originpro automation range. Python 3.13 is experimental "
-            "and Python 3.14+ is treated as unsupported for direct external Origin automation. "
+            "Use origin_capabilities after starting the Origin GUI bridge. The preferred route "
+            "is to run examples/origin_bridge_addon.py from Origin's embedded Python console, "
+            "then let the MCP server connect to that local bridge. External Python with "
+            "OriginExt/originpro is more sensitive to Python version and Origin lifecycle "
+            "mismatches. "
             "Origin/OriginPro 2026 is the primary tested Origin target in this project."
         ),
         keywords=("compatibility", "python", "origin 2026", "originpro", "OriginExt"),
@@ -361,11 +363,12 @@ PYTHON_API_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="python_api",
         path="originpro.oext",
         title="originpro.oext",
-        summary="External Origin automation bridge lifecycle.",
+        summary="External Origin automation lifecycle.",
         body=(
-            "origin-mcp uses the OriginExt bridge for external Python automation on Windows. "
-            "Lifecycle tools such as origin_detach, origin_quit, and origin_force_quit release or "
-            "close the automation connection."
+            "origin-mcp now routes MCP tools through the Origin GUI bridge by default. The "
+            "underlying client still uses originpro lifecycle APIs where available, so tools "
+            "such as origin_detach, origin_quit, and origin_force_quit release or close the "
+            "automation connection from inside the bridge."
         ),
         keywords=("OriginExt", "external", "detach", "quit", "bridge"),
     ),
