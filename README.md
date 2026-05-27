@@ -20,8 +20,9 @@ directly instead of only generating standalone plotting code.
 - Import CSV, TSV, TXT, DAT, XLS, and Excel data into Origin worksheets.
 - Read, write, sort, clear, and export worksheet data.
 - Create common 2D, 3D, contour, statistical, polar, ternary, vector, bubble,
-  image, and matrix-based plots.
-- Cover the documented Origin Plot Type ID table with direct MCP tools.
+  image, and matrix-based plots through high-level plotting routes.
+- Index documented Origin Plot Type IDs in the local knowledge base, with expert
+  wrappers available through the full tool profile.
 - Inspect and refine graph pages, layers, axes, legends, labels, reference lines,
   plot styles, and publication-style formatting.
 - Run common Origin analysis commands, including fitting, smoothing, integration,
@@ -92,7 +93,7 @@ After starting the bridge inside Origin with the root `addon.py`, run
 `python examples\smoke_bridge.py` to validate a real file-to-figure workflow.
 The addon does not require editing a source directory in the file.
 If bridge startup or connection state is unclear, call `origin_doctor` first;
-it reports the status file, bridge ping result, and recommended next steps.
+search the knowledge base for `bridge diagnostics` for the detailed checklist.
 
 The MCP server defaults to a compact 20-tool profile to keep tool selection
 manageable. Set `ORIGIN_MCP_TOOL_PROFILE=full` before starting the server to

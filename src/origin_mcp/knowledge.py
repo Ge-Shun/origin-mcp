@@ -154,6 +154,35 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
     ),
     KnowledgeEntry(
         collection="reference",
+        path="documentation/sources-of-truth",
+        title="Documentation sources of truth",
+        summary="Where to keep canonical details instead of duplicating them across docs.",
+        body=(
+            "Keep exhaustive tool catalogs in the generated mcp_tools knowledge collection, "
+            "not in README or docs pages. Keep plotting workflow guidance, Plot Type ID "
+            "entries, style modes, graph formatting behavior, analysis adapters, runtime "
+            "compatibility, and official documentation links in the reference knowledge "
+            "collection. Keep bridge startup, smoke testing, and user-facing installation "
+            "steps in docs/origin-bridge.md and README. Keep callable schemas and exact "
+            "tool registration behavior in src/origin_mcp/server.py."
+        ),
+        keywords=(
+            "documentation",
+            "source of truth",
+            "dedupe",
+            "knowledge",
+            "mcp_tools",
+            "reference",
+        ),
+        metadata={
+            "tool_catalog": "mcp_tools knowledge collection",
+            "workflow_guidance": "reference knowledge collection",
+            "tool_registration": "src/origin_mcp/server.py",
+            "bridge_user_docs": "docs/origin-bridge.md",
+        },
+    ),
+    KnowledgeEntry(
+        collection="reference",
         path="plotting/style-modes",
         title="Plot style modes",
         summary="Controls whether origin-mcp preserves Origin defaults or applies MCP presets.",
@@ -281,6 +310,100 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "Origin/OriginPro 2026 is the primary tested Origin target in this project."
         ),
         keywords=("compatibility", "python", "origin 2026", "originpro", "OriginExt"),
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="bridge/startup",
+        title="Origin GUI bridge startup",
+        summary="Run addon.py inside Origin's embedded Python and let MCP connect over localhost.",
+        body=(
+            "Start the bridge from Origin's Python console by running addon.py from the checkout "
+            "root or an installed package location. The addon auto-detects an installed "
+            "origin_mcp package or an adjacent src/origin_mcp directory. It writes JSON status "
+            "to origin-bridge.status.txt next to addon.py unless ORIGIN_MCP_BRIDGE_STATUS is "
+            "set. Common environment variables are ORIGIN_MCP_BRIDGE_HOST, "
+            "ORIGIN_MCP_BRIDGE_PORT, ORIGIN_MCP_BRIDGE_TOKEN, ORIGIN_MCP_BRIDGE_TIMEOUT, "
+            "ORIGIN_MCP_BRIDGE_MAX_TASKS, ORIGIN_MCP_INSTALL_MISSING, "
+            "ORIGIN_MCP_BRIDGE_BACKGROUND, and ORIGIN_MCP_SRC."
+        ),
+        keywords=("bridge", "addon", "startup", "status file", "environment variables"),
+        metadata={
+            "addon": "addon.py",
+            "status_file_default": "origin-bridge.status.txt",
+            "env": [
+                "ORIGIN_MCP_BRIDGE_HOST",
+                "ORIGIN_MCP_BRIDGE_PORT",
+                "ORIGIN_MCP_BRIDGE_TOKEN",
+                "ORIGIN_MCP_BRIDGE_TIMEOUT",
+                "ORIGIN_MCP_BRIDGE_MAX_TASKS",
+                "ORIGIN_MCP_INSTALL_MISSING",
+                "ORIGIN_MCP_BRIDGE_BACKGROUND",
+                "ORIGIN_MCP_BRIDGE_STATUS",
+                "ORIGIN_MCP_SRC",
+            ],
+        },
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="bridge/tasks",
+        title="Bridge background tasks",
+        summary="Submit long Origin operations to the bridge queue and poll task status.",
+        body=(
+            "Use origin_bridge_submit_task for long-running bridge methods, then poll "
+            "origin_bridge_task_status with the returned task_id. Task states are queued, "
+            "running, completed, failed, and cancelled. Cancellation is cooperative: queued "
+            "tasks can be cancelled, while running Origin calls can only be marked "
+            "cancel_requested because Python cannot safely terminate the active Origin "
+            "automation call. The bridge keeps bounded task history controlled by "
+            "ORIGIN_MCP_BRIDGE_MAX_TASKS."
+        ),
+        keywords=("bridge", "task", "queue", "cancel", "task_id", "taskable_methods"),
+        metadata={
+            "states": ["queued", "running", "completed", "failed", "cancelled"],
+            "submit_tool": "origin_bridge_submit_task",
+            "status_tool": "origin_bridge_task_status",
+            "cancel_tool": "origin_bridge_cancel_task",
+            "history_limit_env": "ORIGIN_MCP_BRIDGE_MAX_TASKS",
+        },
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="bridge/diagnostics",
+        title="Bridge diagnostics",
+        summary="Use origin_doctor and the addon status file before retrying failed Origin calls.",
+        body=(
+            "When a tool cannot connect to Origin, run origin_doctor first. It reports MCP-side "
+            "bridge configuration, status file contents, bridge ping results, optional Origin "
+            "ping results, compact/full tool profile configuration, and recommendations. Common "
+            "fixes are starting addon.py inside Origin, matching host and port with the status "
+            "file, checking ORIGIN_MCP_BRIDGE_TOKEN, or inspecting last_error when dependency "
+            "import or installation failed."
+        ),
+        keywords=("bridge", "doctor", "diagnostics", "status file", "last_error", "token"),
+        metadata={"primary_tool": "origin_doctor"},
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="bridge/file-to-figure",
+        title="Bridge file-to-figure workflow",
+        summary=(
+            "Validate Origin automation by importing a table, plotting it, exporting PNG, "
+            "and saving OPJU."
+        ),
+        body=(
+            "Use examples/smoke_bridge.py for the canonical real-Origin validation workflow. "
+            "It checks bridge status, pings Origin, creates a new project, imports "
+            "examples/sample_data.csv, reads worksheet rows, creates a line plot, exports a "
+            "PNG, inspects that the export is non-empty, saves an OPJU project, and prints "
+            "origin_doctor output on failure. For ad hoc long-running file-to-figure work, "
+            "submit a bridge task and poll task status."
+        ),
+        keywords=("bridge", "smoke", "file to figure", "import", "plot", "export", "opju"),
+        metadata={
+            "script": "examples/smoke_bridge.py",
+            "sample_data": "examples/sample_data.csv",
+            "failure_diagnostic": "origin_doctor",
+        },
     ),
 )
 

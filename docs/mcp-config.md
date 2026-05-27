@@ -1,16 +1,7 @@
 # MCP Client Configuration
 
-Install the project into a virtual environment first:
-
-```powershell
-cd <path-to-origin-mcp>
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-python -m pip install -e ".[origin]"
-```
-
-Then configure your MCP client to launch the server over stdio.
+Install the project first using the commands in the README. Then configure your
+MCP client to launch the server over stdio.
 
 ## Codex / Claude Desktop style
 
@@ -30,37 +21,25 @@ Replace `C:\\path\\to\\origin-mcp` with your local checkout path.
 Using `python.exe` with `-m origin_mcp` avoids hard-coding the generated console
 script path and works reliably for editable installs.
 
-## First Test Prompt
+## First Test
 
-Ask your MCP client:
+Start the Origin GUI bridge with `addon.py`, then run the smoke script from a
+separate terminal:
+
+```powershell
+python examples\smoke_bridge.py --keep-origin-open
+```
+
+For an MCP-client prompt, use a compact workflow:
 
 ```text
-Use the origin MCP server to ping Origin. If it connects, import
-<path-to-origin-mcp>\examples\sample_data.csv, plot signal_a and signal_b
-against time as lines, and export the graph to
+Use the origin MCP server to run origin_doctor. If the bridge is healthy, import
+<path-to-origin-mcp>\examples\sample_data.csv, create a suitable line plot for
+signal_a and signal_b against time, and export the graph to
 <path-to-origin-mcp>\output\sample_plot.png.
 ```
 
 ## Troubleshooting
 
-If `origin_ping` reports that `originpro` is missing:
-
-1. Confirm Origin/OriginPro is installed and licensed.
-2. Try installing the package into the same environment:
-
-   ```powershell
-   python -m pip install originpro pywin32
-   ```
-
-3. If installation fails on Python 3.14, use Python 3.11 or 3.12 for this MCP
-   server.
-
-If Origin starts but plotting fails, use `origin_run_labtalk` for a small command
-such as:
-
-```text
-type -b "hello from mcp";
-```
-
-That confirms the MCP-to-Origin command path works before debugging worksheet or
-graph APIs.
+Run `origin_doctor` first. For detailed startup and troubleshooting guidance,
+search the knowledge base for `bridge startup` or `bridge diagnostics`.

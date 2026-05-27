@@ -17,8 +17,10 @@ pull request。
 
 - 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
 - 读取、写入、排序、清空和导出工作表数据。
-- 创建常见 2D、3D、等高线、统计、极坐标、三元图、向量图、气泡图、图像图和矩阵图。
-- 覆盖 Origin 文档中的 Plot Type ID，并提供直接 MCP 工具。
+- 通过高层绘图入口创建常见 2D、3D、等高线、统计、极坐标、三元图、向量图、气泡图、
+  图像图和矩阵图。
+- 在本地知识库中索引 Origin 文档中的 Plot Type ID；需要专家 wrapper 时可启用 full
+  tool profile。
 - 检查和调整图页、图层、坐标轴、图例、标签、参考线、plot 样式和发表级样式。
 - 支持 Nature 风格预设、语义色板、chart atlas 路由、图像板块标签和 QA checklist。
 - 运行常见 Origin 分析，包括拟合、平滑、积分、微分、寻峰和描述统计。
@@ -84,7 +86,7 @@ MCP 客户端配置示例：
 `python examples\smoke_bridge.py` 验证真实的导入、绘图、导出和保存项目流程。
 `addon.py` 内不需要手动改源码目录。
 如果不确定 bridge 是否启动或为何连不上，先调用 `origin_doctor`；它会返回
-status 文件、bridge ping 结果和建议的下一步。
+核心诊断信息。详细 checklist 可在知识库中搜索 `bridge diagnostics`。
 
 MCP server 默认使用 20 个工具的 compact profile，降低模型选工具成本。启动 server
 前设置 `ORIGIN_MCP_TOOL_PROFILE=full` 可暴露所有 worksheet、graph、analysis 和

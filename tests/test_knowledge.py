@@ -59,6 +59,45 @@ def test_browse_reference_tool_profiles() -> None:
     assert entry["metadata"]["full_profile_env"] == "ORIGIN_MCP_TOOL_PROFILE=full"
 
 
+def test_browse_reference_documentation_sources_of_truth() -> None:
+    result = browse_knowledge("reference", "documentation/sources-of-truth")
+
+    entry = result["entry"]
+    assert entry["metadata"]["tool_catalog"] == "mcp_tools knowledge collection"
+    assert entry["metadata"]["workflow_guidance"] == "reference knowledge collection"
+
+
+def test_browse_reference_bridge_startup() -> None:
+    result = browse_knowledge("reference", "bridge/startup")
+
+    entry = result["entry"]
+    assert entry["metadata"]["addon"] == "addon.py"
+    assert "ORIGIN_MCP_BRIDGE_PORT" in entry["metadata"]["env"]
+
+
+def test_browse_reference_bridge_tasks() -> None:
+    result = browse_knowledge("reference", "bridge/tasks")
+
+    entry = result["entry"]
+    assert "running" in entry["metadata"]["states"]
+    assert entry["metadata"]["status_tool"] == "origin_bridge_task_status"
+
+
+def test_browse_reference_bridge_diagnostics() -> None:
+    result = browse_knowledge("reference", "bridge/diagnostics")
+
+    entry = result["entry"]
+    assert entry["metadata"]["primary_tool"] == "origin_doctor"
+
+
+def test_browse_reference_bridge_file_to_figure() -> None:
+    result = browse_knowledge("reference", "bridge/file-to-figure")
+
+    entry = result["entry"]
+    assert entry["metadata"]["script"] == "examples/smoke_bridge.py"
+    assert entry["metadata"]["failure_diagnostic"] == "origin_doctor"
+
+
 def test_query_reference_finds_heatmap_plot_type() -> None:
     result = query_knowledge("heatmap plot type id", collection="reference", limit=5)
 
