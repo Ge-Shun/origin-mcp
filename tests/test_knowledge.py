@@ -1,0 +1,108 @@
+import ast
+from pathlib import Path
+
+import origin_mcp.server as server
+from origin_mcp.knowledge import browse_knowledge, query_knowledge
+
+
+def test_browse_knowledge_lists_collections() -> None:
+    result = browse_knowledge()
+
+    names = {item["name"] for item in result["collections"]}
+    assert {"mcp_tools", "reference", "python_api", "labtalk", "official_docs"} <= names
+
+
+def test_mcp_tool_knowledge_covers_all_server_origin_tools() -> None:
+    server_path = Path(server.__file__)
+    module = ast.parse(server_path.read_text(encoding="utf-8"))
+    tool_names = {
+        node.name
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("origin_")
+    }
+
+    groups = browse_knowledge("mcp_tools")["children"]
+    indexed = set()
+    for group in groups:
+        group_result = browse_knowledge("mcp_tools", group["path"])
+        indexed.update(
+            item["title"]
+            for item in group_result["children"]
+            if item["title"].startswith("origin_")
+        )
+
+    assert tool_names <= indexed
+
+
+def test_browse_reference_plot_type_entry() -> None:
+    result = browse_knowledge("reference", "plot-types/200")
+
+    entry = result["entry"]
+    assert entry["metadata"]["plot_type_id"] == 200
+    assert entry["metadata"]["direct_tool"] == "origin_plot_line"
+    assert "Line" in entry["title"]
+
+
+def test_query_reference_finds_heatmap_plot_type() -> None:
+    result = query_knowledge("heatmap plot type id", collection="reference", limit=5)
+
+    paths = [item["path"] for item in result["results"]]
+    assert "plot-types/105" in paths
+    assert result["count"] <= 5
+
+
+def test_browse_python_api_by_dot_path() -> None:
+    result = browse_knowledge("python_api", "originpro.find_graph")
+
+    assert result["entry"]["path"] == "originpro.find_graph"
+    assert "Graph lookup" in result["entry"]["body"]
+
+
+def test_browse_python_api_root_shows_dot_path_children() -> None:
+    result = browse_knowledge("python_api", "originpro")
+
+    child_paths = {item["path"] for item in result["children"]}
+    assert "originpro.analysis" in child_paths
+    assert "originpro.find_graph" in child_paths
+    assert "originpro.find_sheet" in child_paths
+
+
+def test_query_python_api_finds_official_class_index() -> None:
+    result = query_knowledge("NLFit nonlinear fitting", collection="python_api", limit=5)
+
+    assert any(item["path"] == "originpro.analysis.NLFit" for item in result["results"])
+
+
+def test_browse_labtalk_command_category() -> None:
+    result = browse_knowledge("labtalk", "commands/display-control")
+
+    assert "axis" in result["entry"]["keywords"]
+    assert "legend" in result["entry"]["keywords"]
+    assert result["entry"]["metadata"]["official_url"].endswith("/display-control/")
+
+
+def test_query_official_docs_finds_xfunction_reference() -> None:
+    result = query_knowledge("x-function plotting", collection="official_docs", limit=5)
+
+    assert any(item["path"] == "x-function/plotting" for item in result["results"])
+
+
+def test_query_tool_alias_collection() -> None:
+    result = query_knowledge("legend font position", collection="tools", limit=3)
+
+    assert result["collection"] == "mcp_tools"
+    assert any(item["path"].endswith("origin_format_legend") for item in result["results"])
+
+
+def test_server_reference_wrapper_returns_tool_result() -> None:
+    result = server.origin_query_reference("legend", limit=1)
+
+    assert result["ok"] is True
+    assert result["data"]["results"][0]["path"] == "graph/legend"
+
+
+def test_server_rejects_unknown_knowledge_path() -> None:
+    result = server.origin_browse_reference("missing/topic")
+
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_request"

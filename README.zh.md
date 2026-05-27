@@ -23,6 +23,8 @@ pull request。
 - 支持 Nature 风格预设、语义色板、chart atlas 路由、图像板块标签和 QA checklist。
 - 运行常见 Origin 分析，包括拟合、平滑、积分、微分、寻峰和描述统计。
 - 将分析输出工作表读回 JSON，并在可能时规范化拟合参数和指标。
+- 搜索和浏览本地 Origin 知识库，覆盖 MCP 工具、Plot Type ID、图形格式化、
+  分析适配器、OriginPro API 笔记和 LabTalk/X-Function 路由。
 - 导出图形、预览导出图像、保存项目，并安全释放或关闭 Origin。
 
 ## 环境要求
@@ -74,6 +76,16 @@ MCP 客户端配置示例：
 
 - [工具与兼容性参考](docs/tools.md)
 - [MCP 客户端配置](docs/mcp-config.md)
+
+## 知识库
+
+服务器通过 MCP 工具暴露结构化本地知识库。使用 `origin_query_knowledge` 或各集合
+专用 query 工具搜索；使用 `origin_browse_knowledge` 或各集合专用 browse 工具按稳定
+路径查看完整条目。MCP 工具索引会从当前 server 工具 docstring 自动生成，因此会跟随
+已实现工具面更新。
+
+当前集合包括 `mcp_tools`、`reference`、`python_api`、`labtalk` 和 `official_docs`。
+知识库是面向操作的精选索引；需要官方精确语法的条目会带 OriginLab 官方文档 URL。
 
 ## 安全说明
 

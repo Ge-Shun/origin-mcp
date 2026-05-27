@@ -28,6 +28,9 @@ directly instead of only generating standalone plotting code.
   differentiation, peak finding, and descriptive statistics.
 - Read analysis output worksheets back as JSON and normalize fit parameters and
   metrics where possible.
+- Search and browse a local Origin knowledge base covering MCP tools, Plot Type
+  IDs, graph formatting, analysis adapters, OriginPro API notes, and
+  LabTalk/X-Function routes.
 - Export figures, preview exported images, save projects, and release or close
   Origin safely.
 
@@ -81,6 +84,18 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 
 - [Tool and compatibility reference](docs/tools.md)
 - [MCP client configuration](docs/mcp-config.md)
+
+## Knowledge Base
+
+The server exposes a structured local knowledge base through MCP tools. Use
+`origin_query_knowledge` or the collection-specific query tools to search, and
+use `origin_browse_knowledge` or the collection-specific browse tools to inspect
+stable paths. The MCP tool index is generated from the current server tool
+docstrings so it tracks the implemented tool surface.
+
+Collections include `mcp_tools`, `reference`, `python_api`, `labtalk`, and
+`official_docs`. The knowledge base is a curated operational index; official
+OriginLab documentation entries include URLs for exact upstream syntax.
 
 ## Safety
 

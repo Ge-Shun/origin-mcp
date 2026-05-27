@@ -16,12 +16,80 @@ of parsing the message text.
 - `origin_capabilities`
 - `origin_get_default_plot_config`
 - `origin_plot_type_coverage`
+- `origin_browse_knowledge`
+- `origin_query_knowledge`
 - `origin_new_project`
 - `origin_open_project`
 - `origin_save_project`
 - `origin_list_project`
 - `origin_rename_object`
 - `origin_delete_object`
+
+## Knowledge Base Tools
+
+`origin-mcp` includes a local, structured knowledge base modeled as searchable
+and browsable collections. It is intentionally tool-addressable rather than only
+README text, so an MCP client can discover the right workflow before calling
+Origin.
+
+General entry points:
+
+- `origin_browse_knowledge`
+- `origin_query_knowledge`
+
+Collection-specific entry points:
+
+- `origin_browse_reference`
+- `origin_query_reference`
+- `origin_browse_python_api`
+- `origin_query_python_api`
+- `origin_browse_labtalk`
+- `origin_query_labtalk`
+- `origin_browse_mcp_tools`
+- `origin_query_mcp_tools`
+- `origin_browse_official_docs`
+- `origin_query_official_docs`
+
+Collections:
+
+- `mcp_tools`: origin-mcp tools grouped by workflow, such as worksheet,
+  plotting, graph editing, analysis, export, and lifecycle control. Tool entries
+  are generated from `src/origin_mcp/server.py` docstrings so the index tracks
+  the current MCP surface.
+- `reference`: Origin workflow notes, Plot Type ID entries, style modes,
+  graph formatting behavior, chart routing, analysis adapters, and runtime
+  compatibility notes.
+- `python_api`: OriginPro Python API usage notes used by this project.
+- `labtalk`: LabTalk and X-Function routes used by this project, including
+  worksheet plotting, `plotxyz`, `plotm`, legend refresh, export fallbacks, and
+  analysis X-Functions.
+- `official_docs`: curated official OriginLab documentation entry points for
+  Python, originpro API, LabTalk references, and X-Function references.
+
+The local knowledge base is a curated operational index. It does not copy the
+entire OriginLab documentation set into this repository; entries that need exact
+official syntax include an `official_url` or `url` metadata field.
+
+Browse calls use a path-like topic. Examples:
+
+```json
+{"collection": "reference", "topic": "plot-types/200"}
+```
+
+```json
+{"api": "originpro.find_graph"}
+```
+
+Query calls return ranked entries with path, title, summary, keywords, metadata,
+and score. Examples:
+
+```json
+{"query": "heatmap plot type id", "collection": "reference", "limit": 5}
+```
+
+```json
+{"query": "legend font position", "limit": 3}
+```
 
 ## Worksheet Tools
 
