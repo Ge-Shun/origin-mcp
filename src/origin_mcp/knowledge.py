@@ -216,7 +216,7 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         summary="Origin 2026 plus its embedded Python bridge is the primary automation target.",
         body=(
             "Use origin_capabilities after starting the Origin GUI bridge. The preferred route "
-            "is to run examples/origin_bridge_addon.py from Origin's embedded Python console, "
+            "is to run addon.py from Origin's embedded Python console, "
             "then let the MCP server connect to that local bridge. External Python with "
             "OriginExt/originpro is more sensitive to Python version and Origin lifecycle "
             "mismatches. "

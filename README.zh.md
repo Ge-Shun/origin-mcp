@@ -81,7 +81,7 @@ MCP 客户端配置示例：
 - [Origin GUI bridge](docs/origin-bridge.md)
 
 在 Origin 内用
-`exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())`
+`exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())`
 启动 bridge 后，可运行 `python examples\smoke_bridge.py` 验证真实的导入、绘图、
 导出和保存项目流程。
 

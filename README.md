@@ -89,7 +89,7 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 - [Origin GUI bridge](docs/origin-bridge.md)
 
 After starting the bridge inside Origin with
-`exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())`,
+`exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())`,
 run `python examples\smoke_bridge.py` to validate a real file-to-figure
 workflow.
 

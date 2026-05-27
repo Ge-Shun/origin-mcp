@@ -91,7 +91,7 @@ class _StdioCompat:
 
 def _default_src_dir() -> Path:
     try:
-        return Path(__file__).resolve().parents[1] / "src"
+        return Path(__file__).resolve().parent / "src"
     except NameError:
         return Path(os.environ.get("ORIGIN_MCP_SRC", r"D:\origin-mcp\src"))
 

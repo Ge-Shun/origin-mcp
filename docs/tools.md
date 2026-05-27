@@ -393,7 +393,7 @@ it inside Origin's own Python console so `originpro` calls stay in the Origin
 process:
 
 ```python
-exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())
+exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())
 ```
 
 The MCP server can then call `origin_bridge_status`,

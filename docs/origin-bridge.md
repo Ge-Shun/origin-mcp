@@ -20,7 +20,7 @@ Python version mismatches.
 3. Run:
 
 ```python
-exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())
+exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())
 ```
 
 The addon shows a Windows message box when the bridge is ready:
@@ -190,7 +190,7 @@ directly.
 In the Origin Python console:
 
 ```python
-exec(open(r"D:\origin-mcp\examples\origin_bridge_addon.py", encoding="utf-8").read())
+exec(open(r"D:\origin-mcp\addon.py", encoding="utf-8").read())
 ```
 
 Then in another terminal:
