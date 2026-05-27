@@ -1,4 +1,8 @@
+import asyncio
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import origin_mcp.server as server
@@ -19,6 +23,34 @@ def test_json_safe_replaces_non_finite_floats() -> None:
         "nested": [None, None, {"value": 2.0}],
     }
     assert math.isnan(data["bad"])
+
+
+def test_default_mcp_tool_profile_is_compact() -> None:
+    tools = asyncio.run(server.mcp.list_tools())
+    names = {tool.name for tool in tools}
+
+    assert len(names) == 20
+    assert names == server.COMPACT_TOOL_NAMES
+    assert "origin_plot_line" not in names
+
+
+def test_full_mcp_tool_profile_registers_all_tools() -> None:
+    env = {**os.environ, "ORIGIN_MCP_TOOL_PROFILE": "full"}
+    output = subprocess.check_output(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import asyncio, origin_mcp.server as s; "
+                "print(len(asyncio.run(s.mcp.list_tools())))"
+            ),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        text=True,
+    )
+
+    assert int(output.strip()) == 148
 
 
 def test_error_response_includes_stable_error_code() -> None:

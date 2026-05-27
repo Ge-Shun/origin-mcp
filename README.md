@@ -94,6 +94,11 @@ The addon does not require editing a source directory in the file.
 If bridge startup or connection state is unclear, call `origin_doctor` first;
 it reports the status file, bridge ping result, and recommended next steps.
 
+The MCP server defaults to a compact 20-tool profile to keep tool selection
+manageable. Set `ORIGIN_MCP_TOOL_PROFILE=full` before starting the server to
+expose every specialized worksheet, graph, analysis, and `origin_plot_*`
+wrapper.
+
 ## Knowledge Base
 
 The server exposes a structured local knowledge base through MCP tools. Use

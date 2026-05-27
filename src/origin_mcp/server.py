@@ -26,7 +26,59 @@ from .models import (
     ToolResult,
 )
 
-mcp = FastMCP("origin-mcp")
+mcp = FastMCP(
+    "origin-mcp",
+    instructions=(
+        "Origin/OriginPro MCP server. The default compact tool profile exposes "
+        "high-level diagnostics, knowledge, plotting, worksheet, analysis, export, "
+        "LabTalk, and task tools. Set ORIGIN_MCP_TOOL_PROFILE=full to expose every "
+        "specialized worksheet, graph, analysis, and plot-type wrapper."
+    ),
+)
+
+COMPACT_TOOL_NAMES = frozenset(
+    {
+        "origin_doctor",
+        "origin_ping",
+        "origin_capabilities",
+        "origin_browse_knowledge",
+        "origin_query_knowledge",
+        "origin_import_table",
+        "origin_read_worksheet",
+        "origin_write_worksheet",
+        "origin_recommend_chart",
+        "origin_plot_auto",
+        "origin_plot_chart_atlas",
+        "origin_plot_table_id",
+        "origin_format_graph",
+        "origin_export_graph",
+        "origin_run_analysis",
+        "origin_run_labtalk",
+        "origin_bridge_submit_task",
+        "origin_bridge_task_status",
+        "origin_bridge_cancel_task",
+        "origin_bridge_list_tasks",
+    }
+)
+FULL_TOOL_PROFILE_VALUES = {"full", "expert", "all"}
+
+
+def _tool_profile() -> str:
+    return os.environ.get("ORIGIN_MCP_TOOL_PROFILE", "compact").strip().lower() or "compact"
+
+
+def _should_register_tool(name: str) -> bool:
+    profile = _tool_profile()
+    return profile in FULL_TOOL_PROFILE_VALUES or name in COMPACT_TOOL_NAMES
+
+
+def _mcp_tool() -> Any:
+    def decorate(func: Any) -> Any:
+        if _should_register_tool(func.__name__):
+            return mcp.tool()(func)
+        return func
+
+    return decorate
 
 
 class _BridgeOnlyClient:
@@ -184,14 +236,14 @@ def _read_bridge_status(status_path: str | None = None) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_ping(show: bool = True) -> dict[str, Any]:
     """Connect to Origin/OriginPro and report basic status."""
 
     return _wrap(lambda: _ok("Connected to Origin.", **client.connect(show=show)))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_capabilities(show: bool = False, refresh: bool = False) -> dict[str, Any]:
     """Report Origin/originpro versions and runtime feature availability."""
 
@@ -203,7 +255,7 @@ def origin_capabilities(show: bool = False, refresh: bool = False) -> dict[str, 
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_status(
     host: str | None = None,
     port: int | None = None,
@@ -226,7 +278,7 @@ def origin_bridge_status(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_doctor(
     host: str | None = None,
     port: int | None = None,
@@ -309,12 +361,16 @@ def origin_doctor(
                 "port": config.port,
                 "timeout": config.timeout,
                 "token_configured": bool(config.token),
+                "tool_profile": _tool_profile(),
+                "compact_tool_count": len(COMPACT_TOOL_NAMES),
+                "compact_tools": sorted(COMPACT_TOOL_NAMES),
                 "env": {
                     "ORIGIN_MCP_BRIDGE_HOST": os.environ.get("ORIGIN_MCP_BRIDGE_HOST"),
                     "ORIGIN_MCP_BRIDGE_PORT": os.environ.get("ORIGIN_MCP_BRIDGE_PORT"),
                     "ORIGIN_MCP_BRIDGE_TIMEOUT": os.environ.get("ORIGIN_MCP_BRIDGE_TIMEOUT"),
                     "ORIGIN_MCP_BRIDGE_STATUS": os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
                     "ORIGIN_MCP_BRIDGE_TOKEN": bool(os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN")),
+                    "ORIGIN_MCP_TOOL_PROFILE": os.environ.get("ORIGIN_MCP_TOOL_PROFILE"),
                 },
             },
             status_file=status_file,
@@ -326,7 +382,7 @@ def origin_doctor(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_ping_origin(
     show: bool = True,
     host: str | None = None,
@@ -351,7 +407,7 @@ def origin_bridge_ping_origin(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_capabilities(
     show: bool = False,
     refresh: bool = False,
@@ -377,7 +433,7 @@ def origin_bridge_capabilities(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_run_labtalk(
     script: str,
     host: str | None = None,
@@ -402,7 +458,7 @@ def origin_bridge_run_labtalk(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_new_project(
     show: bool = True,
     host: str | None = None,
@@ -427,7 +483,7 @@ def origin_bridge_new_project(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_open_project(
     path: str,
     readonly: bool = False,
@@ -454,7 +510,7 @@ def origin_bridge_open_project(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_save_project(
     path: str,
     host: str | None = None,
@@ -479,7 +535,7 @@ def origin_bridge_save_project(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_list_project(
     host: str | None = None,
     port: int | None = None,
@@ -502,7 +558,7 @@ def origin_bridge_list_project(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_import_table(
     path: str,
     book_name: str | None = None,
@@ -547,7 +603,7 @@ def origin_bridge_import_table(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_get_worksheet_info(
     book_name: str | None = None,
     sheet_name: str | None = None,
@@ -574,7 +630,7 @@ def origin_bridge_get_worksheet_info(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_read_worksheet(
     book_name: str | None = None,
     sheet_name: str | None = None,
@@ -609,7 +665,7 @@ def origin_bridge_read_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_write_worksheet(
     rows: list[dict[str, Any]] | list[list[Any]],
     columns: list[str] | None = None,
@@ -646,7 +702,7 @@ def origin_bridge_write_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_plot_table(
     path: str,
     kind: str = "line",
@@ -719,7 +775,7 @@ def origin_bridge_plot_table(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_export_graph(
     path: str,
     graph_name: str | None = None,
@@ -746,7 +802,7 @@ def origin_bridge_export_graph(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_run_analysis(
     analysis: str,
     worksheet: str | None = None,
@@ -787,7 +843,7 @@ def origin_bridge_run_analysis(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_submit_task(
     method: str,
     params: dict[str, Any] | None = None,
@@ -813,7 +869,7 @@ def origin_bridge_submit_task(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_task_status(
     task_id: str,
     host: str | None = None,
@@ -838,7 +894,7 @@ def origin_bridge_task_status(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_cancel_task(
     task_id: str,
     host: str | None = None,
@@ -863,7 +919,7 @@ def origin_bridge_cancel_task(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_bridge_list_tasks(
     limit: int = 20,
     host: str | None = None,
@@ -888,7 +944,7 @@ def origin_bridge_list_tasks(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_type_coverage(
     origin_version: float | None = None,
     show: bool = False,
@@ -908,7 +964,7 @@ def origin_plot_type_coverage(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_knowledge(
     collection: str | None = None,
     topic: str | None = None,
@@ -924,7 +980,7 @@ def origin_browse_knowledge(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_knowledge(
     query: str,
     collection: str | None = None,
@@ -941,7 +997,7 @@ def origin_query_knowledge(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_reference(topic: str | None = None, version: str | None = None) -> dict[str, Any]:
     """Browse Origin workflow reference notes, plot IDs, styles, and analysis adapters."""
 
@@ -953,7 +1009,7 @@ def origin_browse_reference(topic: str | None = None, version: str | None = None
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_reference(
     query: str,
     version: str | None = None,
@@ -969,7 +1025,7 @@ def origin_query_reference(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_python_api(api: str | None = None) -> dict[str, Any]:
     """Browse OriginPro Python API usage notes by dot path."""
 
@@ -981,7 +1037,7 @@ def origin_browse_python_api(api: str | None = None) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_python_api(query: str, limit: int = 10) -> dict[str, Any]:
     """Search OriginPro Python API usage notes."""
 
@@ -993,7 +1049,7 @@ def origin_query_python_api(query: str, limit: int = 10) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_labtalk(command: str | None = None, version: str | None = None) -> dict[str, Any]:
     """Browse LabTalk and X-Function knowledge used by origin-mcp."""
 
@@ -1005,7 +1061,7 @@ def origin_browse_labtalk(command: str | None = None, version: str | None = None
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_labtalk(query: str, version: str | None = None, limit: int = 10) -> dict[str, Any]:
     """Search LabTalk and X-Function knowledge used by origin-mcp."""
 
@@ -1017,7 +1073,7 @@ def origin_query_labtalk(query: str, version: str | None = None, limit: int = 10
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_mcp_tools(tool: str | None = None) -> dict[str, Any]:
     """Browse origin-mcp tools by workflow group or tool path."""
 
@@ -1029,7 +1085,7 @@ def origin_browse_mcp_tools(tool: str | None = None) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_mcp_tools(query: str, limit: int = 10) -> dict[str, Any]:
     """Search origin-mcp tool knowledge."""
 
@@ -1041,7 +1097,7 @@ def origin_query_mcp_tools(query: str, limit: int = 10) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_browse_official_docs(topic: str | None = None) -> dict[str, Any]:
     """Browse indexed official OriginLab documentation entry points."""
 
@@ -1053,7 +1109,7 @@ def origin_browse_official_docs(topic: str | None = None) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_query_official_docs(query: str, limit: int = 10) -> dict[str, Any]:
     """Search indexed official OriginLab documentation entry points."""
 
@@ -1065,7 +1121,7 @@ def origin_query_official_docs(query: str, limit: int = 10) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_get_default_plot_config(
     template_dir: str | None = None,
     max_templates: int = 200,
@@ -1083,14 +1139,14 @@ def origin_get_default_plot_config(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_new_project(show: bool = True) -> dict[str, Any]:
     """Create a new Origin project."""
 
     return _wrap(lambda: _ok("Created a new Origin project.", **client.new_project(show=show)))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_open_project(path: str, readonly: bool = False, asksave: bool = False) -> dict[str, Any]:
     """Open an existing Origin OPJU/OPJ project."""
 
@@ -1102,14 +1158,14 @@ def origin_open_project(path: str, readonly: bool = False, asksave: bool = False
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_save_project(path: str) -> dict[str, Any]:
     """Save the current Origin project to an OPJU/OPJ path."""
 
     return _wrap(lambda: _ok("Saved Origin project.", **client.save_project(Path(path))))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_import_csv(
     path: str,
     book_name: str | None = None,
@@ -1125,7 +1181,7 @@ def origin_import_csv(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_import_table(
     path: str,
     book_name: str | None = None,
@@ -1170,7 +1226,7 @@ def origin_import_table(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_import_excel(
     path: str,
     book_name: str | None = None,
@@ -1187,7 +1243,7 @@ def origin_import_excel(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_import_file(
     path: str,
     book_name: str | None = None,
@@ -1214,7 +1270,7 @@ def origin_import_file(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_append_table(
     path: str,
     book_name: str | None = None,
@@ -1261,7 +1317,7 @@ def origin_append_table(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_get_worksheet_info(
     book_name: str | None = None,
     sheet_name: str | None = None,
@@ -1281,7 +1337,7 @@ def origin_get_worksheet_info(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_read_worksheet(
     book_name: str | None = None,
     sheet_name: str | None = None,
@@ -1305,7 +1361,7 @@ def origin_read_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_write_worksheet(
     rows: list[dict[str, Any]] | list[list[Any]],
     columns: list[str] | None = None,
@@ -1331,7 +1387,7 @@ def origin_write_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_add_calculated_column(
     column_name: str,
     formula: str,
@@ -1353,7 +1409,7 @@ def origin_add_calculated_column(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_sort_worksheet(
     by: str | int,
     ascending: bool = True,
@@ -1375,7 +1431,7 @@ def origin_sort_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_get_cell_value(
     row: int,
     column: str | int,
@@ -1397,7 +1453,7 @@ def origin_get_cell_value(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_cell_value(
     row: int,
     column: str | int,
@@ -1421,7 +1477,7 @@ def origin_set_cell_value(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_delete_columns(
     columns: list[str | int],
     book_name: str | None = None,
@@ -1441,7 +1497,7 @@ def origin_delete_columns(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_clear_worksheet(
     book_name: str | None = None,
     sheet_name: str | None = None,
@@ -1461,7 +1517,7 @@ def origin_clear_worksheet(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_export_worksheet_csv(
     path: str,
     book_name: str | None = None,
@@ -1483,7 +1539,7 @@ def origin_export_worksheet_csv(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_line(
     path: str,
     x_col: str | int | None = None,
@@ -1537,7 +1593,7 @@ def origin_plot_line(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_scatter(
     path: str,
     x_col: str | int | None = None,
@@ -1591,7 +1647,7 @@ def origin_plot_scatter(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_line_symbol(
     path: str,
     x_col: str | int | None = None,
@@ -1645,7 +1701,7 @@ def origin_plot_line_symbol(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_column(
     path: str,
     x_col: str | int | None = None,
@@ -1697,7 +1753,7 @@ def origin_plot_column(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_contour(
     path: str,
     x_col: str | int,
@@ -1749,7 +1805,7 @@ def origin_plot_contour(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_errorbar(
     path: str,
     x_col: str | int | None = None,
@@ -1803,7 +1859,7 @@ def origin_plot_errorbar(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_histogram(
     path: str,
     x_col: str | int | None = None,
@@ -1853,7 +1909,7 @@ def origin_plot_histogram(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_box(
     path: str,
     x_col: str | int | None = None,
@@ -1903,7 +1959,7 @@ def origin_plot_box(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_heatmap(
     path: str,
     x_col: str | int,
@@ -1952,7 +2008,7 @@ def origin_plot_heatmap(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_scatter(
     path: str,
     x_col: str | int,
@@ -2001,7 +2057,7 @@ def origin_plot_3d_scatter(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_surface(
     path: str,
     x_col: str | int,
@@ -2050,7 +2106,7 @@ def origin_plot_3d_surface(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_polar(
     path: str,
     x_col: str | int | None = None,
@@ -2100,7 +2156,7 @@ def origin_plot_polar(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_table_id(
     path: str,
     plot_type_id: int,
@@ -2147,7 +2203,7 @@ def origin_plot_table_id(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_matrix_id(
     data_range: str,
     plot_type_id: int,
@@ -2177,7 +2233,7 @@ def origin_plot_matrix_id(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_area(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2190,7 +2246,7 @@ def origin_plot_area(
     return _pti(path, 204, "area", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_stack_area(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2203,7 +2259,7 @@ def origin_plot_stack_area(
     return _pti(path, 214, "stackarea", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_fill_area(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2216,7 +2272,7 @@ def origin_plot_fill_area(
     return _pti(path, 249, "fillarea", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_bar(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2229,7 +2285,7 @@ def origin_plot_bar(
     return _pti(path, 215, "bar", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_stack_bar(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2242,7 +2298,7 @@ def origin_plot_stack_bar(
     return _pti(path, 216, "bar", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_floating_bar(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2255,7 +2311,7 @@ def origin_plot_floating_bar(
     return _pti(path, 207, "floatbar", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_column_stack(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2268,7 +2324,7 @@ def origin_plot_column_stack(
     return _pti(path, 213, "column", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_pie(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2281,7 +2337,7 @@ def origin_plot_pie(
     return _pti(path, 225, "pie", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_ternary(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2294,7 +2350,7 @@ def origin_plot_ternary(
     return _pti(path, 245, "ternary", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_ternary_contour(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2307,7 +2363,7 @@ def origin_plot_ternary_contour(
     return _pti(path, 185, "TernaryContour", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_bubble(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2320,7 +2376,7 @@ def origin_plot_bubble(
     return _pti(path, 193, "scatter", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_bubble_color_mapped(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2333,7 +2389,7 @@ def origin_plot_bubble_color_mapped(
     return _pti(path, 248, "scatter", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_color_mapped(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2346,7 +2402,7 @@ def origin_plot_color_mapped(
     return _pti(path, 247, "scatter", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_vector_xyam(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2359,7 +2415,7 @@ def origin_plot_vector_xyam(
     return _pti(path, 208, "vector", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_vector_xyxy(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2372,7 +2428,7 @@ def origin_plot_vector_xyxy(
     return _pti(path, 218, "vectxyxy", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_vector(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2385,7 +2441,7 @@ def origin_plot_3d_vector(
     return _pti(path, 183, "gl3DVector", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_high_low_close(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2398,7 +2454,7 @@ def origin_plot_high_low_close(
     return _pti(path, 205, "hclose", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_candlestick(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2411,7 +2467,7 @@ def origin_plot_candlestick(
     return _pti(path, 221, "Candlestick", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_waterfall(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2424,7 +2480,7 @@ def origin_plot_waterfall(
     return _pti(path, 210, "walls", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_ribbon(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2437,7 +2493,7 @@ def origin_plot_3d_ribbon(
     return _pti(path, 211, "ribbon", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_bars(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2450,7 +2506,7 @@ def origin_plot_3d_bars(
     return _pti(path, 212, "bar3d", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_3d_errorbar(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2463,7 +2519,7 @@ def origin_plot_3d_errorbar(
     return _pti(path, 184, "gl3DError", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_polar_xr_ytheta(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2476,7 +2532,7 @@ def origin_plot_polar_xr_ytheta(
     return _pti(path, 186, "PolarXrYTheta", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_smith(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2489,7 +2545,7 @@ def origin_plot_smith(
     return _pti(path, 191, "SmithCht", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_dendrogram(
     path: str,
     selected_cols: list[str | int] | None = None,
@@ -2502,7 +2558,7 @@ def origin_plot_dendrogram(
     return _pti(path, 108, "Cluster", selected_cols, graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_matrix_3d_scatter(
     data_range: str,
     graph_name: str | None = None,
@@ -2514,7 +2570,7 @@ def origin_plot_matrix_3d_scatter(
     return origin_plot_matrix_id(data_range, 101, "gl3DScatterMat", graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_matrix_3d_surface(
     data_range: str,
     graph_name: str | None = None,
@@ -2526,7 +2582,7 @@ def origin_plot_matrix_3d_surface(
     return origin_plot_matrix_id(data_range, 103, "glmesh", graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_matrix_heatmap(
     data_range: str,
     graph_name: str | None = None,
@@ -2538,7 +2594,7 @@ def origin_plot_matrix_heatmap(
     return origin_plot_matrix_id(data_range, 105, "heatmap", graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_matrix_contour(
     data_range: str,
     graph_name: str | None = None,
@@ -2550,7 +2606,7 @@ def origin_plot_matrix_contour(
     return origin_plot_matrix_id(data_range, 226, "contour", graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_image(
     data_range: str,
     graph_name: str | None = None,
@@ -2562,7 +2618,7 @@ def origin_plot_image(
     return origin_plot_matrix_id(data_range, 220, "image", graph_name, title, export_path)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_from_range(
     data_range: str,
     template: str = "line",
@@ -2596,7 +2652,7 @@ def origin_plot_from_range(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_batch_plot_from_template(
     data_ranges: list[str],
     template: str,
@@ -2620,7 +2676,7 @@ def origin_batch_plot_from_template(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_list_graph_templates(template_dir: str | None = None) -> dict[str, Any]:
     """List common graph template names and optional template files in a directory."""
 
@@ -2632,7 +2688,7 @@ def origin_list_graph_templates(template_dir: str | None = None) -> dict[str, An
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_get_graph_info(graph_name: str | None = None) -> dict[str, Any]:
     """Inspect a graph page, its layers, axes, and plots."""
 
@@ -2644,7 +2700,7 @@ def origin_get_graph_info(graph_name: str | None = None) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_get_layer_info(
     graph_name: str | None = None,
     layer_index: int = 0,
@@ -2659,7 +2715,7 @@ def origin_get_layer_info(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_export_graph(
     path: str,
     graph_name: str | None = None,
@@ -2678,7 +2734,7 @@ def origin_export_graph(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_export_all_graphs(
     output_dir: str,
     file_type: str = "png",
@@ -2700,7 +2756,7 @@ def origin_export_all_graphs(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_export_preview(
     graph_name: str | None = None,
     output_dir: str | None = None,
@@ -2722,7 +2778,7 @@ def origin_export_preview(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_inspect_export(path: str) -> dict[str, Any]:
     """Inspect an exported graph file for size, dimensions, hash, and image quality."""
 
@@ -2734,7 +2790,7 @@ def origin_inspect_export(path: str) -> dict[str, Any]:
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_format_graph(
     graph_name: str | None = None,
     title: str | None = None,
@@ -2769,7 +2825,7 @@ def origin_format_graph(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_axis(
     graph_name: str | None = None,
     axis: str = "x",
@@ -2796,7 +2852,7 @@ def origin_set_axis(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_plot_style(
     graph_name: str | None = None,
     plot_index: int | None = None,
@@ -2825,7 +2881,7 @@ def origin_set_plot_style(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_apply_publication_style(
     graph_name: str | None = None,
     layer_index: int | None = None,
@@ -2861,7 +2917,7 @@ def origin_apply_publication_style(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_apply_nature_style(
     graph_name: str | None = None,
     layer_index: int | None = None,
@@ -2905,7 +2961,7 @@ def origin_apply_nature_style(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_diagnose_graph(
     graph_name: str | None = None,
     style: str | None = None,
@@ -2945,7 +3001,7 @@ def origin_diagnose_graph(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_recommend_chart(
     path: str,
     intent: str | None = None,
@@ -2989,7 +3045,7 @@ def origin_recommend_chart(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_auto(
     path: str,
     intent: str | None = None,
@@ -3047,7 +3103,7 @@ def origin_plot_auto(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_chart_atlas_route(
     intent: str,
     columns: list[str] | None = None,
@@ -3063,7 +3119,7 @@ def origin_chart_atlas_route(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_plot_chart_atlas(
     path: str,
     intent: str,
@@ -3123,7 +3179,7 @@ def origin_plot_chart_atlas(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_apply_image_panel_style(
     graph_name: str | None = None,
     layer_index: int | None = None,
@@ -3155,7 +3211,7 @@ def origin_apply_image_panel_style(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_add_plot_to_graph(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3187,7 +3243,7 @@ def origin_add_plot_to_graph(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_remove_plot_from_graph(
     plot_index: int,
     graph_name: str | None = None,
@@ -3207,7 +3263,7 @@ def origin_remove_plot_from_graph(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_change_plot_type(
     plot_index: int,
     plot_type: str,
@@ -3229,7 +3285,7 @@ def origin_change_plot_type(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_change_plot_data(
     plot_index: int,
     worksheet: str | None,
@@ -3255,7 +3311,7 @@ def origin_change_plot_data(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_graph_page(
     graph_name: str | None = None,
     width: float | None = None,
@@ -3281,7 +3337,7 @@ def origin_set_graph_page(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_arrange_layers(
     graph_name: str | None = None,
     rows: int = 1,
@@ -3305,7 +3361,7 @@ def origin_arrange_layers(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_add_graph_label(
     text: str,
     graph_name: str | None = None,
@@ -3333,7 +3389,7 @@ def origin_add_graph_label(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_add_reference_line(
     value: float,
     axis: str = "y",
@@ -3357,7 +3413,7 @@ def origin_add_reference_line(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_column_labels(
     labels: list[str],
     label_type: str = "L",
@@ -3381,7 +3437,7 @@ def origin_set_column_labels(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_set_column_designations(
     spec: str,
     book_name: str | None = None,
@@ -3407,7 +3463,7 @@ def origin_set_column_designations(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_format_legend(
     graph_name: str | None = None,
     text: str | None = None,
@@ -3439,14 +3495,14 @@ def origin_format_legend(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_list_project() -> dict[str, Any]:
     """List workbooks, worksheets, matrix books, graphs, and images in the project."""
 
     return _wrap(lambda: _ok("Listed Origin project objects.", **client.list_project()))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_rename_object(name: str, new_name: str, object_type: str = "graph") -> dict[str, Any]:
     """Rename a graph, workbook, matrixbook, or worksheet."""
 
@@ -3460,7 +3516,7 @@ def origin_rename_object(name: str, new_name: str, object_type: str = "graph") -
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_delete_object(name: str, object_type: str = "graph") -> dict[str, Any]:
     """Delete a graph, workbook, matrixbook, or worksheet."""
 
@@ -3474,7 +3530,7 @@ def origin_delete_object(name: str, object_type: str = "graph") -> dict[str, Any
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_run_analysis(
     analysis: str,
     worksheet: str | None = None,
@@ -3503,7 +3559,7 @@ def origin_run_analysis(
     return _wrap(run)
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_linear_fit(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3540,7 +3596,7 @@ def origin_linear_fit(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_polynomial_fit(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3564,7 +3620,7 @@ def origin_polynomial_fit(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_smooth(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3581,7 +3637,7 @@ def origin_smooth(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_peak_find(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3598,7 +3654,7 @@ def origin_peak_find(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_differentiate(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3622,7 +3678,7 @@ def origin_differentiate(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_integrate(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3639,7 +3695,7 @@ def origin_integrate(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_descriptive_stats(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3663,7 +3719,7 @@ def origin_descriptive_stats(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_nonlinear_fit(
     worksheet: str | None = None,
     x_col: str | int | None = None,
@@ -3687,14 +3743,14 @@ def origin_nonlinear_fit(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_list_fit_functions() -> dict[str, Any]:
     """List common Origin nonlinear fit function names and parameters."""
 
     return _wrap(lambda: _ok("Listed Origin fit functions.", **client.list_fit_functions()))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_nonlinear_fit_structured(
     worksheet: str | None,
     x_col: str | int,
@@ -3724,35 +3780,35 @@ def origin_nonlinear_fit_structured(
     )
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_run_labtalk(script: str) -> dict[str, Any]:
     """Execute LabTalk script text inside Origin."""
 
     return _wrap(lambda: _ok("Executed LabTalk script.", **client.run_labtalk(script)))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_quit() -> dict[str, Any]:
     """Close Origin/OriginPro."""
 
     return _wrap(lambda: _ok("Closed Origin.", **client.quit()))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_detach() -> dict[str, Any]:
     """Release the external Origin automation connection without closing Origin."""
 
     return _wrap(lambda: _ok("Released Origin automation connection.", **client.detach()))
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_release() -> dict[str, Any]:
     """Alias for origin_detach."""
 
     return origin_detach()
 
 
-@mcp.tool()
+@_mcp_tool()
 def origin_force_quit() -> dict[str, Any]:
     """Ask the bridge to force-close Origin/OriginPro."""
 

@@ -43,6 +43,22 @@ def test_browse_reference_plot_type_entry() -> None:
     assert "Line" in entry["title"]
 
 
+def test_browse_reference_plotting_entrypoints() -> None:
+    result = browse_knowledge("reference", "plotting/recommended-entrypoints")
+
+    entry = result["entry"]
+    assert "origin_plot_auto" in entry["metadata"]["compact_tools"]
+    assert entry["metadata"]["expert_profile"] == "ORIGIN_MCP_TOOL_PROFILE=full"
+
+
+def test_browse_reference_tool_profiles() -> None:
+    result = browse_knowledge("reference", "tool-profiles")
+
+    entry = result["entry"]
+    assert entry["metadata"]["default_profile"] == "compact"
+    assert entry["metadata"]["full_profile_env"] == "ORIGIN_MCP_TOOL_PROFILE=full"
+
+
 def test_query_reference_finds_heatmap_plot_type() -> None:
     result = query_knowledge("heatmap plot type id", collection="reference", limit=5)
 

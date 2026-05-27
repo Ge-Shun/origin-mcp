@@ -79,11 +79,15 @@ The MCP server reads the same connection settings from environment variables:
 - `ORIGIN_MCP_INSTALL_MISSING`
 - `ORIGIN_MCP_BRIDGE_BACKGROUND`
 
-Existing MCP tools such as `origin_ping`, `origin_import_table`, and
+Existing tool functions such as `origin_ping`, `origin_import_table`, and
 `origin_plot_line` keep their original names and route through an
 `OriginClient`-style bridge proxy. The bridge allowlist is tested against
 `server.py` so new public client calls must be added deliberately. The explicit
-`origin_bridge_*` tools remain as diagnostics and bridge controls.
+`origin_bridge_*` functions remain as diagnostics and bridge controls.
+
+The MCP server registers the compact 20-tool profile by default. Specialized
+bridge and plotting wrappers remain available in Python and can be exposed to
+MCP clients by starting the server with `ORIGIN_MCP_TOOL_PROFILE=full`.
 
 ## MCP Tools
 

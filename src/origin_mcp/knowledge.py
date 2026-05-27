@@ -86,13 +86,71 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "Import table data, choose a plotting route, format the graph, then export/inspect."
         ),
         body=(
-            "For file-backed data, start with a common wrapper such as origin_plot_line or "
-            "origin_plot_scatter when the chart type is known. Use origin_recommend_chart or "
-            "origin_plot_auto when the assistant should inspect columns first. Use "
-            "origin_plot_table_id, origin_plot_matrix_id, or a named Plot Type ID wrapper for "
-            "specialized Origin templates."
+            "In the default compact MCP tool profile, start with origin_recommend_chart when "
+            "the chart type is unclear and origin_plot_auto when the assistant should inspect "
+            "columns and create the graph. Use origin_plot_chart_atlas for semantic intents "
+            "such as correlation, distribution, composition, matrix, image_plate, and "
+            "time_series. Use origin_plot_table_id for a specific Origin Plot Type ID. "
+            "Named direct wrappers such as origin_plot_line and origin_plot_scatter are "
+            "available in the full/expert tool profile and remain internal compatibility "
+            "routes."
         ),
-        keywords=("plot", "workflow", "table", "template", "plot type id"),
+        keywords=("plot", "workflow", "compact", "profile", "template", "plot type id"),
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="plotting/recommended-entrypoints",
+        title="Recommended plotting entry points",
+        summary="Compact-profile plotting tools to prefer before direct origin_plot_* wrappers.",
+        body=(
+            "Prefer origin_plot_auto for file-backed table data because it profiles columns, "
+            "routes to a suitable chart, and can export the result. Use origin_recommend_chart "
+            "when you only need a recommendation. Use origin_plot_chart_atlas when the user "
+            "states a semantic intent rather than a chart type. Use origin_plot_table_id when "
+            "the user gives a concrete Origin Plot Type ID or template route. Direct wrappers "
+            "like origin_plot_line, origin_plot_scatter, origin_plot_column, and specialized "
+            "matrix/3D wrappers are expert/full-profile tools."
+        ),
+        keywords=(
+            "plot",
+            "entrypoint",
+            "compact",
+            "origin_plot_auto",
+            "origin_recommend_chart",
+            "origin_plot_chart_atlas",
+            "origin_plot_table_id",
+        ),
+        metadata={
+            "compact_tools": [
+                "origin_recommend_chart",
+                "origin_plot_auto",
+                "origin_plot_chart_atlas",
+                "origin_plot_table_id",
+            ],
+            "expert_profile": "ORIGIN_MCP_TOOL_PROFILE=full",
+        },
+    ),
+    KnowledgeEntry(
+        collection="reference",
+        path="tool-profiles",
+        title="MCP tool profiles",
+        summary=(
+            "Default compact profile exposes high-level tools; full profile exposes all wrappers."
+        ),
+        body=(
+            "origin-mcp defaults to ORIGIN_MCP_TOOL_PROFILE=compact, which exposes a small "
+            "high-level tool surface for diagnostics, knowledge search, worksheet import/read/"
+            "write, plotting, export, analysis, LabTalk, and bridge tasks. Set "
+            "ORIGIN_MCP_TOOL_PROFILE=full, expert, or all before starting the MCP server to "
+            "register every specialized worksheet, graph editing, analysis, and origin_plot_* "
+            "wrapper. Functions remain in the Python module even when they are not registered "
+            "as MCP tools in compact mode."
+        ),
+        keywords=("tool profile", "compact", "full", "expert", "origin_plot", "mcp tools"),
+        metadata={
+            "default_profile": "compact",
+            "full_profile_env": "ORIGIN_MCP_TOOL_PROFILE=full",
+        },
     ),
     KnowledgeEntry(
         collection="reference",

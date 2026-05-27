@@ -86,6 +86,10 @@ MCP 客户端配置示例：
 如果不确定 bridge 是否启动或为何连不上，先调用 `origin_doctor`；它会返回
 status 文件、bridge ping 结果和建议的下一步。
 
+MCP server 默认使用 20 个工具的 compact profile，降低模型选工具成本。启动 server
+前设置 `ORIGIN_MCP_TOOL_PROFILE=full` 可暴露所有 worksheet、graph、analysis 和
+`origin_plot_*` 专家工具。
+
 ## 知识库
 
 服务器通过 MCP 工具暴露结构化本地知识库。使用 `origin_query_knowledge` 或各集合

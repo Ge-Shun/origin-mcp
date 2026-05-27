@@ -1,7 +1,8 @@
 # Tools and Compatibility
 
 `origin-mcp` exposes MCP tools for Origin project management, worksheet editing,
-plotting, graph formatting, analysis, export, and lifecycle control.
+plotting, graph formatting, analysis, export, and lifecycle control. By default
+it uses a compact tool profile to reduce model tool-selection cost.
 
 Tool failures return `ok=false`, a human-readable `message`, the Python
 `error_type`, and a stable `error_code` such as `worksheet_not_found`,
@@ -10,39 +11,43 @@ Tool failures return `ok=false`, a human-readable `message`, the Python
 `origin_dependency_unavailable`. Clients should branch on `error_code` instead
 of parsing the message text.
 
-## Core Tools
+## Tool Profiles
+
+The default profile is `compact`, which registers 20 high-level tools. It keeps
+the common workflow surface small while preserving the specialized wrappers as
+internal Python functions.
+
+Set `ORIGIN_MCP_TOOL_PROFILE=full` before starting the MCP server to expose all
+specialized worksheet, plotting, graph editing, analysis, and lifecycle tools.
+The aliases `expert` and `all` behave the same as `full`.
+
+## Default Compact Tools
 
 - `origin_ping`
 - `origin_capabilities`
 - `origin_doctor`
-- `origin_bridge_status`
-- `origin_bridge_ping_origin`
-- `origin_bridge_capabilities`
-- `origin_bridge_new_project`
-- `origin_bridge_open_project`
-- `origin_bridge_save_project`
-- `origin_bridge_list_project`
-- `origin_bridge_get_worksheet_info`
-- `origin_bridge_read_worksheet`
-- `origin_bridge_write_worksheet`
-- `origin_bridge_import_table`
-- `origin_bridge_plot_table`
-- `origin_bridge_export_graph`
-- `origin_bridge_run_analysis`
 - `origin_bridge_submit_task`
 - `origin_bridge_task_status`
 - `origin_bridge_cancel_task`
 - `origin_bridge_list_tasks`
-- `origin_get_default_plot_config`
-- `origin_plot_type_coverage`
 - `origin_browse_knowledge`
 - `origin_query_knowledge`
-- `origin_new_project`
-- `origin_open_project`
-- `origin_save_project`
-- `origin_list_project`
-- `origin_rename_object`
-- `origin_delete_object`
+- `origin_import_table`
+- `origin_read_worksheet`
+- `origin_write_worksheet`
+- `origin_recommend_chart`
+- `origin_plot_auto`
+- `origin_plot_chart_atlas`
+- `origin_plot_table_id`
+- `origin_export_graph`
+- `origin_format_graph`
+- `origin_run_analysis`
+- `origin_run_labtalk`
+
+The sections below document the full profile and internal compatibility
+wrappers. In compact mode, use `origin_query_knowledge` or
+`origin_browse_knowledge` to discover the right high-level workflow instead of
+choosing from every specialized wrapper.
 
 ## Knowledge Base Tools
 
