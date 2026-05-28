@@ -166,24 +166,36 @@ def origin_query_mcp_tools(query: str, limit: int = 10) -> dict[str, Any]:
 
 
 @_mcp_tool()
-def origin_browse_official_docs(topic: str | None = None) -> dict[str, Any]:
+def origin_browse_official_docs(
+    topic: str | None = None,
+    version: str | None = None,
+) -> dict[str, Any]:
     """Browse indexed official OriginLab documentation entry points."""
 
     return _wrap(
         lambda: _ok(
             "Browsed official OriginLab documentation index.",
-            **browse_knowledge(collection="official_docs", path=topic),
+            **browse_knowledge(collection="official_docs", path=topic, version=version),
         )
     )
 
 
 @_mcp_tool()
-def origin_query_official_docs(query: str, limit: int = 10) -> dict[str, Any]:
+def origin_query_official_docs(
+    query: str,
+    version: str | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
     """Search indexed official OriginLab documentation entry points."""
 
     return _wrap(
         lambda: _ok(
             "Searched official OriginLab documentation index.",
-            **query_knowledge(query=query, collection="official_docs", limit=limit),
+            **query_knowledge(
+                query=query,
+                collection="official_docs",
+                version=version,
+                limit=limit,
+            ),
         )
     )

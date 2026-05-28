@@ -57,12 +57,46 @@ Collections:
 - `labtalk`: LabTalk and X-Function routes used by this project, including
   worksheet plotting, `plotxyz`, `plotm`, legend refresh, export fallbacks, and
   analysis X-Functions.
-- `official_docs`: curated official OriginLab documentation entry points for
-  Python, originpro API, LabTalk references, and X-Function references.
+- `official_docs`: versioned official OriginLab documentation boundary map for
+  Python, originpro API class pages, LabTalk command/function/object references,
+  and X-Function category references.
 
 The local knowledge base is a curated operational index. It does not copy the
 entire OriginLab documentation set into this repository; entries that need exact
-official syntax include an `official_url` or `url` metadata field.
+official syntax include `official_url`, `doc_family`, `doc_kind`, `versions`,
+and `verified` metadata fields.
+
+The official documentation boundary map has two layers: a hand-curated seed
+index in `src/origin_mcp/knowledge.py` and an optional generated overlay at
+`src/origin_mcp/official_docs.generated.json`. Refresh the overlay with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\update_official_docs_index.py
+```
+
+The crawler follows OriginLab documentation links, classifies LabTalk command
+pages, X-Function pages, and originpro API class pages into stable browse paths,
+then validates duplicate paths and required version metadata before writing the
+JSON index.
+
+Origin 2026 is the baseline index. Older supported versions use
+`src/origin_mcp/official_docs.version_diffs.json`, which stores only `added`,
+`removed`, and `changed` records for each version. At query time, origin-mcp
+applies that delta in memory so `version="2024"` and `version="2025"` do not
+require duplicate full indexes.
+
+To compare two generated indexes for Origin version drift:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_official_docs_index.py old.json new.json --output diff.json
+```
+
+To build a compact version-diff overlay from separately generated version
+indexes:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_official_docs_version_diffs.py --base origin2026.json --version-index 2025 origin2025.json --version-index 2024 origin2024.json --output src\origin_mcp\official_docs.version_diffs.json
+```
 
 Browse calls use a path-like topic. Examples:
 
@@ -83,6 +117,10 @@ and score. Examples:
 
 ```json
 {"query": "legend font position", "limit": 3}
+```
+
+```json
+{"collection": "official_docs", "topic": "labtalk/commands/display-control", "version": "2026"}
 ```
 
 ## Single Source of Truth

@@ -151,6 +151,63 @@ def test_query_official_docs_finds_xfunction_reference() -> None:
     assert any(item["path"] == "x-function/plotting" for item in result["results"])
 
 
+def test_browse_official_docs_has_versioned_labtalk_category() -> None:
+    result = browse_knowledge("official_docs", "labtalk/commands/display-control", version="2026")
+
+    entry = result["entry"]
+    assert entry["metadata"]["doc_family"] == "labtalk"
+    assert entry["metadata"]["doc_kind"] == "command_category"
+    assert entry["metadata"]["versions"] == ["2026"]
+    assert entry["metadata"]["official_url"].rstrip("/").endswith("/display-control")
+
+
+def test_browse_official_docs_root_exposes_fine_grained_children() -> None:
+    result = browse_knowledge("official_docs", "python/originpro-api")
+
+    child_paths = {item["path"] for item in result["children"]}
+    assert "python/originpro-api/analysis" in child_paths
+    assert "python/originpro-api/graph" in child_paths
+    assert "python/originpro-api/worksheet" in child_paths
+
+
+def test_query_official_docs_filters_by_version() -> None:
+    current = query_knowledge("originpro Axis", collection="official_docs", version="2026", limit=5)
+    old = query_knowledge("originpro Axis", collection="official_docs", version="2025", limit=5)
+    unsupported = query_knowledge(
+        "originpro Axis",
+        collection="official_docs",
+        version="2023",
+        limit=5,
+    )
+
+    assert any(item["path"] == "python/originpro-api/graph/Axis" for item in current["results"])
+    assert any(item["path"] == "python/originpro-api/graph/Axis" for item in old["results"])
+    assert old["results"][0]["metadata"]["versions"] == ["2025"]
+    assert old["results"][0]["metadata"]["version_status"] == "baseline"
+    assert unsupported["results"] == []
+
+
+def test_generated_official_docs_include_xfunction_function() -> None:
+    result = browse_knowledge("official_docs", "x-function/plotting/plotxy", version="2026")
+
+    assert result["entry"]["metadata"]["doc_kind"] == "xfunction"
+    assert result["entry"]["metadata"]["official_url"].endswith("/plotxy/")
+
+
+def test_generated_official_docs_include_labtalk_command() -> None:
+    result = browse_knowledge("official_docs", "labtalk/commands/display-control/legend")
+
+    assert result["entry"]["metadata"]["doc_kind"] == "command"
+    assert result["entry"]["metadata"]["official_url"].endswith("/legend-cmd/")
+
+
+def test_generated_official_docs_include_originpro_member() -> None:
+    result = browse_knowledge("official_docs", "python/originpro-api/graph/Axis/scale")
+
+    assert result["entry"]["metadata"]["doc_kind"] == "member"
+    assert result["entry"]["metadata"]["doc_family"] == "originpro_api"
+
+
 def test_query_tool_alias_collection() -> None:
     result = query_knowledge("legend font position", collection="tools", limit=3)
 

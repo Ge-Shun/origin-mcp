@@ -7,6 +7,16 @@ from typing import Any
 
 from .analysis_adapters import ANALYSIS_ADAPTERS
 from .compat import PLOT_TYPE_CATALOG
+from .official_docs import (
+    BASE_OFFICIAL_DOC_VERSION,
+    load_generated_records,
+    merge_records,
+    records_for_version,
+    validate_records,
+)
+from .official_docs import (
+    OfficialDocRecord as OfficialDocPage,
+)
 
 
 @dataclass(frozen=True)
@@ -42,11 +52,14 @@ COLLECTIONS: dict[str, str] = {
 }
 
 
+OFFICIAL_DOC_VERIFIED = "2026-05-28"
+
+
 OFFICIAL_URLS = {
     "python": "https://docs.originlab.com/python/",
     "originpro_api": "https://docs.originlab.com/originpro/annotated.html",
-    "labtalk_reference": "https://docs.originlab.com/labtalk/ref/",
-    "labtalk_commands": "https://docs.originlab.com/labtalk/ref/command-reference-by-category/",
+    "labtalk_reference": "https://docs.originlab.com/labtalk/ref",
+    "labtalk_commands": "https://docs.originlab.com/labtalk/ref/command-reference-by-category",
     "xfunction_reference": "https://docs.originlab.com/x-function/ref/",
     "xfunction_plotting": "https://docs.originlab.com/x-function/ref/plotting/",
 }
@@ -409,89 +422,493 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
 )
 
 
-OFFICIAL_DOC_ENTRIES: tuple[KnowledgeEntry, ...] = (
-    KnowledgeEntry(
-        collection="official_docs",
+OFFICIAL_DOC_PAGES: tuple[OfficialDocPage, ...] = (
+    OfficialDocPage(
         path="python",
         title="OriginLab Python documentation",
         summary="Official overview of Embedded Python and External Python in Origin.",
-        body=(
-            "OriginLab documents two Python routes: Embedded Python inside Origin and External "
-            "Python that accesses Origin as a server application. External Python installs the "
-            "originpro package and requires a licensed Origin installation."
-        ),
+        url=OFFICIAL_URLS["python"],
+        doc_family="python",
+        doc_kind="chapter",
         keywords=("official", "python", "embedded python", "external python", "originpro"),
-        metadata={"url": OFFICIAL_URLS["python"]},
+        body=(
+            "OriginLab's Python chapter is the root for choosing between Embedded Python inside "
+            "Origin and External Python that controls Origin as a server application."
+        ),
     ),
-    KnowledgeEntry(
-        collection="official_docs",
+    OfficialDocPage(
+        path="python/embedded-python",
+        title="Embedded Python",
+        summary="Official documentation for Python running inside Origin.",
+        url="https://docs.originlab.com/python/run-python-in-origin/",
+        doc_family="python",
+        doc_kind="guide",
+        keywords=("embedded python", "origin", "originpro", "packages"),
+    ),
+    OfficialDocPage(
+        path="python/external-python",
+        title="External Python",
+        summary="Official documentation for controlling Origin from an external Python runtime.",
+        url="https://docs.originlab.com/externalpython",
+        doc_family="python",
+        doc_kind="guide",
+        keywords=("external python", "originpro", "server application", "automation"),
+    ),
+    OfficialDocPage(
+        path="python/running-python-code",
+        title="Running Python Code",
+        summary="Official entry point for running Python code in Origin workflows.",
+        url="https://docs.originlab.com/python/running_python_code/",
+        doc_family="python",
+        doc_kind="guide",
+        keywords=("run python", "embedded", "script", "origin"),
+    ),
+    OfficialDocPage(
+        path="python/code-samples",
+        title="Python Code Samples",
+        summary="Official Python examples for Origin workflows.",
+        url="https://docs.originlab.com/python/examples",
+        doc_family="python",
+        doc_kind="examples",
+        keywords=("python", "samples", "examples", "originpro"),
+    ),
+    OfficialDocPage(
         path="python/originpro-api",
         title="originpro API class list",
         summary="Official Doxygen-style class list for the originpro Python package.",
-        body=(
-            "The official originpro class list includes analysis.LinearFit, analysis.NLFit, "
-            "base.BaseLayer, base.BaseObject, base.BasePage, graph.Axis, graph.GLayer, "
-            "graph.GPage, graph.Plot, image.IPage, matrix.MBook, matrix.MSheet, notes.Notes, "
-            "pe.Folder, worksheet.WBook, and worksheet.WSheet."
-        ),
+        url=OFFICIAL_URLS["originpro_api"],
+        doc_family="originpro_api",
+        doc_kind="class_index",
         keywords=("originpro", "api", "class list", "LinearFit", "NLFit", "WBook", "WSheet"),
-        metadata={"url": OFFICIAL_URLS["originpro_api"]},
+        body=(
+            "The class list is the official map for originpro automation classes. Use the "
+            "class-specific children under this path before relying on inferred method names."
+        ),
     ),
-    KnowledgeEntry(
-        collection="official_docs",
+    OfficialDocPage(
+        path="python/originpro-api/analysis/LinearFit",
+        title="originpro.analysis.LinearFit",
+        summary="Official class page for linear fitting through Origin's fitting engine.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1analysis_1_1LinearFit.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "analysis", "LinearFit", "set_data", "result", "report"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/analysis/NLFit",
+        title="originpro.analysis.NLFit",
+        summary="Official class page for nonlinear fitting through Origin's fitting engine.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1analysis_1_1NLFit.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "analysis", "NLFit", "nonlinear", "fitting"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/graph/Axis",
+        title="originpro.graph.Axis",
+        summary="Official class page for graph axis scale, limits, step, and title APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1graph_1_1Axis.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "graph", "Axis", "scale", "limits", "title"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/graph/GLayer",
+        title="originpro.graph.GLayer",
+        summary="Official class page for graph layer APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1graph_1_1GLayer.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "graph", "GLayer", "layer", "plot"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/graph/GPage",
+        title="originpro.graph.GPage",
+        summary="Official class page for graph page APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1graph_1_1GPage.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "graph", "GPage", "page", "export"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/graph/Plot",
+        title="originpro.graph.Plot",
+        summary="Official class page for data plot APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1graph_1_1Plot.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "graph", "Plot", "data plot", "style"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/worksheet/WBook",
+        title="originpro.worksheet.WBook",
+        summary="Official class page for workbook APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1worksheet_1_1WBook.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "worksheet", "WBook", "workbook", "add_sheet"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/worksheet/WSheet",
+        title="originpro.worksheet.WSheet",
+        summary="Official class page for worksheet APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1worksheet_1_1WSheet.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "worksheet", "WSheet", "columns", "data"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/matrix/MBook",
+        title="originpro.matrix.MBook",
+        summary="Official class page for matrix book APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1matrix_1_1MBook.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "matrix", "MBook", "matrix book"),
+    ),
+    OfficialDocPage(
+        path="python/originpro-api/matrix/MSheet",
+        title="originpro.matrix.MSheet",
+        summary="Official class page for matrix sheet APIs.",
+        url="https://docs.originlab.com/originpro/classoriginpro_1_1matrix_1_1MSheet.html",
+        doc_family="originpro_api",
+        doc_kind="class",
+        keywords=("originpro", "matrix", "MSheet", "matrix sheet"),
+    ),
+    OfficialDocPage(
         path="labtalk",
         title="LabTalk language reference",
         summary=(
             "Official LabTalk reference for commands, functions, macros, objects, and variables."
         ),
-        body=(
-            "The LabTalk reference is the official source for command syntax, object model "
-            "details, functions, macros, system variables, and reference tables."
-        ),
-        keywords=("labtalk", "official", "commands", "functions", "objects", "system variables"),
-        metadata={"url": OFFICIAL_URLS["labtalk_reference"]},
+        url=OFFICIAL_URLS["labtalk_reference"],
+        doc_family="labtalk",
+        doc_kind="chapter",
+        keywords=("labtalk", "official", "commands", "functions", "objects", "variables"),
     ),
-    KnowledgeEntry(
-        collection="official_docs",
-        path="labtalk/command-reference",
+    OfficialDocPage(
+        path="labtalk/commands",
         title="LabTalk command reference by category",
         summary="Official command categories for LabTalk scripts.",
-        body=(
-            "Official LabTalk command categories include Data Manipulation and Calculation, "
-            "Display Control, Project Management, Control Flow, Input and Output, Script "
-            "Management, External Access, and Time."
-        ),
+        url=OFFICIAL_URLS["labtalk_commands"],
+        doc_family="labtalk",
+        doc_kind="category_index",
         keywords=("labtalk", "command reference", "category", "script"),
-        metadata={"url": OFFICIAL_URLS["labtalk_commands"]},
+        body=(
+            "The command category page is the boundary map for LabTalk command families. Browse "
+            "children to select a category before issuing or composing LabTalk."
+        ),
     ),
-    KnowledgeEntry(
-        collection="official_docs",
+    OfficialDocPage(
+        path="labtalk/command-reference",
+        title="LabTalk command reference by category",
+        summary="Compatibility path for the official LabTalk command category index.",
+        url=OFFICIAL_URLS["labtalk_commands"],
+        doc_family="labtalk",
+        doc_kind="category_index",
+        keywords=("labtalk", "command reference", "category", "script", "commands"),
+        body=(
+            "This path preserves the earlier origin-mcp official_docs topic name. Prefer "
+            "labtalk/commands for category browsing."
+        ),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/data-manipulation-and-calculation",
+        title="Data Manipulation and Calculation commands",
+        summary="Official category for commands that change data or run calculations.",
+        url="https://docs.originlab.com/labtalk/ref/data-manipulation-and-calculation",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "data", "calculation", "average", "integrate", "sort", "plot"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/display-control",
+        title="Display Control commands",
+        summary="Official category for graph windows, axes, layers, labels, legends, and pages.",
+        url="https://docs.originlab.com/labtalk/ref/display-control",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "display", "axis", "legend", "layer", "page", "window"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/project-management",
+        title="Project Management commands",
+        summary="Official category for managing Origin projects and windows.",
+        url="https://docs.originlab.com/labtalk/ref/project-management",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "project", "window", "save", "rename", "delete"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/control-flow",
+        title="Control Flow commands",
+        summary="Official category for LabTalk script sequencing.",
+        url="https://docs.originlab.com/labtalk/ref/control-flow",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "control flow", "script", "loop", "condition"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/input-and-output",
+        title="Input and Output commands",
+        summary="Official category for file, system, and user I/O commands.",
+        url="https://docs.originlab.com/labtalk/ref/input-and-output",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "input", "output", "file", "system"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/script-management",
+        title="Script Management commands",
+        summary="Official category for scripts, macros, and menus.",
+        url="https://docs.originlab.com/labtalk/ref/script-management",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "script", "macro", "menu"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/external-access",
+        title="External Access commands",
+        summary="Official category for external DLL and DDE-style access.",
+        url="https://docs.originlab.com/labtalk/ref/external-access",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "external", "dll", "dde"),
+    ),
+    OfficialDocPage(
+        path="labtalk/commands/time",
+        title="Time commands",
+        summary="Official category for timer operations and repeated scheduled scripts.",
+        url="https://docs.originlab.com/labtalk/ref/time",
+        doc_family="labtalk",
+        doc_kind="command_category",
+        keywords=("labtalk", "time", "timer", "schedule"),
+    ),
+    OfficialDocPage(
+        path="labtalk/functions",
+        title="LabTalk function reference",
+        summary="Official function reference grouped by function category.",
+        url="https://docs.originlab.com/labtalk/ref/function-reference",
+        doc_family="labtalk",
+        doc_kind="function_index",
+        keywords=("labtalk", "functions", "statistics", "signal processing", "text"),
+    ),
+    OfficialDocPage(
+        path="labtalk/objects",
+        title="LabTalk object reference",
+        summary="Official reference for LabTalk objects, properties, and methods.",
+        url="https://docs.originlab.com/labtalk/ref/object-reference",
+        doc_family="labtalk",
+        doc_kind="object_index",
+        keywords=("labtalk", "objects", "properties", "methods", "page", "wks", "layer"),
+    ),
+    OfficialDocPage(
         path="x-function",
         title="X-Function reference",
         summary="Official category index for Origin X-Functions.",
-        body=(
-            "The official X-Function reference is organized into Data Exploration, Data "
-            "Manipulation, Database Access, Fitting, Graph Manipulation, Image, Import and Export, "
-            "Mathematics, Miscellaneous, Plotting, Signal Processing, Spectroscopy, Statistics, "
-            "Utilities, Vision, Function Details, and an alphabetic list."
-        ),
+        url=OFFICIAL_URLS["xfunction_reference"],
+        doc_family="x_function",
+        doc_kind="category_index",
         keywords=("x-function", "official", "fitting", "plotting", "statistics"),
-        metadata={"url": OFFICIAL_URLS["xfunction_reference"]},
     ),
-    KnowledgeEntry(
-        collection="official_docs",
+    OfficialDocPage(
+        path="x-function/data-exploration",
+        title="Data Exploration X-Functions",
+        summary="Official X-Function category for data exploration tools.",
+        url="https://docs.originlab.com/x-function/ref/data-exploration/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "data exploration", "explore"),
+    ),
+    OfficialDocPage(
+        path="x-function/data-manipulation",
+        title="Data Manipulation X-Functions",
+        summary="Official X-Function category for data manipulation tools.",
+        url="https://docs.originlab.com/x-function/ref/data-manipulation/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "data manipulation", "worksheet", "transform"),
+    ),
+    OfficialDocPage(
+        path="x-function/database-access",
+        title="Database Access X-Functions",
+        summary="Official X-Function category for database access.",
+        url="https://docs.originlab.com/x-function/ref/database-access/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "database", "access"),
+    ),
+    OfficialDocPage(
+        path="x-function/fitting",
+        title="Fitting X-Functions",
+        summary="Official X-Function category for fitting tools.",
+        url="https://docs.originlab.com/x-function/ref/fitting/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "fitting", "fitlr", "fitpoly", "nlfit"),
+    ),
+    OfficialDocPage(
+        path="x-function/graph-manipulation",
+        title="Graph Manipulation X-Functions",
+        summary="Official X-Function category for graph manipulation.",
+        url="https://docs.originlab.com/x-function/ref/graph-manipulation/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "graph", "manipulation", "legend", "layer"),
+    ),
+    OfficialDocPage(
+        path="x-function/image",
+        title="Image X-Functions",
+        summary="Official X-Function category for image operations.",
+        url="https://docs.originlab.com/x-function/ref/image/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "image", "import", "export"),
+    ),
+    OfficialDocPage(
+        path="x-function/import-and-export",
+        title="Import and Export X-Functions",
+        summary="Official X-Function category for import and export workflows.",
+        url="https://docs.originlab.com/x-function/ref/import-and-export/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "import", "export", "file", "data connector"),
+    ),
+    OfficialDocPage(
+        path="x-function/mathematics",
+        title="Mathematics X-Functions",
+        summary="Official X-Function category for mathematical operations.",
+        url="https://docs.originlab.com/x-function/ref/mathematics/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "mathematics", "math"),
+    ),
+    OfficialDocPage(
+        path="x-function/miscellaneous",
+        title="Miscellaneous X-Functions",
+        summary="Official X-Function category for miscellaneous operations.",
+        url="https://docs.originlab.com/x-function/ref/miscellaneous/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "miscellaneous"),
+    ),
+    OfficialDocPage(
         path="x-function/plotting",
         title="Plotting X-Functions",
         summary="Official Origin plotting X-Function category.",
-        body=(
-            "The official plotting category includes plotm, plotmatrix, plotms, plotvm, plotxy, "
-            "plotxyz, plot_prob, plot_windrose, and other specialized plotting X-Functions. "
-            "origin-mcp currently uses plotxyz and plotm for several Plot Type ID routes."
-        ),
+        url=OFFICIAL_URLS["xfunction_plotting"],
+        doc_family="x_function",
+        doc_kind="xfunction_category",
         keywords=("x-function", "plotting", "plotm", "plotxy", "plotxyz", "plotvm"),
-        metadata={"url": OFFICIAL_URLS["xfunction_plotting"]},
+        body=(
+            "The plotting category is the official boundary for X-Functions such as plotm, "
+            "plotmatrix, plotms, plotvm, plotxy, plotxyz, plot_prob, and plot_windrose."
+        ),
+    ),
+    OfficialDocPage(
+        path="x-function/signal-processing",
+        title="Signal Processing X-Functions",
+        summary="Official X-Function category for signal processing tools.",
+        url="https://docs.originlab.com/x-function/ref/signal-processing/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "signal processing", "smooth", "filter", "peak"),
+    ),
+    OfficialDocPage(
+        path="x-function/spectroscopy",
+        title="Spectroscopy X-Functions",
+        summary="Official X-Function category for spectroscopy tools.",
+        url="https://docs.originlab.com/x-function/ref/spectroscopy/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "spectroscopy"),
+    ),
+    OfficialDocPage(
+        path="x-function/statistics",
+        title="Statistics X-Functions",
+        summary="Official X-Function category for statistics tools.",
+        url="https://docs.originlab.com/x-function/ref/statistics/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "statistics", "moments", "summary"),
+    ),
+    OfficialDocPage(
+        path="x-function/utilities",
+        title="Utilities X-Functions",
+        summary="Official X-Function category for utility functions.",
+        url="https://docs.originlab.com/x-function/ref/utilities/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "utilities"),
+    ),
+    OfficialDocPage(
+        path="x-function/vision",
+        title="Vision X-Functions",
+        summary="Official X-Function category for vision tools.",
+        url="https://docs.originlab.com/x-function/ref/vision/",
+        doc_family="x_function",
+        doc_kind="xfunction_category",
+        keywords=("x-function", "vision"),
+    ),
+    OfficialDocPage(
+        path="x-function/function-details",
+        title="Function Details",
+        summary="Official X-Function details index.",
+        url="https://docs.originlab.com/x-function/ref/function-details/",
+        doc_family="x_function",
+        doc_kind="detail_index",
+        keywords=("x-function", "function details", "parameters"),
+    ),
+    OfficialDocPage(
+        path="x-function/alphabetic-list",
+        title="Alphabetic List to X-Functions",
+        summary="Official alphabetic X-Function lookup.",
+        url="https://docs.originlab.com/x-function/ref/function-list",
+        doc_family="x_function",
+        doc_kind="alphabetic_index",
+        keywords=("x-function", "alphabetic", "lookup"),
     ),
 )
+
+
+def _official_doc_pages(version: str | None = None) -> list[OfficialDocPage]:
+    pages = merge_records(list(OFFICIAL_DOC_PAGES), load_generated_records())
+    validate_records(pages)
+    return records_for_version(pages, version)
+
+
+def _official_doc_entries(version: str | None = None) -> list[KnowledgeEntry]:
+    return [
+        KnowledgeEntry(
+            collection="official_docs",
+            path=page.path,
+            title=page.title,
+            summary=page.summary,
+            body=page.body
+            or (
+                f"{page.title} is an OriginLab official documentation page. Use this entry as "
+                "the upstream boundary before generating LabTalk, X-Function, or originpro API "
+                "syntax that is not already covered by a higher-level origin-mcp wrapper."
+            ),
+            keywords=("official", page.doc_family, page.doc_kind, *page.keywords),
+            metadata={
+                "source": "OriginLab official documentation",
+                "doc_family": page.doc_family,
+                "doc_kind": page.doc_kind,
+                "url": page.url,
+                "official_url": page.url,
+                "versions": list(page.versions),
+                "base_version": BASE_OFFICIAL_DOC_VERSION,
+                "version_status": page.version_status or "baseline",
+                "locale": page.locale,
+                "verified": OFFICIAL_DOC_VERIFIED,
+            },
+        )
+        for page in _official_doc_pages(version)
+    ]
+
+
+OFFICIAL_DOC_ENTRIES: tuple[KnowledgeEntry, ...] = tuple(_official_doc_entries())
 
 
 PYTHON_API_ENTRIES: tuple[KnowledgeEntry, ...] = (
@@ -930,7 +1347,6 @@ def browse_knowledge(
     path: str | None = None,
     version: str | None = None,
 ) -> dict[str, Any]:
-    entries = _entries()
     if collection is None:
         return {
             "collections": [
@@ -939,6 +1355,7 @@ def browse_knowledge(
         }
 
     collection = _normalize_collection(collection)
+    entries = _entries(official_docs_version=version if collection == "official_docs" else None)
     path_key = _normalize_path(path)
     scoped = [entry for entry in entries if entry.collection == collection]
     if version:
@@ -971,9 +1388,12 @@ def query_knowledge(
     if limit < 1:
         raise ValueError("limit must be at least 1.")
 
-    entries = _entries()
     if collection is not None:
         collection = _normalize_collection(collection)
+    entries = _entries(
+        official_docs_version=version if collection == "official_docs" else None
+    )
+    if collection is not None:
         entries = [entry for entry in entries if entry.collection == collection]
     if version:
         entries = [entry for entry in entries if _entry_supports_version(entry, version)]
@@ -998,11 +1418,11 @@ def query_knowledge(
     }
 
 
-def _entries() -> list[KnowledgeEntry]:
+def _entries(official_docs_version: str | None = None) -> list[KnowledgeEntry]:
     return [
         *_tool_entries(),
         *REFERENCE_ENTRIES,
-        *OFFICIAL_DOC_ENTRIES,
+        *_official_doc_entries(official_docs_version),
         *_plot_type_entries(),
         *_analysis_entries(),
         *PYTHON_API_ENTRIES,

@@ -26,7 +26,8 @@ pull request。
 - 运行常见 Origin 分析，包括拟合、平滑、积分、微分、寻峰和描述统计。
 - 将分析输出工作表读回 JSON，并在可能时规范化拟合参数和指标。
 - 搜索和浏览本地 Origin 知识库，覆盖 MCP 工具、Plot Type ID、图形格式化、
-  分析适配器、OriginPro API 笔记和 LabTalk/X-Function 路由。
+  分析适配器、OriginPro API 笔记，以及带版本元数据的 OriginLab 官方
+  LabTalk/X-Function/API 文档边界图。
 - 导出图形、预览导出图像、保存项目，并安全释放或关闭 Origin。
 - 通过本地 Origin GUI bridge 路由 Origin 操作，把 MCP server 运行环境与 Origin
   自动化运行环境分离。
@@ -111,7 +112,10 @@ MCP server 默认使用 20 个工具的 compact profile，降低模型选工具�
 已实现工具面更新。
 
 当前集合包括 `mcp_tools`、`reference`、`python_api`、`labtalk` 和 `official_docs`。
-知识库是面向操作的精选索引；需要官方精确语法的条目会带 OriginLab 官方文档 URL。
+知识库是面向操作的精选索引；需要官方精确语法的条目会带 OriginLab 官方文档 URL，
+以及 `doc_family`、`doc_kind`、`versions` 和验证日期等元数据。
+可选脚本 `scripts/update_official_docs_index.py` 可刷新官方文档生成索引覆盖层，用于
+LabTalk command 页面、X-Function 页面和 originpro API 页面。
 
 ## 安全说明
 

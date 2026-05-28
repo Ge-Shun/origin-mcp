@@ -30,8 +30,8 @@ directly instead of only generating standalone plotting code.
 - Read analysis output worksheets back as JSON and normalize fit parameters and
   metrics where possible.
 - Search and browse a local Origin knowledge base covering MCP tools, Plot Type
-  IDs, graph formatting, analysis adapters, OriginPro API notes, and
-  LabTalk/X-Function routes.
+  IDs, graph formatting, analysis adapters, OriginPro API notes, and a
+  versioned official OriginLab LabTalk/X-Function/API documentation boundary map.
 - Export figures, preview exported images, save projects, and release or close
   Origin safely.
 - Route Origin operations through a local Origin GUI bridge so the MCP server
@@ -121,7 +121,11 @@ docstrings so it tracks the implemented tool surface.
 
 Collections include `mcp_tools`, `reference`, `python_api`, `labtalk`, and
 `official_docs`. The knowledge base is a curated operational index; official
-OriginLab documentation entries include URLs for exact upstream syntax.
+OriginLab documentation entries include URLs plus `doc_family`, `doc_kind`,
+`versions`, and verification metadata for exact upstream syntax.
+The optional `scripts/update_official_docs_index.py` crawler can refresh a
+generated official-doc overlay for LabTalk command pages, X-Function pages, and
+originpro API pages.
 
 ## Safety
 

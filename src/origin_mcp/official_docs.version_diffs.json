@@ -1,0 +1,22 @@
+{
+  "base_version": "2026",
+  "diffs": {
+    "2024": {
+      "added": [],
+      "changed": [],
+      "removed": []
+    },
+    "2025": {
+      "added": [],
+      "changed": [],
+      "removed": []
+    }
+  },
+  "notes": "Delta overlay only. The 2026 generated index is the baseline; 2024 and 2025 inherit baseline records unless listed in added, changed, or removed.",
+  "schema_version": 1,
+  "versions": [
+    "2024",
+    "2025",
+    "2026"
+  ]
+}
