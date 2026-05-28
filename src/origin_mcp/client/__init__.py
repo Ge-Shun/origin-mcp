@@ -6,14 +6,16 @@ from .export import _ExportMixin
 from .graph_formatting import _GraphFormattingMixin
 from .graph_style import _GraphStyleMixin
 from .lifecycle import _LifecycleMixin
-from .plot import _PlotMixin
+from .plot_routing import _PlotRoutingMixin
+from .table_plot import _TablePlotMixin
 from .worksheet import _WorksheetMixin
 
 
 class OriginClient(
     _LifecycleMixin,
     _WorksheetMixin,
-    _PlotMixin,
+    _TablePlotMixin,
+    _PlotRoutingMixin,
     _GraphFormattingMixin,
     _GraphStyleMixin,
     _AnalysisMixin,
