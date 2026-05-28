@@ -54,21 +54,6 @@ Fetch and follow this bootstrap guide end to end:
 https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md
 ```
 
-## 安装
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-python -m pip install -e ".[origin]"
-```
-
-如果你的 Origin 安装环境已经能提供 `originpro`：
-
-```powershell
-python -m pip install -e .
-```
-
 ## MCP 配置
 
 MCP 客户端配置示例：
