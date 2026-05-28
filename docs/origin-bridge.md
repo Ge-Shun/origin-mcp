@@ -70,7 +70,7 @@ $env:ORIGIN_MCP_BRIDGE_TOKEN = "replace-with-a-local-secret"
 
 Existing tool functions keep their original names and route through an
 `OriginClient`-style bridge proxy. The bridge allowlist is tested against
-`server.py` so new public client calls must be added deliberately. Explicit
+the tool modules so new public client calls must be added deliberately. Explicit
 `origin_bridge_*` functions remain available as diagnostics and bridge controls,
 with most of them exposed only in the full tool profile.
 
@@ -82,7 +82,7 @@ MCP clients by starting the server with `ORIGIN_MCP_TOOL_PROFILE=full`.
 
 Bridge-specific tools provide diagnostics and a task surface for validating and
 managing the split-process design. The exact callable catalog is generated from
-`src/origin_mcp/server.py` docstrings and can be searched through the knowledge
+`src/origin_mcp/tools/*.py` docstrings and can be searched through the knowledge
 base instead of duplicated here:
 
 ```json

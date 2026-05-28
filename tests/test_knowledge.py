@@ -13,13 +13,7 @@ def test_browse_knowledge_lists_collections() -> None:
 
 
 def test_mcp_tool_knowledge_covers_all_server_origin_tools() -> None:
-    server_path = Path(server.__file__)
-    module = ast.parse(server_path.read_text(encoding="utf-8"))
-    tool_names = {
-        node.name
-        for node in module.body
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("origin_")
-    }
+    tool_names = _tool_module_function_names()
 
     groups = browse_knowledge("mcp_tools")["children"]
     indexed = set()
@@ -32,6 +26,21 @@ def test_mcp_tool_knowledge_covers_all_server_origin_tools() -> None:
         )
 
     assert tool_names <= indexed
+
+
+def _tool_module_function_names() -> set[str]:
+    tools_dir = Path(server.__file__).with_name("tools")
+    names: set[str] = set()
+    for path in tools_dir.glob("*.py"):
+        if path.name.startswith("_"):
+            continue
+        module = ast.parse(path.read_text(encoding="utf-8"))
+        names.update(
+            node.name
+            for node in module.body
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("origin_")
+        )
+    return names
 
 
 def test_browse_reference_plot_type_entry() -> None:

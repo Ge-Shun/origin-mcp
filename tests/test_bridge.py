@@ -11,6 +11,7 @@ import pytest
 
 import origin_mcp.bridge as bridge
 import origin_mcp.server as mcp_server
+import origin_mcp.tools.bridge as bridge_tools
 from origin_mcp.bridge import OriginBridgeServer, OriginEmbeddedBridgeServer
 from origin_mcp.bridge_client import OriginBridgeClient, OriginBridgeConfig, OriginBridgeProxy
 from origin_mcp.errors import OriginBridgeError
@@ -291,7 +292,6 @@ def test_bridge_allowlist_covers_all_server_origin_client_calls() -> None:
     source = server_path.read_text(encoding="utf-8")
     assert "OriginClient" not in source
     assert "_direct_client" not in source
-    module = ast.parse(source)
     methods: set[str] = set()
 
     class Visitor(ast.NodeVisitor):
@@ -300,7 +300,11 @@ def test_bridge_allowlist_covers_all_server_origin_client_calls() -> None:
                 methods.add(node.attr)
             self.generic_visit(node)
 
-    Visitor().visit(module)
+    tools_dir = server_path.with_name("tools")
+    for path in tools_dir.glob("*.py"):
+        if path.name.startswith("_"):
+            continue
+        Visitor().visit(ast.parse(path.read_text(encoding="utf-8")))
 
     public_methods = {method for method in methods if not method.startswith("_")}
     assert public_methods <= bridge.ALLOWED_CLIENT_METHODS
@@ -453,7 +457,7 @@ def test_bridge_task_history_is_pruned() -> None:
 
 def test_server_bridge_status_wraps_response(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        mcp_server,
+        bridge_tools,
         "request_bridge",
         lambda method, **_kwargs: {"bridge": method, "version": "test"},
     )
@@ -468,7 +472,7 @@ def test_server_bridge_status_reports_connection_error(monkeypatch: pytest.Monke
     def fail(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise OriginBridgeError("bridge unavailable", "origin_bridge_unavailable")
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fail)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fail)
 
     result = mcp_server.origin_bridge_status()
 
@@ -488,7 +492,7 @@ def test_origin_doctor_reports_reachable_bridge(
         calls.append(method)
         return {"bridge": "origin-mcp-bridge", "taskable_methods": ["run_labtalk"]}
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
 
     result = mcp_server.origin_doctor(status_path=str(status_path))
 
@@ -509,7 +513,7 @@ def test_origin_doctor_reports_unavailable_bridge(
     def fake_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise OriginBridgeError("bridge unavailable", "origin_bridge_unavailable")
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
 
     result = mcp_server.origin_doctor(status_path=str(status_path))
 
@@ -527,7 +531,7 @@ def test_server_bridge_submit_task_wraps_response(monkeypatch: pytest.MonkeyPatc
         calls.append((method, params))
         return {"task": {"task_id": "abc", "status": "queued"}}
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
 
     result = mcp_server.origin_bridge_submit_task("run_labtalk", {"script": "type ok;"})
 
@@ -543,7 +547,7 @@ def test_server_bridge_plot_table_wraps_response(monkeypatch: pytest.MonkeyPatch
         calls.append((method, params))
         return {"graph": {"graph_name": "Graph1"}}
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
 
     result = mcp_server.origin_bridge_plot_table("data.csv", kind="scatter", y_cols=["y"])
 
@@ -561,7 +565,7 @@ def test_server_bridge_run_analysis_wraps_response(monkeypatch: pytest.MonkeyPat
         calls.append((method, params))
         return {"analysis": "smooth", "executed": True}
 
-    monkeypatch.setattr(mcp_server, "request_bridge", fake_request)
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
 
     result = mcp_server.origin_bridge_run_analysis("smooth", y_col="signal")
 

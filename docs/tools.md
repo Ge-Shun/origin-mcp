@@ -24,9 +24,9 @@ The aliases `expert` and `all` behave the same as `full`.
 ## Default Compact Tools
 
 The exact compact tool list is owned by `COMPACT_TOOL_NAMES` in
-`src/origin_mcp/server.py` and is reported by `origin_doctor`. The searchable
-tool catalog is generated from server docstrings and is available through the
-`mcp_tools` knowledge collection.
+`src/origin_mcp/tools/_shared.py` and is reported by `origin_doctor`. The
+searchable tool catalog is generated from tool module docstrings and is
+available through the `mcp_tools` knowledge collection.
 
 In compact mode, use `origin_query_knowledge` or `origin_browse_knowledge` to
 discover the right high-level workflow instead of choosing from every
@@ -48,7 +48,7 @@ Collections:
 
 - `mcp_tools`: origin-mcp tools grouped by workflow, such as worksheet,
   plotting, graph editing, analysis, export, and lifecycle control. Tool entries
-  are generated from `src/origin_mcp/server.py` docstrings so the index tracks
+  are generated from `src/origin_mcp/tools/*.py` docstrings so the index tracks
   the current MCP surface.
 - `reference`: Origin workflow notes, Plot Type ID entries, style modes,
   graph formatting behavior, chart routing, analysis adapters, and runtime

@@ -163,8 +163,9 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "entries, style modes, graph formatting behavior, analysis adapters, runtime "
             "compatibility, and official documentation links in the reference knowledge "
             "collection. Keep bridge startup, smoke testing, and user-facing installation "
-            "steps in docs/origin-bridge.md and README. Keep callable schemas and exact "
-            "tool registration behavior in src/origin_mcp/server.py."
+            "steps in docs/origin-bridge.md and README. Keep callable schemas in "
+            "src/origin_mcp/tools/*.py and exact tool registration behavior in "
+            "src/origin_mcp/tools/_shared.py plus src/origin_mcp/server.py."
         ),
         keywords=(
             "documentation",
@@ -177,7 +178,7 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         metadata={
             "tool_catalog": "mcp_tools knowledge collection",
             "workflow_guidance": "reference knowledge collection",
-            "tool_registration": "src/origin_mcp/server.py",
+            "tool_registration": "src/origin_mcp/tools/_shared.py and src/origin_mcp/server.py",
             "bridge_user_docs": "docs/origin-bridge.md",
         },
     ),
@@ -1045,25 +1046,28 @@ def _tool_entries() -> list[KnowledgeEntry]:
                         "Use docs/tools.md and the MCP tool schema for parameter-level details."
                     ),
                     keywords=(tool, group, tool.removeprefix("origin_")),
-                    metadata={"group": group, "source": "src/origin_mcp/server.py"},
+                    metadata={"group": group, "source": "src/origin_mcp/tools/*.py"},
                 )
             )
     return entries
 
 
 def _server_tool_docs() -> list[dict[str, str]]:
-    server_path = Path(__file__).with_name("server.py")
-    module = ast.parse(server_path.read_text(encoding="utf-8"))
     tools = []
-    for node in module.body:
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("origin_"):
-            tools.append(
-                {
-                    "name": node.name,
-                    "doc": ast.get_docstring(node) or "",
-                    "group": _tool_group_for_name(node.name),
-                }
-            )
+    tools_dir = Path(__file__).with_name("tools")
+    for tool_path in sorted(tools_dir.glob("*.py")):
+        if tool_path.name.startswith("_"):
+            continue
+        module = ast.parse(tool_path.read_text(encoding="utf-8"))
+        for node in module.body:
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("origin_"):
+                tools.append(
+                    {
+                        "name": node.name,
+                        "doc": ast.get_docstring(node) or "",
+                        "group": _tool_group_for_name(node.name),
+                    }
+                )
     return tools
 
 
