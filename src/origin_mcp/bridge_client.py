@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,10 +45,18 @@ class OriginBridgeConfig:
 
 
 class OriginBridgeClient:
-    """Small JSON-lines client for the Origin GUI bridge."""
+    """JSON-lines client for the Origin GUI bridge with a persistent connection.
+
+    The client transparently reconnects when the server closes the socket, so it
+    works with both the threaded bridge (which keeps the connection open) and the
+    embedded cooperative bridge (which services one request per connection).
+    """
 
     def __init__(self, config: OriginBridgeConfig | None = None) -> None:
         self.config = config or OriginBridgeConfig.from_env()
+        self._lock = threading.Lock()
+        self._socket: socket.socket | None = None
+        self._stream: Any = None
 
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         request_id = str(uuid.uuid4())
@@ -58,29 +67,45 @@ class OriginBridgeClient:
         }
         if self.config.token:
             payload["token"] = self.config.token
+        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
-        try:
-            with socket.create_connection(
-                (self.config.host, self.config.port),
-                timeout=self.config.timeout,
-            ) as connection:
-                connection.settimeout(self.config.timeout)
-                with connection.makefile("rwb") as stream:
-                    stream.write(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-                    stream.write(b"\n")
-                    stream.flush()
-                    line = stream.readline()
-        except OSError as exc:
-            raise OriginBridgeError(
-                (
-                    "Origin bridge is unavailable at "
-                    f"{self.config.host}:{self.config.port}: {exc}"
-                ),
-                "origin_bridge_unavailable",
-            ) from exc
+        with self._lock:
+            line: bytes | None = None
+            last_error: OSError | None = None
+            for attempt in (1, 2):
+                try:
+                    self._ensure_connection_locked()
+                    assert self._stream is not None
+                    self._stream.write(encoded)
+                    self._stream.flush()
+                    line = self._stream.readline()
+                    if not line:
+                        # Server closed the socket. Retry once with a fresh connection.
+                        self._close_locked()
+                        if attempt == 1:
+                            continue
+                        raise OriginBridgeError(
+                            "Origin bridge closed the connection without a response.",
+                        )
+                    break
+                except OSError as exc:
+                    last_error = exc
+                    self._close_locked()
+                    if attempt == 1:
+                        continue
+                    raise OriginBridgeError(
+                        (
+                            "Origin bridge is unavailable at "
+                            f"{self.config.host}:{self.config.port}: {exc}"
+                        ),
+                        "origin_bridge_unavailable",
+                    ) from exc
+            if line is None:
+                # Defensive: the loop above always sets line or raises.
+                raise OriginBridgeError(
+                    "Origin bridge did not return a response.",
+                ) from last_error
 
-        if not line:
-            raise OriginBridgeError("Origin bridge closed the connection without a response.")
         try:
             response = json.loads(line.decode("utf-8"))
         except json.JSONDecodeError as exc:
@@ -95,6 +120,43 @@ class OriginBridgeClient:
             )
         result = response.get("result")
         return result if isinstance(result, dict) else {"result": result}
+
+    def close(self) -> None:
+        with self._lock:
+            self._close_locked()
+
+    def _ensure_connection_locked(self) -> None:
+        if self._socket is not None:
+            return
+        connection = socket.create_connection(
+            (self.config.host, self.config.port),
+            timeout=self.config.timeout,
+        )
+        connection.settimeout(self.config.timeout)
+        self._socket = connection
+        self._stream = connection.makefile("rwb")
+
+    def _close_locked(self) -> None:
+        stream = self._stream
+        sock = self._socket
+        self._stream = None
+        self._socket = None
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    def __del__(self) -> None:  # best-effort cleanup
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 class OriginBridgeProxy:
@@ -121,6 +183,19 @@ class OriginBridgeProxy:
         return call
 
 
+_shared_client_lock = threading.Lock()
+_shared_clients: dict[OriginBridgeConfig, OriginBridgeClient] = {}
+
+
+def _shared_client(config: OriginBridgeConfig) -> OriginBridgeClient:
+    with _shared_client_lock:
+        client = _shared_clients.get(config)
+        if client is None:
+            client = OriginBridgeClient(config)
+            _shared_clients[config] = client
+        return client
+
+
 def request_bridge(
     method: str,
     params: dict[str, Any] | None = None,
@@ -131,7 +206,7 @@ def request_bridge(
     timeout: float | None = None,
 ) -> dict[str, Any]:
     config = OriginBridgeConfig.from_env(host=host, port=port, token=token, timeout=timeout)
-    return OriginBridgeClient(config).request(method, params=params)
+    return _shared_client(config).request(method, params=params)
 
 
 def _bridge_json_safe(value: Any) -> Any:

@@ -144,11 +144,15 @@ def resolve_analysis_adapter(name: str, origin_version: float | int | None) -> A
         )
     if adapter is None:
         supported = ", ".join(sorted(ANALYSIS_ADAPTERS))
-        raise OriginOperationError(f"Unsupported analysis type: {name}. Supported: {supported}")
+        raise OriginOperationError(
+            f"Unsupported analysis type: {name}. Supported: {supported}",
+            error_code="unsupported_analysis_type",
+        )
     if not adapter.supports(origin_version):
         raise OriginOperationError(
             f"Analysis '{adapter.name}' requires Origin >= {adapter.minimum_origin_version}; "
-            f"detected {origin_version}."
+            f"detected {origin_version}.",
+            error_code="unsupported_origin_version",
         )
     return adapter
 

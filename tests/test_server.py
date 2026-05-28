@@ -55,7 +55,12 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
 
 
 def test_error_response_includes_stable_error_code() -> None:
-    result = _error(OriginOperationError("Worksheet not found: [Book1]Sheet1"))
+    result = _error(
+        OriginOperationError(
+            "Worksheet not found: [Book1]Sheet1",
+            error_code="worksheet_not_found",
+        )
+    )
 
     assert result["ok"] is False
     assert result["error_code"] == "worksheet_not_found"
@@ -72,11 +77,18 @@ def test_error_response_codes_dependency_failures() -> None:
 def test_error_response_codes_unsupported_analysis() -> None:
     result = _error(
         OriginOperationError(
-            "Unsupported analysis type: nope. Supported: linear_fit, polynomial_fit"
+            "Unsupported analysis type: nope. Supported: linear_fit, polynomial_fit",
+            error_code="unsupported_analysis_type",
         )
     )
 
     assert result["error_code"] == "unsupported_analysis_type"
+
+
+def test_error_response_defaults_for_unmarked_operation_errors() -> None:
+    result = _error(OriginOperationError("something went wrong"))
+
+    assert result["error_code"] == "origin_operation_failed"
 
 
 def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(

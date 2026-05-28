@@ -8,12 +8,9 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
-from origin_mcp.bridge_client import OriginBridgeProxy
+from origin_mcp.bridge_client import OriginBridgeConfig, OriginBridgeProxy
 from origin_mcp.errors import (
-    OriginBridgeError,
-    OriginDependencyError,
     OriginMcpError,
-    OriginOperationError,
 )
 from origin_mcp.models import ToolResult
 
@@ -73,8 +70,29 @@ def _mcp_tool() -> Any:
 
 
 class _BridgeOnlyClient:
+    """Config-keyed singleton facade around an OriginBridgeProxy.
+
+    The proxy holds a persistent TCP connection inside its OriginBridgeClient,
+    so reusing it across tool calls avoids re-opening the socket. The cached
+    proxy is rebuilt whenever the bridge configuration (host/port/token/
+    timeout) changes — most importantly during tests that monkeypatch env vars.
+    """
+
+    def __init__(self) -> None:
+        self._proxy: OriginBridgeProxy | None = None
+        self._config: OriginBridgeConfig | None = None
+
+    def _get_proxy(self) -> OriginBridgeProxy:
+        config = OriginBridgeConfig.from_env()
+        if self._proxy is None or self._config != config:
+            self._config = config
+            self._proxy = OriginBridgeProxy(config)
+        return self._proxy
+
     def __getattr__(self, name: str) -> Any:
-        return getattr(OriginBridgeProxy(), name)
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._get_proxy(), name)
 
 
 client = _BridgeOnlyClient()
@@ -105,37 +123,12 @@ def _error(exc: Exception) -> dict[str, Any]:
 
 
 def _error_code(exc: Exception) -> str:
-    if isinstance(exc, OriginBridgeError):
-        return exc.error_code
-    if isinstance(exc, OriginDependencyError):
-        return "origin_dependency_unavailable"
     if isinstance(exc, ValidationError):
         return "invalid_request"
+    if isinstance(exc, OriginMcpError):
+        return exc.error_code
     if isinstance(exc, ValueError):
         return "invalid_request"
-    if isinstance(exc, OriginOperationError):
-        message = str(exc).lower()
-        if "outside origin_mcp_allowed_roots" in message:
-            return "path_not_allowed"
-        if "file does not exist" in message:
-            return "file_not_found"
-        if "path is not a file" in message:
-            return "invalid_file_path"
-        if "unsupported data file extension" in message:
-            return "unsupported_file_type"
-        if "unsupported analysis type" in message:
-            return "unsupported_analysis_type"
-        if "worksheet not found" in message:
-            return "worksheet_not_found"
-        if "graph not found" in message:
-            return "graph_not_found"
-        if "labtalk" in message and "not available" in message:
-            return "labtalk_unavailable"
-        if "requires origin >=" in message:
-            return "unsupported_origin_version"
-        if "not supported by this origin/originpro environment" in message:
-            return "unsupported_origin_feature"
-        return "origin_operation_failed"
     return "unexpected_error"
 
 

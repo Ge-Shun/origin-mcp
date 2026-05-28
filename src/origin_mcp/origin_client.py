@@ -243,7 +243,8 @@ class OriginClient:
         requirement = f" Requires Origin >= {minimum}." if minimum else ""
         raise OriginOperationError(
             f"{operation} is not supported by this Origin/originpro environment. "
-            f"Detected Origin version: {version}.{requirement} {note}"
+            f"Detected Origin version: {version}.{requirement} {note}",
+            error_code="unsupported_origin_feature",
         )
 
     def new_project(self, show: bool = True) -> dict[str, Any]:
@@ -338,7 +339,10 @@ class OriginClient:
         op = self.op
         func = getattr(op, "lt_exec", None)
         if not callable(func):
-            raise OriginOperationError("originpro.lt_exec is not available in this environment.")
+            raise OriginOperationError(
+                "originpro.lt_exec is not available in this environment.",
+                error_code="labtalk_unavailable",
+            )
 
         result = func(script)
         return {"result": result}
@@ -3411,7 +3415,10 @@ class OriginClient:
                 return graph
 
         if graph_name:
-            raise OriginOperationError(f"Graph not found: {graph_name}")
+            raise OriginOperationError(
+                f"Graph not found: {graph_name}",
+                error_code="graph_not_found",
+            )
 
         raise OriginOperationError("No active graph found. Create or name a graph first.")
 
@@ -4606,7 +4613,10 @@ class OriginClient:
             return pd.read_csv(path, sep=delimiter, engine="python", **read_kwargs)
         if suffix == ".csv":
             return pd.read_csv(path, sep=delimiter or ",", **read_kwargs)
-        raise OriginOperationError(f"Unsupported data file extension: {path.suffix}")
+        raise OriginOperationError(
+            f"Unsupported data file extension: {path.suffix}",
+            error_code="unsupported_file_type",
+        )
 
     @staticmethod
     def _labtalk_text(text: str) -> str:
@@ -4655,9 +4665,15 @@ class OriginClient:
     def _validate_file(path: Path) -> None:
         OriginClient._check_path_allowed(path)
         if not path.exists():
-            raise OriginOperationError(f"File does not exist: {path}")
+            raise OriginOperationError(
+                f"File does not exist: {path}",
+                error_code="file_not_found",
+            )
         if not path.is_file():
-            raise OriginOperationError(f"Path is not a file: {path}")
+            raise OriginOperationError(
+                f"Path is not a file: {path}",
+                error_code="invalid_file_path",
+            )
 
     @staticmethod
     def _check_path_allowed(path: Path) -> None:
@@ -4671,7 +4687,10 @@ class OriginClient:
             if root.strip()
         ]
         if not any(resolved == root or root in resolved.parents for root in roots):
-            raise OriginOperationError(f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}")
+            raise OriginOperationError(
+                f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}",
+                error_code="path_not_allowed",
+            )
 
     @staticmethod
     def _resolve_column(columns: list[str], value: str | int | None, default_index: int) -> str:
@@ -4788,7 +4807,10 @@ class OriginClient:
             wks = self._find_sheet_by_book_label(ref, None)
             if wks is not None:
                 return wks
-        raise OriginOperationError(f"Worksheet not found: {ref or '<active worksheet>'}")
+        raise OriginOperationError(
+            f"Worksheet not found: {ref or '<active worksheet>'}",
+            error_code="worksheet_not_found",
+        )
 
     def _find_sheet_from_ref(self, worksheet: str | None = None) -> Any:
         op = self.op
@@ -4805,7 +4827,10 @@ class OriginClient:
             else:
                 wks = self._find_sheet_by_book_label(clean, None)
         if wks is None:
-            raise OriginOperationError(f"Worksheet not found: {worksheet or '<active worksheet>'}")
+            raise OriginOperationError(
+                f"Worksheet not found: {worksheet or '<active worksheet>'}",
+                error_code="worksheet_not_found",
+            )
         return wks
 
     def _find_sheet_by_book_label(self, book_name: str, sheet_name: str | None) -> Any | None:

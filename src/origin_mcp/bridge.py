@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .errors import OriginDependencyError, OriginMcpError, OriginOperationError
+from .errors import OriginMcpError, OriginOperationError
 from .origin_client import GraphRef, OriginClient, WorksheetRef
 from .runtime import python_runtime_profile
 
@@ -142,7 +142,10 @@ class BridgeTaskManager:
 
     def submit(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method not in TASKABLE_METHODS:
-            raise OriginOperationError(f"Unsupported bridge task method: {method}")
+            raise OriginOperationError(
+                f"Unsupported bridge task method: {method}",
+                error_code="unsupported_bridge_task_method",
+            )
         task = BridgeTask(task_id=str(uuid.uuid4()), method=method, params=params)
         with self._lock:
             self._tasks[task.task_id] = task
@@ -157,7 +160,10 @@ class BridgeTaskManager:
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
-                raise OriginOperationError(f"Bridge task not found: {task_id}")
+                raise OriginOperationError(
+                    f"Bridge task not found: {task_id}",
+                    error_code="bridge_task_not_found",
+                )
             was_queued = task.status == "queued"
             if task.status == "queued":
                 task.status = "cancelled"
@@ -191,7 +197,10 @@ class BridgeTaskManager:
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
-                raise OriginOperationError(f"Bridge task not found: {task_id}")
+                raise OriginOperationError(
+                    f"Bridge task not found: {task_id}",
+                    error_code="bridge_task_not_found",
+                )
             return task
 
     def _work(self) -> None:
@@ -274,6 +283,7 @@ class _OriginBridgeServerState:
 class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
+    persistent_connections = True
 
     def __init__(
         self,
@@ -288,6 +298,10 @@ class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServ
 
 class OriginEmbeddedBridgeServer(_OriginBridgeServerState, socketserver.TCPServer):
     allow_reuse_address = True
+    # The embedded server is polled cooperatively from Origin's UI thread via
+    # handle_request(); each handler invocation must service one request and
+    # return so the message pump keeps running.
+    persistent_connections = False
 
     def __init__(
         self,
@@ -304,26 +318,36 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
     server: OriginBridgeServer
 
     def handle(self) -> None:
-        line = self.rfile.readline()
-        if not line:
-            return
-        request_id = None
-        try:
-            request = json.loads(line.decode("utf-8"))
-            request_id = request.get("id") if isinstance(request, dict) else None
-            response = self._dispatch(request)
-        except Exception as exc:
-            response = self._error_response(request_id, exc)
-        self.wfile.write(json.dumps(response, separators=(",", ":")).encode("utf-8"))
-        self.wfile.write(b"\n")
-        self.wfile.flush()
+        persistent = bool(getattr(self.server, "persistent_connections", False))
+        while True:
+            line = self.rfile.readline()
+            if not line:
+                return
+            request_id = None
+            try:
+                request = json.loads(line.decode("utf-8"))
+                request_id = request.get("id") if isinstance(request, dict) else None
+                response = self._dispatch(request)
+            except Exception as exc:
+                response = self._error_response(request_id, exc)
+            try:
+                self.wfile.write(json.dumps(response, separators=(",", ":")).encode("utf-8"))
+                self.wfile.write(b"\n")
+                self.wfile.flush()
+            except OSError:
+                return
+            if not persistent:
+                return
 
     def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
         request_id = request.get("id")
         if not isinstance(request, dict):
             raise OriginOperationError("Bridge request must be a JSON object.")
         if self.server.token and request.get("token") != self.server.token:
-            raise OriginOperationError("Invalid Origin bridge token.")
+            raise OriginOperationError(
+                "Invalid Origin bridge token.",
+                error_code="origin_bridge_unauthorized",
+            )
         method = request.get("method")
         params = request.get("params") or {}
         if not isinstance(method, str) or not method:
@@ -364,7 +388,10 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             return {"value": _serialize_bridge_value(value)}
         if method in TASKABLE_METHODS:
             return _call_origin_method(self.server.client, method, params)
-        raise OriginOperationError(f"Unsupported bridge method: {method}")
+        raise OriginOperationError(
+            f"Unsupported bridge method: {method}",
+            error_code="unsupported_bridge_method",
+        )
 
     @staticmethod
     def _error_response(request_id: Any, exc: Exception) -> dict[str, Any]:
@@ -432,10 +459,16 @@ def _call_client_method(
     kwargs: dict[str, Any],
 ) -> Any:
     if method not in ALLOWED_CLIENT_METHODS:
-        raise OriginOperationError(f"Unsupported bridge client method: {method}")
+        raise OriginOperationError(
+            f"Unsupported bridge client method: {method}",
+            error_code="unsupported_bridge_client_method",
+        )
     func = getattr(client, method, None)
     if not callable(func):
-        raise OriginOperationError(f"Origin client method is not available: {method}")
+        raise OriginOperationError(
+            f"Origin client method is not available: {method}",
+            error_code="origin_client_method_unavailable",
+        )
     restored_args = [_restore_bridge_value(arg) for arg in args]
     restored_kwargs = {key: _restore_bridge_value(value) for key, value in kwargs.items()}
     coerced_args, coerced_kwargs = _coerce_path_args(func, restored_args, restored_kwargs)
@@ -587,21 +620,8 @@ def _call_origin_method(
 
 
 def _error_code(exc: Exception) -> str:
-    if isinstance(exc, OriginDependencyError):
-        return "origin_dependency_unavailable"
-    if isinstance(exc, OriginOperationError):
-        message = str(exc).lower()
-        if "invalid origin bridge token" in message:
-            return "origin_bridge_unauthorized"
-        if "unsupported bridge method" in message:
-            return "unsupported_bridge_method"
-        if "unsupported bridge task method" in message:
-            return "unsupported_bridge_task_method"
-        if "bridge task not found" in message:
-            return "bridge_task_not_found"
-        return "origin_operation_failed"
     if isinstance(exc, OriginMcpError):
-        return "origin_bridge_failed"
+        return exc.error_code
     return "unexpected_error"
 
 
