@@ -43,12 +43,13 @@ directly instead of only generating standalone plotting code.
 - Origin or OriginPro installed and licensed
 - Origin/OriginPro 2026 is the primary tested target; other Origin versions are
   not currently guaranteed
-- Python 3.11 or 3.12 recommended; Python 3.10 is supported but less tested
+- Python 3.10+ for the MCP server runtime
+- Python 3.11 or 3.12 recommended when installing Origin automation packages
 - Origin's `originpro` package and `pywin32`
 
-Newer Python versions such as Python 3.14 may run the MCP server itself, but
-Origin automation packages may not publish compatible wheels yet. If installation
-fails on a newer Python version, use Python 3.11 or 3.12.
+The MCP server core targets Python 3.10+. Local checks currently pass on Python
+3.12 and 3.14. Origin automation packages may lag newer Python releases, so use
+Python 3.11 or 3.12 for environments that import `originpro` or `pywin32`.
 
 ## Agentic Setup
 

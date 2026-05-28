@@ -36,12 +36,13 @@ pull request。
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
 - 当前主要测试目标是 Origin/OriginPro 2026，其他 Origin 版本暂不保证兼容
-- 推荐 Python 3.11 或 3.12；Python 3.10 受支持，但测试较少
+- MCP server 运行环境需要 Python 3.10+
+- 安装 Origin 自动化相关包时推荐 Python 3.11 或 3.12
 - Origin 的 `originpro` 包和 `pywin32`
 
-Python 3.14 等较新的 Python 版本可能可以运行 MCP 服务器本身，但 Origin 自动化相关包
-不一定已经发布兼容 wheel。如果在较新的 Python 版本上安装失败，请使用 Python 3.11
-或 3.12。
+MCP server core 目标是支持 Python 3.10+；本地检查目前已在 Python 3.12 和 3.14 上
+通过。Origin 自动化包可能滞后于较新的 Python 版本，因此需要导入 `originpro` 或
+`pywin32` 的环境建议使用 Python 3.11 或 3.12。
 
 ## Agentic Setup
 
