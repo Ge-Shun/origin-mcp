@@ -7,6 +7,7 @@ from typing import Any
 
 from origin_mcp.bridge_client import OriginBridgeConfig, request_bridge
 from origin_mcp.errors import OriginBridgeError
+from origin_mcp.logging_config import active_log_path, tail_log
 
 from ._shared import (
     COMPACT_TOOL_NAMES,
@@ -205,6 +206,14 @@ def origin_doctor(
                 "from the checkout root."
             )
 
+        log_path = active_log_path()
+        log_info: dict[str, Any] = {
+            "path": str(log_path) if log_path else None,
+            "enabled": log_path is not None,
+            "exists": bool(log_path and log_path.exists()),
+            "recent": tail_log(20) if log_path and log_path.exists() else [],
+        }
+
         return _ok(
             "Origin doctor completed.",
             config={
@@ -222,11 +231,13 @@ def origin_doctor(
                     "ORIGIN_MCP_BRIDGE_STATUS": os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
                     "ORIGIN_MCP_BRIDGE_TOKEN": bool(os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN")),
                     "ORIGIN_MCP_TOOL_PROFILE": os.environ.get("ORIGIN_MCP_TOOL_PROFILE"),
+                    "ORIGIN_MCP_LOG_FILE": os.environ.get("ORIGIN_MCP_LOG_FILE"),
                 },
             },
             status_file=status_file,
             bridge=bridge_check,
             origin=origin_check,
+            log=log_info,
             recommendations=_dedupe_strings(recommendations),
         )
 

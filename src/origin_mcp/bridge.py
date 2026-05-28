@@ -17,6 +17,7 @@ from typing import Any
 
 from . import __version__
 from .errors import OriginMcpError, OriginOperationError
+from .logging_config import log_bridge_event
 from .origin_client import GraphRef, OriginClient, WorksheetRef
 from .runtime import python_runtime_profile
 
@@ -324,12 +325,29 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             if not line:
                 return
             request_id = None
+            method_for_log = "<invalid_request>"
+            started_at = time.monotonic()
             try:
                 request = json.loads(line.decode("utf-8"))
-                request_id = request.get("id") if isinstance(request, dict) else None
+                if isinstance(request, dict):
+                    request_id = request.get("id")
+                    raw_method = request.get("method")
+                    if isinstance(raw_method, str) and raw_method:
+                        method_for_log = raw_method
                 response = self._dispatch(request)
             except Exception as exc:
                 response = self._error_response(request_id, exc)
+            duration_ms = (time.monotonic() - started_at) * 1000.0
+            ok = bool(response.get("ok"))
+            log_bridge_event(
+                method_for_log,
+                request_id=request_id,
+                ok=ok,
+                duration_ms=duration_ms,
+                error_code=None if ok else response.get("error_code"),
+                error_type=None if ok else response.get("error_type"),
+                error_message=None if ok else response.get("message"),
+            )
             try:
                 self.wfile.write(json.dumps(response, separators=(",", ":")).encode("utf-8"))
                 self.wfile.write(b"\n")

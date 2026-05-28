@@ -246,6 +246,16 @@ def _install_missing_runtime_packages() -> None:
     importlib.invalidate_caches()
 
 
+def _missing_dependency_message(missing: list[str]) -> str:
+    return (
+        "Origin's embedded Python is missing origin-mcp runtime dependencies: "
+        + ", ".join(missing)
+        + ".\nInstall them into Origin's embedded Python (for example by re-running "
+        "this addon with ORIGIN_MCP_INSTALL_MISSING=1, or by running `pip install` "
+        "in the embedded Python yourself)."
+    )
+
+
 def _clear_failed_imports() -> None:
     for module_name in (
         "origin_mcp.bridge",
@@ -297,17 +307,15 @@ def _load_bridge_server(install_missing: bool) -> Any:
         return OriginEmbeddedBridgeServer
     except ModuleNotFoundError as exc:
         missing = exc.name or str(exc)
-        if install_missing and missing in RUNTIME_PACKAGES:
-            _install_missing_runtime_packages()
-            _clear_failed_imports()
-            from origin_mcp.bridge import OriginEmbeddedBridgeServer
+        if missing not in RUNTIME_PACKAGES:
+            raise
+        if not install_missing:
+            raise RuntimeError(_missing_dependency_message(_missing_runtime_packages())) from exc
+        _install_missing_runtime_packages()
+        _clear_failed_imports()
+        from origin_mcp.bridge import OriginEmbeddedBridgeServer
 
-            return OriginEmbeddedBridgeServer
-        raise RuntimeError(
-            f"Origin's embedded Python is missing dependency '{missing}'. "
-            "Install origin-mcp runtime dependencies into Origin's embedded Python, "
-            "or run this addon with install_missing=True."
-        ) from exc
+        return OriginEmbeddedBridgeServer
     return OriginEmbeddedBridgeServer
 
 
@@ -317,10 +325,17 @@ def start_origin_mcp_bridge(
     token: str | None = None,
     max_tasks: int = DEFAULT_MAX_TASKS,
     src_dir: str | os.PathLike[str] | None = None,
-    install_missing: bool = True,
+    install_missing: bool = False,
     background: bool = False,
 ) -> dict[str, Any]:
-    """Start origin-mcp bridge inside the running Origin Python process."""
+    """Start origin-mcp bridge inside the running Origin Python process.
+
+    ``install_missing`` defaults to ``False``. When the embedded Python is
+    missing required packages the addon fails fast with an explicit message
+    listing what to install. Pass ``install_missing=True`` (or set
+    ``ORIGIN_MCP_INSTALL_MISSING=1``) to let the addon run ``pip install``
+    inside Origin's embedded Python automatically.
+    """
 
     existing = globals().get("_origin_mcp_bridge_server")
     thread = globals().get("_origin_mcp_bridge_thread")
@@ -349,6 +364,10 @@ def start_origin_mcp_bridge(
         package_source = _ensure_origin_mcp_importable(src_dir)
         if install_missing:
             _install_missing_runtime_packages()
+        else:
+            still_missing = _missing_runtime_packages()
+            if still_missing:
+                raise RuntimeError(_missing_dependency_message(still_missing))
         OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
         server = OriginBridgeServer((host, port), token=token, max_tasks=max_tasks)
     except Exception as exc:
@@ -444,6 +463,6 @@ if __name__ == "__main__":
         token=os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN") or None,
         max_tasks=_env_int("ORIGIN_MCP_BRIDGE_MAX_TASKS", DEFAULT_MAX_TASKS),
         src_dir=os.environ.get("ORIGIN_MCP_SRC") or None,
-        install_missing=_env_bool("ORIGIN_MCP_INSTALL_MISSING", True),
+        install_missing=_env_bool("ORIGIN_MCP_INSTALL_MISSING", False),
         background=_env_bool("ORIGIN_MCP_BRIDGE_BACKGROUND", False),
     )

@@ -48,9 +48,14 @@ The addon also writes JSON status to `origin-bridge.status.txt` next to
 file location. The status includes the latest message, host, port, package
 source, Python executable/version, and `last_error` when startup fails.
 
-On first run, the addon can install missing runtime packages into Origin's
-embedded Python. Search the knowledge base for `bridge startup` to inspect the
-full environment variable list and startup behavior.
+By default the addon does **not** install missing runtime packages into
+Origin's embedded Python. If `originpro`, `pandas`, `openpyxl`, or `xlrd` is
+missing the addon fails fast and lists the packages so you can install them
+yourself. Pass `install_missing=True` to `start_origin_mcp_bridge` or set
+`ORIGIN_MCP_INSTALL_MISSING=1` to let the addon run `pip install` inside
+Origin's embedded Python automatically. Search the knowledge base for
+`bridge startup` to inspect the full environment variable list and startup
+behavior.
 
 Then run the MCP server or smoke test from a separate terminal. The MCP server
 connects to the same host and port through `OriginBridgeProxy`.
@@ -67,6 +72,15 @@ Use a token when multiple local tools may connect to the same machine:
 ```powershell
 $env:ORIGIN_MCP_BRIDGE_TOKEN = "replace-with-a-local-secret"
 ```
+
+## Bridge Log
+
+The bridge writes one JSON-lines record per request (timestamp, request id,
+method, duration, error code) to a rotating log file. The default location is
+`%TEMP%\origin-mcp\bridge.log`. Override with `ORIGIN_MCP_LOG_FILE`, or set the
+variable to `-` to disable file logging entirely. `origin_doctor` returns the
+active log path and the last 20 entries in its `data.log` field, so MCP clients
+can inspect recent failures without leaving the tool surface.
 
 Existing tool functions keep their original names and route through an
 `OriginClient`-style bridge proxy. The bridge allowlist is tested against

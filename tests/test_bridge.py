@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import threading
 import time
 from contextlib import contextmanager
@@ -10,6 +11,7 @@ from typing import Any
 import pytest
 
 import origin_mcp.bridge as bridge
+import origin_mcp.logging_config as bridge_logging
 import origin_mcp.server as mcp_server
 import origin_mcp.tools.bridge as bridge_tools
 from origin_mcp.bridge import OriginBridgeServer, OriginEmbeddedBridgeServer
@@ -574,3 +576,83 @@ def test_server_bridge_run_analysis_wraps_response(monkeypatch: pytest.MonkeyPat
     assert calls[0][0] == "run_analysis"
     assert calls[0][1]["analysis"] == "smooth"
     assert calls[0][1]["y_col"] == "signal"
+
+
+def test_bridge_writes_structured_log_records(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "bridge.log"
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(log_path))
+    bridge_logging.reset_for_tests()
+    try:
+        with running_bridge() as server:
+            bridge_client(server).request("ping")
+            with pytest.raises(OriginBridgeError):
+                bridge_client(server).request("does_not_exist")
+    finally:
+        bridge_logging.reset_for_tests()
+
+    lines = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line]
+    records = [json.loads(line) for line in lines]
+    methods = [record["method"] for record in records]
+    assert "ping" in methods
+    assert "does_not_exist" in methods
+    error_record = next(record for record in records if record["method"] == "does_not_exist")
+    assert error_record["ok"] is False
+    assert error_record["error_code"] == "unsupported_bridge_method"
+    success_record = next(record for record in records if record["method"] == "ping")
+    assert success_record["ok"] is True
+    assert "duration_ms" in success_record
+
+
+def test_origin_doctor_reports_log_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "bridge.log"
+    log_path.write_text(
+        '{"ts":"2026-01-01T00:00:00Z","method":"ping","ok":true,"duration_ms":1.0}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(log_path))
+    bridge_logging.reset_for_tests()
+
+    monkeypatch.setattr(
+        bridge_tools,
+        "request_bridge",
+        lambda *_args, **_kwargs: {"bridge": "origin-mcp-bridge"},
+    )
+
+    try:
+        result = mcp_server.origin_doctor()
+    finally:
+        bridge_logging.reset_for_tests()
+
+    log_info = result["data"]["log"]
+    assert log_info["enabled"] is True
+    assert log_info["path"] == str(log_path)
+    assert log_info["exists"] is True
+    assert any("ping" in line for line in log_info["recent"])
+
+
+def test_origin_doctor_log_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", "-")
+    bridge_logging.reset_for_tests()
+
+    monkeypatch.setattr(
+        bridge_tools,
+        "request_bridge",
+        lambda *_args, **_kwargs: {"bridge": "origin-mcp-bridge"},
+    )
+
+    try:
+        result = mcp_server.origin_doctor()
+    finally:
+        bridge_logging.reset_for_tests()
+
+    log_info = result["data"]["log"]
+    assert log_info["enabled"] is False
+    assert log_info["path"] is None
