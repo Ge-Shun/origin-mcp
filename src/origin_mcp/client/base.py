@@ -14,6 +14,17 @@ from ..analysis_outputs import (
     structure_analysis_output,
     structure_fit_result,
 )
+from ..chart_palette import (
+    chart_atlas_routes,
+    nature_acceptable_palette,
+    nature_chart_style,
+    nature_chart_type_for_plot_id,
+    nature_palette,
+    nature_semantic_palette,
+    normalize_chart_intent,
+    normalize_chart_type,
+    palette_roles,
+)
 from ..errors import OriginDependencyError, OriginOperationError
 from ..file_io import check_path_allowed, read_table, safe_filename, validate_file
 from ..runtime import python_runtime_profile
@@ -110,6 +121,19 @@ class _OriginClientBase:
             raise OriginOperationError(
                 f"Unsupported style_mode: {style_mode!r}. Supported: {supported}."
             ) from exc
+
+    # Backwards-compatible shims for palette / chart-atlas helpers extracted
+    # to ``chart_palette``. Both _PlotMixin and _GraphStyleMixin reach them
+    # via ``self._nature_palette()`` etc., so the shims preserve that API.
+    _nature_palette = staticmethod(nature_palette)
+    _nature_semantic_palette = staticmethod(nature_semantic_palette)
+    _nature_acceptable_palette = staticmethod(nature_acceptable_palette)
+    _palette_roles = staticmethod(palette_roles)
+    _normalize_chart_type = staticmethod(normalize_chart_type)
+    _nature_chart_style = staticmethod(nature_chart_style)
+    _nature_chart_type_for_plot_id = staticmethod(nature_chart_type_for_plot_id)
+    _chart_atlas_routes = staticmethod(chart_atlas_routes)
+    _normalize_chart_intent = staticmethod(normalize_chart_intent)
 
     # Backwards-compatible shims for analysis output helpers extracted to
     # ``analysis_outputs``. Tests still call ``client._structure_fit_result``
