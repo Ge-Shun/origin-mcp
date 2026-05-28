@@ -50,6 +50,15 @@ Newer Python versions such as Python 3.14 may run the MCP server itself, but
 Origin automation packages may not publish compatible wheels yet. If installation
 fails on a newer Python version, use Python 3.11 or 3.12.
 
+## Agentic Setup
+
+Copy this to your AI agent and let it self-configure:
+
+```text
+Fetch and follow this bootstrap guide end to end:
+https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md
+```
+
 ## Install
 
 ```powershell
@@ -88,6 +97,7 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 - [Tool and compatibility reference](docs/tools.md)
 - [MCP client configuration](docs/mcp-config.md)
 - [Origin GUI bridge](docs/origin-bridge.md)
+- [Agent bootstrap guide](docs/agentic/origin-mcp-bootstrap.md)
 
 After starting the bridge inside Origin with the root `addon.py`, run
 `python examples\smoke_bridge.py` to validate a real file-to-figure workflow.

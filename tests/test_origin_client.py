@@ -1,6 +1,7 @@
 import struct
 import zlib
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -1193,6 +1194,40 @@ def test_chart_atlas_route_selects_correlation_scatter() -> None:
     assert route["kind"] == "scatter"
     assert route["regression"] is True
     assert route["palette_role"] == "hero"
+
+
+def test_plot_auto_routes_bubble_color_mapped_to_plot_type_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "bubble.csv"
+    path.write_text(
+        "x,y,size,intensity\n0,0.1,5,100\n1,0.4,10,120\n",
+        encoding="utf-8",
+    )
+    client = OriginClient()
+    worksheet = WorksheetRef("Book1", "Sheet1", ["x", "y", "size", "intensity"], 2)
+    graph = GraphRef("AutoBubble", template="scatter", style_mode="origin_default")
+    calls = {}
+
+    def fake_plot_table_by_id(**kwargs: object) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
+        calls["plot_table_by_id"] = kwargs
+        return worksheet, graph, {"script": "plotxy iy:=... plot:=248;"}
+
+    monkeypatch.setattr(client, "plot_table_by_id", fake_plot_table_by_id)
+    monkeypatch.setattr(
+        client,
+        "diagnose_graph",
+        lambda **kwargs: calls.setdefault("diagnose", kwargs) or {"passed": True},
+    )
+
+    result = client.plot_auto(path=path, intent="color_mapped", graph_name="AutoBubble")
+
+    assert calls["plot_table_by_id"]["plot_type_id"] == 248
+    assert calls["plot_table_by_id"]["template"] == "scatter"
+    assert calls["plot_table_by_id"]["selected_cols"] == ["x", "y", "size", "intensity"]
+    assert result["recommendation"]["selected"]["chart"] == "bubble_color_mapped"
+    assert result["command"] == {"script": "plotxy iy:=... plot:=248;"}
 
 
 def test_plot_chart_atlas_defaults_to_origin_style_and_regression(

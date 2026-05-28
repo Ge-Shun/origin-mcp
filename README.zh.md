@@ -43,6 +43,15 @@ Python 3.14 等较新的 Python 版本可能可以运行 MCP 服务器本身，�
 不一定已经发布兼容 wheel。如果在较新的 Python 版本上安装失败，请使用 Python 3.11
 或 3.12。
 
+## Agentic Setup
+
+把下面这段发给你的 AI agent，让它按步骤自配置：
+
+```text
+Fetch and follow this bootstrap guide end to end:
+https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md
+```
+
 ## 安装
 
 ```powershell
@@ -81,6 +90,7 @@ MCP 客户端配置示例：
 - [工具与兼容性参考](docs/tools.md)
 - [MCP 客户端配置](docs/mcp-config.md)
 - [Origin GUI bridge](docs/origin-bridge.md)
+- [Agent bootstrap 指南](docs/agentic/origin-mcp-bootstrap.md)
 
 在 Origin 内用根目录 `addon.py` 启动 bridge 后，可运行
 `python examples\smoke_bridge.py` 验证真实的导入、绘图、导出和保存项目流程。

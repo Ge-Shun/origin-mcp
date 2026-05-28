@@ -211,6 +211,11 @@ def _recommendation_candidates(
     z = z_col or _first_existing(profile.z_candidates)
     yerr = y_error_col or _first_existing(profile.error_columns)
     xerr = x_error_col
+    category_axis = _category_axis(profile, intent, explicit_x=x_col is not None)
+    if category_axis:
+        x = category_axis
+        y_values = y_cols or _default_y_columns(profile, x)
+        y = y_values[0] if y_values else None
 
     if profile.source_target_columns:
         candidates.append(
@@ -257,6 +262,49 @@ def _recommendation_candidates(
                 selected_cols=profile.ternary_columns[:3],
             )
         )
+
+    if x and y and x in numeric and y in numeric:
+        extra_numeric = [column for column in numeric if column not in {x, y}]
+        if extra_numeric and intent in {"bubble", "color_mapped", "bubble_color_mapped"}:
+            if len(extra_numeric) >= 2 and intent in {"color_mapped", "bubble_color_mapped"}:
+                selected = [x, y, extra_numeric[0], extra_numeric[1]]
+                candidates.append(
+                    ChartRecommendation(
+                        chart_family="scatter_bubble",
+                        chart="bubble_color_mapped",
+                        plot_type_id=248,
+                        template="scatter",
+                        score=_score(92, intent, {"bubble_color_mapped", "color_mapped"}),
+                        rationale=(
+                            "Detected paired numeric variables with size and color columns; "
+                            "bubble plus color-mapped scatter preserves both encodings."
+                        ),
+                        selected_cols=selected,
+                        x_col=x,
+                        y_cols=[y],
+                        palette_role="hero,secondary,accent",
+                    )
+                )
+            else:
+                selected = [x, y, extra_numeric[0]]
+                chart = "color_mapped" if intent == "color_mapped" else "bubble"
+                candidates.append(
+                    ChartRecommendation(
+                        chart_family="scatter_bubble",
+                        chart=chart,
+                        plot_type_id=247 if chart == "color_mapped" else 193,
+                        template="scatter",
+                        score=_score(90, intent, {"bubble", "color_mapped", "relationship"}),
+                        rationale=(
+                            "Detected paired numeric variables plus an additional numeric "
+                            "encoding column."
+                        ),
+                        selected_cols=selected,
+                        x_col=x,
+                        y_cols=[y],
+                        palette_role="hero,secondary",
+                    )
+                )
 
     if x and y and z:
         if profile.regular_xyz_grid or intent in {"matrix", "heatmap"}:
@@ -581,8 +629,23 @@ def _normalize_intent(intent: str | None) -> str | None:
         "time": "time_series",
         "matrix_heatmap": "matrix",
         "image": "image_plate",
+        "bubble_color": "bubble_color_mapped",
+        "bubble_colormap": "bubble_color_mapped",
+        "colormap": "color_mapped",
+        "colour_mapped": "color_mapped",
     }
     return aliases.get(value, value)
+
+
+def _category_axis(profile: ChartProfile, intent: str | None, explicit_x: bool) -> str | None:
+    if explicit_x or not profile.categorical_columns or not profile.numeric_columns:
+        return None
+    first = profile.columns[0] if profile.columns else None
+    if first and first.kind == "categorical":
+        return first.name
+    if intent in {"comparison", "bar", "distribution", "composition", "stacked", "area"}:
+        return profile.categorical_columns[0]
+    return None
 
 
 def _score(base: float, intent: str | None, matches: set[str]) -> float:
