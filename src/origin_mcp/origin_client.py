@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import importlib
-import math
-import os
-import struct
 import tempfile
 import uuid
-import zlib
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,10 +10,32 @@ from typing import Any
 import pandas as pd
 
 from .analysis_adapters import resolve_analysis_adapter
+from .analysis_outputs import (
+    analysis_output_rows,
+    analysis_row_metrics,
+    analysis_row_parameter,
+    is_analysis_number,
+    serialize_analysis_value,
+    structure_analysis_output,
+    structure_fit_result,
+)
 from .chart_router import profile_table
 from .chart_router import recommend_chart as recommend_chart_route
 from .compat import collect_capabilities, feature_available, plot_type_coverage
 from .errors import OriginDependencyError, OriginOperationError
+from .file_io import (
+    check_path_allowed,
+    read_table,
+    safe_filename,
+    validate_file,
+)
+from .image_quality import (
+    export_looks_nonempty,
+    export_quality_issues,
+    file_sha256,
+    image_dimensions,
+    image_quality,
+)
 from .runtime import python_runtime_profile
 from .text_format import normalize_label_text, origin_rich_text
 
@@ -66,114 +82,6 @@ class GraphRef:
         if self.display_name is not None:
             data["display_name"] = self.display_name
         return data
-
-
-@dataclass
-class _ImageQualityStats:
-    pixels: int = 0
-    transparent_pixels: int = 0
-    non_white_pixels: int = 0
-    background_diff_pixels: int = 0
-    luma_sum: float = 0.0
-    luma_sum_squares: float = 0.0
-    min_x: int | None = None
-    min_y: int | None = None
-    max_x: int | None = None
-    max_y: int | None = None
-
-    def __post_init__(self) -> None:
-        self.colors: Counter[tuple[int, int, int, int]] = Counter()
-        self.background: tuple[int, int, int, int] | None = None
-
-    def add(self, x: int, y: int, rgba: tuple[int, int, int, int]) -> None:
-        if self.background is None:
-            self.background = rgba
-        self.pixels += 1
-        self.colors[rgba] += 1
-        red, green, blue, alpha = rgba
-        if alpha == 0:
-            self.transparent_pixels += 1
-        luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        self.luma_sum += luma
-        self.luma_sum_squares += luma * luma
-        differs_from_white = alpha > 0 and min(red, green, blue) < 245
-        differs_from_background = self._differs_from_background(rgba)
-        if differs_from_white:
-            self.non_white_pixels += 1
-        if differs_from_background:
-            self.background_diff_pixels += 1
-        if differs_from_white or differs_from_background:
-            self._extend_bbox(x, y)
-
-    def as_dict(self, width: int, height: int, total_pixels: int) -> dict[str, Any]:
-        non_transparent_pixels = self.pixels - self.transparent_pixels
-        non_white_ratio = self._ratio(self.non_white_pixels)
-        non_background_ratio = self._ratio(self.background_diff_pixels)
-        non_transparent_ratio = self._ratio(non_transparent_pixels)
-        mean_luma = self.luma_sum / self.pixels if self.pixels else 0.0
-        variance = max(self.luma_sum_squares / self.pixels - mean_luma * mean_luma, 0.0)
-        luma_stddev = variance**0.5
-        has_visual_content = (
-            non_transparent_pixels > 0
-            and (self.background_diff_pixels >= max(8, int(self.pixels * 0.001)))
-            and (luma_stddev >= 0.5 or len(self.colors) > 2)
-        )
-        issues = []
-        if non_transparent_pixels == 0:
-            issues.append("all_pixels_transparent")
-        if len(self.colors) <= 1:
-            issues.append("single_color_image")
-        if not has_visual_content:
-            issues.append("blank_or_near_blank")
-        elif len(self.colors) <= 4 and non_background_ratio < 0.005:
-            issues.append("low_color_complexity")
-        return {
-            "format": "png",
-            "decoded": True,
-            "width": width,
-            "height": height,
-            "pixel_count": total_pixels,
-            "pixels_sampled": self.pixels,
-            "unique_colors": len(self.colors),
-            "top_colors": [
-                {"rgba": list(color), "count": count} for color, count in self.colors.most_common(5)
-            ],
-            "non_white_ratio": round(non_white_ratio, 6),
-            "non_background_ratio": round(non_background_ratio, 6),
-            "non_transparent_ratio": round(non_transparent_ratio, 6),
-            "mean_luma": round(mean_luma, 3),
-            "luma_stddev": round(luma_stddev, 3),
-            "content_bbox": self._bbox(),
-            "has_visual_content": has_visual_content,
-            "issues": issues,
-        }
-
-    def _differs_from_background(self, rgba: tuple[int, int, int, int]) -> bool:
-        if self.background is None:
-            return False
-        if rgba[3] == 0 and self.background[3] == 0:
-            return False
-        delta = sum(abs(value - base) for value, base in zip(rgba, self.background, strict=True))
-        return delta > 24
-
-    def _extend_bbox(self, x: int, y: int) -> None:
-        self.min_x = x if self.min_x is None else min(self.min_x, x)
-        self.min_y = y if self.min_y is None else min(self.min_y, y)
-        self.max_x = x if self.max_x is None else max(self.max_x, x)
-        self.max_y = y if self.max_y is None else max(self.max_y, y)
-
-    def _bbox(self) -> dict[str, int] | None:
-        if self.min_x is None or self.min_y is None or self.max_x is None or self.max_y is None:
-            return None
-        return {
-            "x_min": self.min_x,
-            "y_min": self.min_y,
-            "x_max": self.max_x,
-            "y_max": self.max_y,
-        }
-
-    def _ratio(self, value: int) -> float:
-        return value / self.pixels if self.pixels else 0.0
 
 
 class OriginClient:
@@ -2370,7 +2278,7 @@ class OriginClient:
                 )
             return result
         fit_result = fit.result()
-        structured = self._structure_fit_result(fit_result)
+        structured = structure_fit_result(fit_result)
         return {
             "mode": "result",
             "result": structured,
@@ -2707,7 +2615,7 @@ class OriginClient:
             else:
                 output = self._analysis_output(output_sheet, output_max_rows)
                 response["output"] = output
-                structured = self._structure_analysis_output(analysis_name, output)
+                structured = structure_analysis_output(analysis_name, output)
                 response["parameters"] = structured["parameters"]
                 response["metrics"] = structured["metrics"]
                 response["sections"] = structured["sections"]
@@ -2857,18 +2765,18 @@ class OriginClient:
             "exists": True,
             "size_bytes": path.stat().st_size,
             "suffix": path.suffix.lower(),
-            "sha256": self._file_sha256(path),
+            "sha256": file_sha256(path),
         }
-        dimensions = self._image_dimensions(path)
+        dimensions = image_dimensions(path)
         if dimensions:
             info.update(dimensions)
-        quality = self._image_quality(path)
+        quality = image_quality(path)
         if quality:
             info["image_quality"] = quality
-        quality_issues = self._export_quality_issues(info)
+        quality_issues = export_quality_issues(info)
         info["quality_issues"] = quality_issues
         info["quality_passed"] = not quality_issues
-        info["looks_nonempty"] = self._export_looks_nonempty(info)
+        info["looks_nonempty"] = export_looks_nonempty(info)
         return info
 
     def _new_sheet(self, book_name: str | None, sheet_name: str | None) -> Any:
@@ -3915,253 +3823,34 @@ class OriginClient:
         parameters = []
         for index in range(order + 1):
             value = self._safe_eval(f"{variables['coef']}[{index + 1}]")
-            if self._is_analysis_number(value):
+            if is_analysis_number(value):
                 parameter = {
                     "name": "Intercept" if index == 0 else f"B{index}",
                     "path": f"{variables['coef']}[{index + 1}]",
                     "value": value,
                 }
                 stderr = self._safe_eval(f"{variables['err']}[{index + 1}]")
-                if self._is_analysis_number(stderr):
+                if is_analysis_number(stderr):
                     parameter["stderr"] = stderr
                 parameters.append(parameter)
 
         metrics: dict[str, Any] = {}
         for key in ("N", "AdjRSq", "RSqCOD"):
             value = self._safe_eval(variables[key])
-            if self._is_analysis_number(value):
+            if is_analysis_number(value):
                 metrics[key] = value
         return {"parameters": parameters, "metrics": metrics}
 
-    def _structure_analysis_output(self, analysis: str, output: Any) -> dict[str, Any]:
-        if analysis not in {"linear_fit", "polynomial_fit", "nonlinear_fit"}:
-            return {"parameters": [], "metrics": {}, "sections": {}}
-
-        rows = self._analysis_output_rows(output)
-        parameters: list[dict[str, Any]] = []
-        metrics: dict[str, Any] = {}
-
-        for index, row in enumerate(rows):
-            row_metrics = self._analysis_row_metrics(row)
-            metrics.update(row_metrics)
-            parameter = self._analysis_row_parameter(row, index)
-            if parameter is not None and parameter["name"] not in row_metrics:
-                parameters.append(parameter)
-
-        return {"parameters": parameters, "metrics": metrics, "sections": {}}
-
-    def _analysis_output_rows(self, output: Any) -> list[dict[str, Any]]:
-        data = self._serialize_analysis_value(output)
-        if not isinstance(data, dict):
-            return []
-        rows = data.get("rows")
-        if isinstance(rows, list):
-            return [row for row in rows if isinstance(row, dict)]
-        return []
-
-    def _analysis_row_metrics(self, row: dict[str, Any]) -> dict[str, Any]:
-        metrics: dict[str, Any] = {}
-        label = self._analysis_row_label(row)
-        value = self._analysis_row_value(row)
-        if label and self._is_analysis_metric_name(label) and self._is_analysis_number(value):
-            metrics[label] = value
-
-        for key, candidate in row.items():
-            if self._is_analysis_metric_name(str(key)) and self._is_analysis_number(candidate):
-                metrics[str(key)] = candidate
-        return metrics
-
-    def _analysis_row_parameter(
-        self,
-        row: dict[str, Any],
-        index: int,
-    ) -> dict[str, Any] | None:
-        name = self._analysis_row_label(row)
-        value = self._analysis_row_value(row)
-        if not name or not self._is_analysis_number(value):
-            return None
-        if self._is_analysis_metric_name(name):
-            return None
-
-        parameter = {
-            "name": name,
-            "path": f"output.rows.{index}",
-            "value": value,
-        }
-        stderr = self._analysis_row_named_value(
-            row,
-            {
-                "stderr",
-                "standarderror",
-                "standarderr",
-                "stddev",
-                "se",
-            },
-        )
-        if self._is_analysis_number(stderr):
-            parameter["stderr"] = stderr
-        return parameter
-
-    @staticmethod
-    def _analysis_row_label(row: dict[str, Any]) -> str | None:
-        label_keys = {
-            "parameter",
-            "parameters",
-            "param",
-            "name",
-            "term",
-            "coefficient",
-            "coef",
-            "quantity",
-            "item",
-        }
-        for key, value in row.items():
-            if OriginClient._analysis_key(key) in label_keys and value not in (None, ""):
-                return str(value)
-        return None
-
-    @staticmethod
-    def _analysis_row_value(row: dict[str, Any]) -> Any:
-        value_keys = {
-            "value",
-            "estimate",
-            "estimatedvalue",
-            "fitvalue",
-            "coefficientvalue",
-            "coefvalue",
-            "result",
-        }
-        named = OriginClient._analysis_row_named_value(row, value_keys)
-        if named is not None:
-            return named
-        for key, value in row.items():
-            normalized = OriginClient._analysis_key(key)
-            if normalized not in {"parameter", "parameters", "param", "name", "term", "item"}:
-                if OriginClient._is_analysis_number(value):
-                    return value
-        return None
-
-    @staticmethod
-    def _analysis_row_named_value(row: dict[str, Any], keys: set[str]) -> Any:
-        for key, value in row.items():
-            if OriginClient._analysis_key(key) in keys:
-                return value
-        return None
-
-    @staticmethod
-    def _analysis_key(value: Any) -> str:
-        return "".join(ch for ch in str(value).lower() if ch.isalnum())
-
-    @staticmethod
-    def _is_analysis_metric_name(value: str) -> bool:
-        key = OriginClient._analysis_key(value)
-        return key in {
-            "r",
-            "rsquare",
-            "rsquared",
-            "r2",
-            "adjrsquare",
-            "adjrsquared",
-            "adjustedrsquare",
-            "adjustedrsquared",
-            "chisqr",
-            "chisquare",
-            "reducedchisqr",
-            "reducedchisquare",
-            "rss",
-            "residualsumofsquares",
-            "rmse",
-            "mse",
-            "dof",
-            "n",
-            "pvalue",
-            "prob",
-        }
-
-    @staticmethod
-    def _is_analysis_number(value: Any) -> bool:
-        return (
-            isinstance(value, int | float)
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-        )
-
-    def _structure_fit_result(self, raw: Any) -> dict[str, Any]:
-        data = self._serialize_analysis_value(raw)
-        flattened = list(self._flatten_mapping(data))
-        parameters = []
-        metrics: dict[str, Any] = {}
-        sections: dict[str, Any] = {}
-
-        for path, value in flattened:
-            key = path[-1].lower() if path else ""
-            joined = ".".join(path).lower()
-            if self._looks_like_fit_parameter(path, value):
-                parameters.append({"name": path[-1], "path": ".".join(path), "value": value})
-            elif key in {"r", "r-square", "r_squared", "rsquare", "adjrsquare", "reducedchisqr"}:
-                metrics[path[-1]] = value
-            elif key in {"slope", "intercept"} and isinstance(value, int | float):
-                parameters.append({"name": path[-1], "path": ".".join(path), "value": value})
-            elif "anova" in joined or "statistics" in joined or "summary" in joined:
-                sections[".".join(path)] = value
-
-        return {
-            "parameters": parameters,
-            "metrics": metrics,
-            "sections": sections,
-            "data": data,
-        }
-
-    @staticmethod
-    def _serialize_analysis_value(value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                str(key): OriginClient._serialize_analysis_value(val) for key, val in value.items()
-            }
-        if isinstance(value, list | tuple):
-            return [OriginClient._serialize_analysis_value(item) for item in value]
-        if hasattr(value, "items"):
-            try:
-                return {
-                    str(key): OriginClient._serialize_analysis_value(val)
-                    for key, val in value.items()
-                }
-            except Exception:
-                pass
-        if hasattr(value, "__dict__") and not isinstance(value, type):
-            public = {key: val for key, val in vars(value).items() if not key.startswith("_")}
-            if public:
-                return OriginClient._serialize_analysis_value(public)
-        try:
-            if pd.isna(value):
-                return None
-        except (TypeError, ValueError):
-            pass
-        return value
-
-    def _flatten_mapping(
-        self,
-        value: Any,
-        path: tuple[str, ...] = (),
-    ) -> list[tuple[tuple[str, ...], Any]]:
-        if isinstance(value, dict):
-            rows = []
-            for key, child in value.items():
-                rows.extend(self._flatten_mapping(child, (*path, str(key))))
-            return rows
-        if isinstance(value, list):
-            rows = []
-            for index, child in enumerate(value):
-                rows.extend(self._flatten_mapping(child, (*path, str(index))))
-            return rows
-        return [(path, value)]
-
-    @staticmethod
-    def _looks_like_fit_parameter(path: tuple[str, ...], value: Any) -> bool:
-        if not isinstance(value, int | float):
-            return False
-        joined = ".".join(path).lower()
-        return any(token in joined for token in ("parameter", "param", "coef", "coefficient"))
+    # Backwards-compatible shims for analysis output helpers extracted to
+    # ``analysis_outputs``. Tests still call ``client._structure_fit_result``
+    # directly, and the static delegates make it cheap to keep the old API.
+    _structure_fit_result = staticmethod(structure_fit_result)
+    _structure_analysis_output = staticmethod(structure_analysis_output)
+    _analysis_output_rows = staticmethod(analysis_output_rows)
+    _analysis_row_metrics = staticmethod(analysis_row_metrics)
+    _analysis_row_parameter = staticmethod(analysis_row_parameter)
+    _is_analysis_number = staticmethod(is_analysis_number)
+    _serialize_analysis_value = staticmethod(serialize_analysis_value)
 
     @staticmethod
     def _write_dataframe_to_worksheet(
@@ -4386,237 +4075,7 @@ class OriginClient:
     def _escape_labtalk(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
-    @staticmethod
-    def _image_dimensions(path: Path) -> dict[str, int] | None:
-        suffix = path.suffix.lower()
-        try:
-            with path.open("rb") as handle:
-                header = handle.read(32)
-                if suffix == ".png" and header.startswith(b"\x89PNG\r\n\x1a\n"):
-                    width, height = struct.unpack(">II", header[16:24])
-                    return {"width": width, "height": height}
-                if suffix in {".jpg", ".jpeg"} and header.startswith(b"\xff\xd8"):
-                    return OriginClient._jpeg_dimensions(path)
-        except OSError:
-            return None
-        return None
-
-    @staticmethod
-    def _jpeg_dimensions(path: Path) -> dict[str, int] | None:
-        try:
-            with path.open("rb") as handle:
-                handle.read(2)
-                while True:
-                    marker_prefix = handle.read(1)
-                    if marker_prefix != b"\xff":
-                        return None
-                    marker = handle.read(1)
-                    while marker == b"\xff":
-                        marker = handle.read(1)
-                    if marker in {b"\xc0", b"\xc1", b"\xc2", b"\xc3"}:
-                        handle.read(3)
-                        height, width = struct.unpack(">HH", handle.read(4))
-                        return {"width": width, "height": height}
-                    segment_length = struct.unpack(">H", handle.read(2))[0]
-                    handle.seek(segment_length - 2, 1)
-        except (OSError, struct.error):
-            return None
-
-    @staticmethod
-    def _file_sha256(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-
-    @staticmethod
-    def _image_quality(path: Path) -> dict[str, Any] | None:
-        if path.suffix.lower() != ".png":
-            return None
-        try:
-            return OriginClient._png_quality(path)
-        except (OSError, struct.error, zlib.error, ValueError):
-            return None
-
-    @staticmethod
-    def _png_quality(path: Path) -> dict[str, Any] | None:
-        with path.open("rb") as handle:
-            if handle.read(8) != b"\x89PNG\r\n\x1a\n":
-                return None
-            width = height = bit_depth = color_type = interlace = None
-            palette: list[tuple[int, int, int]] = []
-            idat = bytearray()
-            while True:
-                length_bytes = handle.read(4)
-                if not length_bytes:
-                    break
-                length = struct.unpack(">I", length_bytes)[0]
-                chunk_type = handle.read(4)
-                data = handle.read(length)
-                handle.read(4)
-                if chunk_type == b"IHDR":
-                    width, height, bit_depth, color_type, _compression, _filter, interlace = (
-                        struct.unpack(">IIBBBBB", data)
-                    )
-                elif chunk_type == b"PLTE":
-                    palette = [
-                        tuple(data[index : index + 3]) for index in range(0, len(data) - 2, 3)
-                    ]
-                elif chunk_type == b"IDAT":
-                    idat.extend(data)
-                elif chunk_type == b"IEND":
-                    break
-
-        if width is None or height is None or bit_depth != 8 or interlace != 0:
-            return None
-        channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
-        if channels is None:
-            return None
-        raw = zlib.decompress(bytes(idat))
-        stride = int(width) * channels
-        expected = (stride + 1) * int(height)
-        if len(raw) < expected:
-            return None
-
-        previous = bytearray(stride)
-        offset = 0
-        stats = _ImageQualityStats()
-        total_pixels = int(width) * int(height)
-        sample_step = max(1, math.ceil((total_pixels / 500_000) ** 0.5))
-        for row_index in range(int(height)):
-            filter_type = raw[offset]
-            offset += 1
-            row = bytearray(raw[offset : offset + stride])
-            offset += stride
-            OriginClient._png_unfilter(row, previous, channels, filter_type)
-            if row_index % sample_step == 0:
-                for column in range(0, int(width), sample_step):
-                    rgba = OriginClient._png_pixel_rgba(
-                        row,
-                        column * channels,
-                        color_type,
-                        palette,
-                    )
-                    stats.add(column, row_index, rgba)
-            previous = row
-        return stats.as_dict(int(width), int(height), total_pixels)
-
-    @staticmethod
-    def _png_unfilter(row: bytearray, previous: bytearray, bpp: int, filter_type: int) -> None:
-        if filter_type == 0:
-            return
-        for index, value in enumerate(row):
-            left = row[index - bpp] if index >= bpp else 0
-            up = previous[index] if previous else 0
-            up_left = previous[index - bpp] if previous and index >= bpp else 0
-            if filter_type == 1:
-                row[index] = (value + left) & 0xFF
-            elif filter_type == 2:
-                row[index] = (value + up) & 0xFF
-            elif filter_type == 3:
-                row[index] = (value + ((left + up) // 2)) & 0xFF
-            elif filter_type == 4:
-                row[index] = (value + OriginClient._png_paeth(left, up, up_left)) & 0xFF
-            else:
-                raise ValueError(f"Unsupported PNG filter type: {filter_type}")
-
-    @staticmethod
-    def _png_paeth(left: int, up: int, up_left: int) -> int:
-        estimate = left + up - up_left
-        left_distance = abs(estimate - left)
-        up_distance = abs(estimate - up)
-        up_left_distance = abs(estimate - up_left)
-        if left_distance <= up_distance and left_distance <= up_left_distance:
-            return left
-        if up_distance <= up_left_distance:
-            return up
-        return up_left
-
-    @staticmethod
-    def _png_pixel_rgba(
-        row: bytearray,
-        offset: int,
-        color_type: int | None,
-        palette: list[tuple[int, int, int]],
-    ) -> tuple[int, int, int, int]:
-        if color_type == 0:
-            gray = row[offset]
-            return gray, gray, gray, 255
-        if color_type == 2:
-            return row[offset], row[offset + 1], row[offset + 2], 255
-        if color_type == 3:
-            red, green, blue = palette[row[offset]]
-            return red, green, blue, 255
-        if color_type == 4:
-            gray = row[offset]
-            return gray, gray, gray, row[offset + 1]
-        if color_type == 6:
-            return row[offset], row[offset + 1], row[offset + 2], row[offset + 3]
-        raise ValueError(f"Unsupported PNG color type: {color_type}")
-
-    @staticmethod
-    def _export_quality_issues(info: dict[str, Any]) -> list[str]:
-        issues = []
-        if info["size_bytes"] <= 0:
-            issues.append("empty_file")
-        width = info.get("width")
-        height = info.get("height")
-        if isinstance(width, int) and isinstance(height, int) and (width < 64 or height < 64):
-            issues.append("dimensions_too_small")
-        quality = info.get("image_quality")
-        if isinstance(quality, dict):
-            issues.extend(quality.get("issues", []))
-        return issues
-
-    @staticmethod
-    def _export_looks_nonempty(info: dict[str, Any]) -> bool:
-        if info["size_bytes"] <= 0:
-            return False
-        quality = info.get("image_quality")
-        if isinstance(quality, dict):
-            return bool(quality.get("has_visual_content"))
-        return True
-
-    @staticmethod
-    def _read_table(
-        path: Path,
-        excel_sheet: str | int | None = 0,
-        delimiter: str | None = None,
-        encoding: str | None = None,
-        header: int | None = 0,
-        skiprows: int | list[int] | None = None,
-        nrows: int | None = None,
-        na_values: str | list[str] | None = None,
-    ) -> pd.DataFrame:
-        suffix = path.suffix.lower()
-        if suffix in {".xls", ".xlsx", ".xlsm"}:
-            return pd.read_excel(
-                path,
-                sheet_name=excel_sheet if excel_sheet is not None else 0,
-                header=header,
-                skiprows=skiprows,
-                nrows=nrows,
-                na_values=na_values,
-            )
-        read_kwargs = {
-            "encoding": encoding,
-            "header": header,
-            "skiprows": skiprows,
-            "nrows": nrows,
-            "na_values": na_values,
-        }
-        read_kwargs = {key: value for key, value in read_kwargs.items() if value is not None}
-        if suffix == ".tsv":
-            return pd.read_csv(path, sep=delimiter or "\t", **read_kwargs)
-        if suffix in {".txt", ".dat"}:
-            return pd.read_csv(path, sep=delimiter, engine="python", **read_kwargs)
-        if suffix == ".csv":
-            return pd.read_csv(path, sep=delimiter or ",", **read_kwargs)
-        raise OriginOperationError(
-            f"Unsupported data file extension: {path.suffix}",
-            error_code="unsupported_file_type",
-        )
+    _read_table = staticmethod(read_table)
 
     @staticmethod
     def _labtalk_text(text: str) -> str:
@@ -4661,36 +4120,8 @@ class OriginClient:
             "holding the Origin automation session."
         )
 
-    @staticmethod
-    def _validate_file(path: Path) -> None:
-        OriginClient._check_path_allowed(path)
-        if not path.exists():
-            raise OriginOperationError(
-                f"File does not exist: {path}",
-                error_code="file_not_found",
-            )
-        if not path.is_file():
-            raise OriginOperationError(
-                f"Path is not a file: {path}",
-                error_code="invalid_file_path",
-            )
-
-    @staticmethod
-    def _check_path_allowed(path: Path) -> None:
-        raw_roots = os.environ.get("ORIGIN_MCP_ALLOWED_ROOTS", "").strip()
-        if not raw_roots:
-            return
-        resolved = path.expanduser().resolve()
-        roots = [
-            Path(root).expanduser().resolve()
-            for root in raw_roots.split(os.pathsep)
-            if root.strip()
-        ]
-        if not any(resolved == root or root in resolved.parents for root in roots):
-            raise OriginOperationError(
-                f"Path is outside ORIGIN_MCP_ALLOWED_ROOTS: {resolved}",
-                error_code="path_not_allowed",
-            )
+    _validate_file = staticmethod(validate_file)
+    _check_path_allowed = staticmethod(check_path_allowed)
 
     @staticmethod
     def _resolve_column(columns: list[str], value: str | int | None, default_index: int) -> str:
@@ -4906,11 +4337,7 @@ class OriginClient:
             raise OriginOperationError(f"{object_type} not found: {name}")
         return obj
 
-    @staticmethod
-    def _safe_filename(name: str) -> str:
-        invalid = '<>:"/\\|?*'
-        cleaned = "".join("_" if ch in invalid else ch for ch in name).strip()
-        return cleaned or "graph"
+    _safe_filename = staticmethod(safe_filename)
 
     def _analysis_script(
         self,
