@@ -88,6 +88,35 @@ def _read_bridge_status(status_path: str | None = None) -> dict[str, Any]:
     }
 
 
+def _bridge_call(
+    method: str,
+    params: dict[str, Any] | None = None,
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    token: str | None = None,
+    timeout: float | None = None,
+    success: str,
+) -> dict[str, Any]:
+    """Shared scaffolding for ``origin_bridge_*`` MCP tools.
+
+    Each tool builds a method name + params dict, forwards the standard
+    ``host/port/token/timeout`` overrides, and reports the response under a
+    success message. Centralising the wrapper avoids ~20 copies of the same
+    ``_wrap(lambda: _ok(..., **request_bridge(...)))`` boilerplate.
+    """
+
+    def run() -> dict[str, Any]:
+        kwargs = {"host": host, "port": port, "token": token, "timeout": timeout}
+        if params is None:
+            response = request_bridge(method, **kwargs)
+        else:
+            response = request_bridge(method, params, **kwargs)
+        return _ok(success, **response)
+
+    return _wrap(run)
+
+
 @_mcp_tool()
 def origin_ping(show: bool = True) -> dict[str, Any]:
     """Connect to Origin/OriginPro and report basic status."""
@@ -116,17 +145,13 @@ def origin_bridge_status(
 ) -> dict[str, Any]:
     """Check whether the Origin GUI bridge is reachable."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge responded.",
-            **request_bridge(
-                "ping",
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "ping",
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge responded.",
     )
 
 
@@ -254,18 +279,14 @@ def origin_bridge_ping_origin(
 ) -> dict[str, Any]:
     """Ask the Origin GUI bridge to connect to Origin and report status."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge connected to Origin.",
-            **request_bridge(
-                "origin_ping",
-                {"show": show},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "origin_ping",
+        {"show": show},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge connected to Origin.",
     )
 
 
@@ -280,18 +301,14 @@ def origin_bridge_capabilities(
 ) -> dict[str, Any]:
     """Ask the Origin GUI bridge for Origin/originpro capabilities."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge collected capabilities.",
-            **request_bridge(
-                "origin_capabilities",
-                {"show": show, "refresh": refresh},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "origin_capabilities",
+        {"show": show, "refresh": refresh},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge collected capabilities.",
     )
 
 
@@ -305,18 +322,14 @@ def origin_bridge_run_labtalk(
 ) -> dict[str, Any]:
     """Execute LabTalk through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge executed LabTalk script.",
-            **request_bridge(
-                "run_labtalk",
-                {"script": script},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "run_labtalk",
+        {"script": script},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge executed LabTalk script.",
     )
 
 
@@ -330,18 +343,14 @@ def origin_bridge_new_project(
 ) -> dict[str, Any]:
     """Create a new Origin project through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge created a new project.",
-            **request_bridge(
-                "new_project",
-                {"show": show},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "new_project",
+        {"show": show},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge created a new project.",
     )
 
 
@@ -357,18 +366,14 @@ def origin_bridge_open_project(
 ) -> dict[str, Any]:
     """Open an Origin project through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge opened project.",
-            **request_bridge(
-                "open_project",
-                {"path": path, "readonly": readonly, "asksave": asksave},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "open_project",
+        {"path": path, "readonly": readonly, "asksave": asksave},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge opened project.",
     )
 
 
@@ -382,18 +387,14 @@ def origin_bridge_save_project(
 ) -> dict[str, Any]:
     """Save the current Origin project through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge saved project.",
-            **request_bridge(
-                "save_project",
-                {"path": path},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "save_project",
+        {"path": path},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge saved project.",
     )
 
 
@@ -406,17 +407,13 @@ def origin_bridge_list_project(
 ) -> dict[str, Any]:
     """List Origin project objects through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge listed project objects.",
-            **request_bridge(
-                "list_project",
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "list_project",
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge listed project objects.",
     )
 
 
@@ -439,29 +436,25 @@ def origin_bridge_import_table(
 ) -> dict[str, Any]:
     """Import table data through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge imported table data.",
-            **request_bridge(
-                "import_table",
-                {
-                    "path": path,
-                    "book_name": book_name,
-                    "sheet_name": sheet_name,
-                    "excel_sheet": excel_sheet,
-                    "delimiter": delimiter,
-                    "encoding": encoding,
-                    "header": header,
-                    "skiprows": skiprows,
-                    "nrows": nrows,
-                    "na_values": na_values,
-                },
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "import_table",
+        {
+            "path": path,
+            "book_name": book_name,
+            "sheet_name": sheet_name,
+            "excel_sheet": excel_sheet,
+            "delimiter": delimiter,
+            "encoding": encoding,
+            "header": header,
+            "skiprows": skiprows,
+            "nrows": nrows,
+            "na_values": na_values,
+        },
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge imported table data.",
     )
 
 
@@ -477,18 +470,14 @@ def origin_bridge_get_worksheet_info(
 ) -> dict[str, Any]:
     """Get worksheet information through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge collected worksheet information.",
-            **request_bridge(
-                "worksheet_info",
-                {"book_name": book_name, "sheet_name": sheet_name, "label_types": label_types},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "worksheet_info",
+        {"book_name": book_name, "sheet_name": sheet_name, "label_types": label_types},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge collected worksheet information.",
     )
 
 
@@ -506,24 +495,20 @@ def origin_bridge_read_worksheet(
 ) -> dict[str, Any]:
     """Read worksheet data through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge read worksheet data.",
-            **request_bridge(
-                "read_worksheet",
-                {
-                    "book_name": book_name,
-                    "sheet_name": sheet_name,
-                    "start_row": start_row,
-                    "max_rows": max_rows,
-                    "columns": columns,
-                },
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "read_worksheet",
+        {
+            "book_name": book_name,
+            "sheet_name": sheet_name,
+            "start_row": start_row,
+            "max_rows": max_rows,
+            "columns": columns,
+        },
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge read worksheet data.",
     )
 
 
@@ -542,25 +527,21 @@ def origin_bridge_write_worksheet(
 ) -> dict[str, Any]:
     """Write worksheet data through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge wrote worksheet data.",
-            **request_bridge(
-                "write_worksheet",
-                {
-                    "rows": rows,
-                    "columns": columns,
-                    "book_name": book_name,
-                    "sheet_name": sheet_name,
-                    "start_col": start_col,
-                    "create": create,
-                },
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "write_worksheet",
+        {
+            "rows": rows,
+            "columns": columns,
+            "book_name": book_name,
+            "sheet_name": sheet_name,
+            "start_col": start_col,
+            "create": create,
+        },
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge wrote worksheet data.",
     )
 
 
@@ -597,43 +578,39 @@ def origin_bridge_plot_table(
 ) -> dict[str, Any]:
     """Create a table-backed plot through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge created table-backed plot.",
-            **request_bridge(
-                "plot_table",
-                {
-                    "path": path,
-                    "kind": kind,
-                    "x_col": x_col,
-                    "y_cols": y_cols,
-                    "book_name": book_name,
-                    "sheet_name": sheet_name,
-                    "excel_sheet": excel_sheet,
-                    "delimiter": delimiter,
-                    "encoding": encoding,
-                    "header": header,
-                    "skiprows": skiprows,
-                    "nrows": nrows,
-                    "na_values": na_values,
-                    "graph_name": graph_name,
-                    "template": template,
-                    "title": title,
-                    "x_label": x_label,
-                    "y_label": y_label,
-                    "z_col": z_col,
-                    "y_error_col": y_error_col,
-                    "x_error_col": x_error_col,
-                    "show_legend": show_legend,
-                    "style_mode": style_mode,
-                    "export_path": export_path,
-                },
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "plot_table",
+        {
+            "path": path,
+            "kind": kind,
+            "x_col": x_col,
+            "y_cols": y_cols,
+            "book_name": book_name,
+            "sheet_name": sheet_name,
+            "excel_sheet": excel_sheet,
+            "delimiter": delimiter,
+            "encoding": encoding,
+            "header": header,
+            "skiprows": skiprows,
+            "nrows": nrows,
+            "na_values": na_values,
+            "graph_name": graph_name,
+            "template": template,
+            "title": title,
+            "x_label": x_label,
+            "y_label": y_label,
+            "z_col": z_col,
+            "y_error_col": y_error_col,
+            "x_error_col": x_error_col,
+            "show_legend": show_legend,
+            "style_mode": style_mode,
+            "export_path": export_path,
+        },
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge created table-backed plot.",
     )
 
 
@@ -649,18 +626,14 @@ def origin_bridge_export_graph(
 ) -> dict[str, Any]:
     """Export a graph through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge exported graph.",
-            **request_bridge(
-                "export_graph",
-                {"path": path, "graph_name": graph_name, "overwrite": overwrite},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "export_graph",
+        {"path": path, "graph_name": graph_name, "overwrite": overwrite},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge exported graph.",
     )
 
 
@@ -681,27 +654,23 @@ def origin_bridge_run_analysis(
 ) -> dict[str, Any]:
     """Run an Origin analysis through the Origin GUI bridge."""
 
-    return _wrap(
-        lambda: _ok(
-            "Origin bridge ran analysis.",
-            **request_bridge(
-                "run_analysis",
-                {
-                    "analysis": analysis,
-                    "worksheet": worksheet,
-                    "x_col": x_col,
-                    "y_col": y_col,
-                    "output_sheet": output_sheet,
-                    "options": options or {},
-                    "include_output": include_output,
-                    "output_max_rows": output_max_rows,
-                },
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "run_analysis",
+        {
+            "analysis": analysis,
+            "worksheet": worksheet,
+            "x_col": x_col,
+            "y_col": y_col,
+            "output_sheet": output_sheet,
+            "options": options or {},
+            "include_output": include_output,
+            "output_max_rows": output_max_rows,
+        },
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge ran analysis.",
     )
 
 
@@ -716,18 +685,14 @@ def origin_bridge_submit_task(
 ) -> dict[str, Any]:
     """Submit a supported Origin bridge method as a queued background task."""
 
-    return _wrap(
-        lambda: _ok(
-            "Submitted Origin bridge task.",
-            **request_bridge(
-                "submit_task",
-                {"method": method, "params": params or {}},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "submit_task",
+        {"method": method, "params": params or {}},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Submitted Origin bridge task.",
     )
 
 
@@ -741,18 +706,14 @@ def origin_bridge_task_status(
 ) -> dict[str, Any]:
     """Read status, result, or error for an Origin bridge background task."""
 
-    return _wrap(
-        lambda: _ok(
-            "Read Origin bridge task status.",
-            **request_bridge(
-                "task_status",
-                {"task_id": task_id},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "task_status",
+        {"task_id": task_id},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Read Origin bridge task status.",
     )
 
 
@@ -766,18 +727,14 @@ def origin_bridge_cancel_task(
 ) -> dict[str, Any]:
     """Cancel a queued Origin bridge task or mark a running task for cancellation."""
 
-    return _wrap(
-        lambda: _ok(
-            "Requested Origin bridge task cancellation.",
-            **request_bridge(
-                "cancel_task",
-                {"task_id": task_id},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "cancel_task",
+        {"task_id": task_id},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Requested Origin bridge task cancellation.",
     )
 
 
@@ -791,16 +748,12 @@ def origin_bridge_list_tasks(
 ) -> dict[str, Any]:
     """List recent Origin bridge background tasks."""
 
-    return _wrap(
-        lambda: _ok(
-            "Listed Origin bridge tasks.",
-            **request_bridge(
-                "list_tasks",
-                {"limit": limit},
-                host=host,
-                port=port,
-                token=token,
-                timeout=timeout,
-            ),
-        )
+    return _bridge_call(
+        "list_tasks",
+        {"limit": limit},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Listed Origin bridge tasks.",
     )
