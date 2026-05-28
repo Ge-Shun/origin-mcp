@@ -353,6 +353,21 @@ def test_bridge_rejects_invalid_token() -> None:
     assert excinfo.value.error_code == "origin_bridge_unauthorized"
 
 
+def test_bridge_rejects_missing_token_when_required() -> None:
+    with running_bridge(token="secret") as server:
+        with pytest.raises(OriginBridgeError) as excinfo:
+            bridge_client(server, token=None).request("ping")
+
+    assert excinfo.value.error_code == "origin_bridge_unauthorized"
+
+
+def test_bridge_accepts_matching_token() -> None:
+    with running_bridge(token="secret") as server:
+        result = bridge_client(server, token="secret").request("ping")
+
+    assert result["bridge"] == "origin-mcp-bridge"
+
+
 def test_bridge_task_lifecycle_completes() -> None:
     with running_bridge() as server:
         client = bridge_client(server)

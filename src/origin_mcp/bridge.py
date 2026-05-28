@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import inspect
 import json
 import math
@@ -361,11 +362,15 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
         request_id = request.get("id")
         if not isinstance(request, dict):
             raise OriginOperationError("Bridge request must be a JSON object.")
-        if self.server.token and request.get("token") != self.server.token:
-            raise OriginOperationError(
-                "Invalid Origin bridge token.",
-                error_code="origin_bridge_unauthorized",
-            )
+        if self.server.token:
+            supplied = request.get("token")
+            if not isinstance(supplied, str) or not hmac.compare_digest(
+                supplied, self.server.token
+            ):
+                raise OriginOperationError(
+                    "Invalid Origin bridge token.",
+                    error_code="origin_bridge_unauthorized",
+                )
         method = request.get("method")
         params = request.get("params") or {}
         if not isinstance(method, str) or not method:
