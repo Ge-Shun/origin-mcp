@@ -4,6 +4,7 @@ from .analysis import _AnalysisMixin
 from .base import GraphRef, WorksheetRef, _OriginClientBase
 from .export import _ExportMixin
 from .graph_formatting import _GraphFormattingMixin
+from .graph_style import _GraphStyleMixin
 from .lifecycle import _LifecycleMixin
 from .plot import _PlotMixin
 from .worksheet import _WorksheetMixin
@@ -14,6 +15,7 @@ class OriginClient(
     _WorksheetMixin,
     _PlotMixin,
     _GraphFormattingMixin,
+    _GraphStyleMixin,
     _AnalysisMixin,
     _ExportMixin,
     _OriginClientBase,
