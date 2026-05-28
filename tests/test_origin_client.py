@@ -73,6 +73,31 @@ def test_allowed_roots_blocks_paths_outside_root(
         OriginClient._validate_file(blocked)
 
 
+def test_normalize_user_path_blocks_paths_outside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    blocked = tmp_path / "outside"
+    monkeypatch.setenv("ORIGIN_MCP_ALLOWED_ROOTS", str(allowed))
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        OriginClient._normalize_user_path(blocked)
+    assert excinfo.value.error_code == "path_not_allowed"
+
+
+def test_normalize_user_path_resolves_and_returns_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORIGIN_MCP_ALLOWED_ROOTS", raising=False)
+    relative = tmp_path / "sub" / ".." / "child.txt"
+
+    resolved = OriginClient._normalize_user_path(relative)
+    assert resolved == (tmp_path / "child.txt").resolve()
+
+
 def test_connect_records_set_show_warning() -> None:
     client = OriginClient()
 

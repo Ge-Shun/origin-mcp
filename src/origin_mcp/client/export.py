@@ -26,8 +26,7 @@ class _ExportMixin(_OriginClientBase):
         overwrite: bool = True,
         width: int = 0,
     ) -> dict[str, Any]:
-        output_dir = output_dir.expanduser().resolve()
-        self._check_path_allowed(output_dir)
+        output_dir = self._normalize_user_path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self.ensure_feature("graph_list", "Batch graph export")
@@ -55,8 +54,7 @@ class _ExportMixin(_OriginClientBase):
         graph: Any | None = None,
         overwrite: bool = True,
     ) -> dict[str, Any]:
-        path = path.expanduser().resolve()
-        self._check_path_allowed(path)
+        path = self._normalize_user_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not overwrite:
             raise OriginOperationError(f"Export path already exists: {path}")
@@ -104,8 +102,7 @@ class _ExportMixin(_OriginClientBase):
         suffix = file_type.lower().lstrip(".") or "png"
         if output_dir is None:
             output_dir = Path(tempfile.gettempdir()) / "origin-mcp-previews"
-        output_dir = output_dir.expanduser().resolve()
-        self._check_path_allowed(output_dir)
+        output_dir = self._normalize_user_path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         safe_name = self._safe_filename(graph_name or "active_graph")
         path = output_dir / f"{safe_name}_{uuid.uuid4().hex[:8]}.{suffix}"
@@ -129,8 +126,7 @@ class _ExportMixin(_OriginClientBase):
             return exported
 
     def inspect_export(self, path: Path) -> dict[str, Any]:
-        path = path.expanduser().resolve()
-        self._check_path_allowed(path)
+        path = self._normalize_user_path(path)
         if not path.exists():
             raise OriginOperationError(f"Export file does not exist: {path}")
         if not path.is_file():

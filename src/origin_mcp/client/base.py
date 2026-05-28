@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ..analysis_outputs import (
@@ -179,6 +180,20 @@ class _OriginClientBase:
     _validate_file = staticmethod(validate_file)
 
     _check_path_allowed = staticmethod(check_path_allowed)
+
+    @staticmethod
+    def _normalize_user_path(path: Path | str) -> Path:
+        """Resolve a user-supplied path and enforce ORIGIN_MCP_ALLOWED_ROOTS.
+
+        Every public method that accepts a filesystem path (data files,
+        export targets, project files, template directories) must route the
+        argument through this helper before using it. The check is a no-op
+        when ORIGIN_MCP_ALLOWED_ROOTS is unset.
+        """
+
+        resolved = Path(path).expanduser().resolve()
+        check_path_allowed(resolved)
+        return resolved
 
     @staticmethod
     def _object_name(obj: Any, default: str) -> str:

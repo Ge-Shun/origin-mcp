@@ -33,7 +33,7 @@ class _WorksheetMixin(_OriginClientBase):
         nrows: int | None = None,
         na_values: str | list[str] | None = None,
     ) -> WorksheetRef:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(
             path,
@@ -68,7 +68,7 @@ class _WorksheetMixin(_OriginClientBase):
         sel: str = "",
         sparks: bool = False,
     ) -> WorksheetRef:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         self.ensure_feature("worksheet_from_file", "Origin Data Connector import")
         wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
@@ -97,7 +97,7 @@ class _WorksheetMixin(_OriginClientBase):
         nrows: int | None = None,
         na_values: str | list[str] | None = None,
     ) -> WorksheetRef:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(
             path,
@@ -339,8 +339,7 @@ class _WorksheetMixin(_OriginClientBase):
         sheet_name: str | None = None,
         overwrite: bool = True,
     ) -> dict[str, Any]:
-        path = path.expanduser().resolve()
-        self._check_path_allowed(path)
+        path = self._normalize_user_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not overwrite:
             raise OriginOperationError(f"Export path already exists: {path}")

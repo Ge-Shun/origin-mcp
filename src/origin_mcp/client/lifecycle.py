@@ -69,7 +69,7 @@ class _LifecycleMixin(_OriginClientBase):
         readonly: bool = False,
         asksave: bool = False,
     ) -> dict[str, Any]:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         if path.suffix.lower() not in {".opju", ".opj"}:
             raise OriginOperationError(f"Not an Origin project file: {path}")
@@ -82,7 +82,7 @@ class _LifecycleMixin(_OriginClientBase):
         return {"path": str(path), "opened": bool(ok)}
 
     def save_project(self, path: Path) -> dict[str, Any]:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         op = self.op
 

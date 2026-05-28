@@ -72,7 +72,7 @@ class _PlotMixin(_OriginClientBase):
         style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(
             path,
@@ -174,7 +174,7 @@ class _PlotMixin(_OriginClientBase):
         style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(
             path,
@@ -401,7 +401,7 @@ class _PlotMixin(_OriginClientBase):
         na_values: str | list[str] | None = None,
         max_recommendations: int = 5,
     ) -> dict[str, Any]:
-        path = path.expanduser().resolve()
+        path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(
             path,
@@ -726,6 +726,8 @@ class _PlotMixin(_OriginClientBase):
         file_type: str = "png",
         plot_type: str = "?",
     ) -> dict[str, Any]:
+        if output_dir is not None:
+            output_dir = self._normalize_user_path(output_dir)
         graphs = []
         for index, data_range in enumerate(data_ranges, start=1):
             export_path = None
@@ -745,8 +747,7 @@ class _PlotMixin(_OriginClientBase):
         builtin = sorted(set(self._default_graph_templates().values()) | {"bar", "ternary"})
         discovered: list[dict[str, str]] = []
         if template_dir is not None:
-            template_dir = template_dir.expanduser().resolve()
-            self._check_path_allowed(template_dir)
+            template_dir = self._normalize_user_path(template_dir)
             if not template_dir.exists() or not template_dir.is_dir():
                 raise OriginOperationError(f"Template directory does not exist: {template_dir}")
             for suffix in ("*.otp", "*.otpu", "*.otm", "*.otmu"):
@@ -769,8 +770,7 @@ class _PlotMixin(_OriginClientBase):
         origin_paths = self._origin_template_paths()
         search_dirs = [Path(path) for path in origin_paths.values() if path]
         if template_dir is not None:
-            template_dir = template_dir.expanduser().resolve()
-            self._check_path_allowed(template_dir)
+            template_dir = self._normalize_user_path(template_dir)
             search_dirs.insert(0, template_dir)
         discovered = self._discover_template_files(search_dirs, max_templates=max_templates)
         return {
