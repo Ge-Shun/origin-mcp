@@ -298,29 +298,41 @@ def _bridge_shutdown_requested(server: Any) -> bool:
     return bool(event is not None and event.is_set())
 
 
+def _finalize_bridge_stopped(server: Any) -> None:
+    """Close the server socket, clear module globals, and record the stop."""
+
+    server.server_close()
+    globals()["_origin_mcp_bridge_server"] = None
+    globals()["_origin_mcp_bridge_thread"] = None
+    _emit("stopped", fields={"running": False})
+
+
 def _load_bridge_server(install_missing: bool) -> Any:
     _ensure_user_site_on_path()
     try:
         from origin_mcp.bridge import OriginEmbeddedBridgeServer
-    except ImportError as exc:
-        if "OriginEmbeddedBridgeServer" not in str(exc):
-            raise
-        _clear_failed_imports()
-        importlib.invalidate_caches()
-        from origin_mcp.bridge import OriginEmbeddedBridgeServer
 
         return OriginEmbeddedBridgeServer
     except ModuleNotFoundError as exc:
+        # A runtime dependency (originpro/pandas/...) pulled in while importing
+        # the bridge is missing. ModuleNotFoundError subclasses ImportError, so
+        # this clause must stay ahead of the generic ImportError handler below.
         missing = exc.name or str(exc)
         if missing not in RUNTIME_PACKAGES:
             raise
         if not install_missing:
             raise RuntimeError(_missing_dependency_message(_missing_runtime_packages())) from exc
         _install_missing_runtime_packages()
-        _clear_failed_imports()
-        from origin_mcp.bridge import OriginEmbeddedBridgeServer
+    except ImportError as exc:
+        # A stale or partially imported bridge module that lacks the expected
+        # symbol; clearing it and retrying usually resolves the import.
+        if "OriginEmbeddedBridgeServer" not in str(exc):
+            raise
 
-        return OriginEmbeddedBridgeServer
+    _clear_failed_imports()
+    importlib.invalidate_caches()
+    from origin_mcp.bridge import OriginEmbeddedBridgeServer
+
     return OriginEmbeddedBridgeServer
 
 
@@ -428,10 +440,7 @@ def start_origin_mcp_bridge(
     try:
         _serve_foreground_cooperative(server)
     finally:
-        server.server_close()
-        globals()["_origin_mcp_bridge_server"] = None
-        globals()["_origin_mcp_bridge_thread"] = None
-        _emit("stopped", fields={"running": False})
+        _finalize_bridge_stopped(server)
     return result
 
 
@@ -444,12 +453,9 @@ def stop_origin_mcp_bridge() -> dict[str, Any]:
         return {"stopped": False, "reason": "not_running"}
 
     server.shutdown()
-    server.server_close()
     if thread is not None:
         thread.join(timeout=2)
-    globals()["_origin_mcp_bridge_server"] = None
-    globals()["_origin_mcp_bridge_thread"] = None
-    _emit("stopped", fields={"running": False})
+    _finalize_bridge_stopped(server)
     return {"stopped": True}
 
 
