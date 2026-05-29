@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from origin_mcp.compat import PLOT_TYPE_CATALOG
 from origin_mcp.errors import OriginOperationError
 from origin_mcp.origin_client import GraphRef, OriginClient, WorksheetRef
 
@@ -1516,6 +1517,58 @@ def test_plot_table_by_id_uses_plotxyz_for_xyz_plot_types(
     assert "wks.col3.type=6;" in scripts[0]
     assert any("plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240" in script for script in scripts)
     assert any('title.show=0; title.text$="";' in script for script in scripts)
+
+
+def test_plot_table_by_id_uses_worksheet_command_for_box_plot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("group_a,group_b,group_c\n1,2,3\n4,5,6\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=206,
+        template="box",
+        selected_cols=["group_a", "group_b", "group_c"],
+        graph_name="BoxPlot",
+    )
+
+    assert command["command"] == "worksheet"
+    assert command["range_option"] == "selection"
+    assert "worksheet -s 1 0 3 0; worksheet -p 206 box;" in scripts
+    assert not any("plotxy" in script and "plot:=206" in script for script in scripts)
+
+
+def test_all_documented_table_plot_ids_use_expected_labtalk_routes() -> None:
+    matrix_only_ids = {
+        item["id"]
+        for item in PLOT_TYPE_CATALOG
+        if item["input"] == "Matrix Object"
+    }
+    expected_plotxyz_ids = {103, 185, 240, 242, 243, 245}
+    expected_worksheet_ids = {183, 184, 206}
+
+    for item in PLOT_TYPE_CATALOG:
+        plot_type_id = item["id"]
+        if plot_type_id in matrix_only_ids:
+            continue
+        command, range_option = OriginClient._table_plot_command_options(plot_type_id)
+        if plot_type_id in expected_worksheet_ids:
+            assert (command, range_option) == ("worksheet", "selection"), item
+        elif plot_type_id in expected_plotxyz_ids:
+            assert (command, range_option) == ("plotxyz", "iz"), item
+        else:
+            assert (command, range_option) == ("plotxy", "iy"), item
 
 
 def test_plot_table_by_id_sets_xyzxyz_designations(

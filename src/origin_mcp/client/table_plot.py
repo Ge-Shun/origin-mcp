@@ -216,6 +216,13 @@ class _TablePlotMixin(_OriginClientBase):
                 graph_name=graph_name_actual,
             )
             result = self.run_labtalk(script)
+        self._assert_plot_type_command(
+            plot_type_id=plot_type_id,
+            template=template,
+            command=command,
+            range_option=range_option,
+            script=script,
+        )
         graph_name_actual = self._created_graph_name(
             requested_graph_name=graph_name_actual,
             existing_graphs=existing_graphs,
@@ -315,6 +322,32 @@ class _TablePlotMixin(_OriginClientBase):
         if plot_type_id in TABLE_PLOTXYZ_IDS:
             return "plotxyz", "iz"
         return "plotxy", "iy"
+
+    def _assert_plot_type_command(
+        self,
+        plot_type_id: int,
+        template: str,
+        command: str,
+        range_option: str,
+        script: str,
+    ) -> None:
+        expected_command, expected_range_option = self._table_plot_command_options(plot_type_id)
+        expected_fragments = {
+            "plotxy": f"plotxy {expected_range_option}:=",
+            "plotxyz": f"plotxyz {expected_range_option}:=",
+            "worksheet": f"worksheet -p {plot_type_id} {template}",
+        }
+        expected_fragment = expected_fragments[expected_command]
+        if (
+            command != expected_command
+            or range_option != expected_range_option
+            or expected_fragment not in script
+        ):
+            raise OriginOperationError(
+                "Plot type route mismatch: "
+                f"id={plot_type_id}, expected {expected_command}/{expected_range_option}, "
+                f"got {command}/{range_option}."
+            )
 
     @staticmethod
     def _worksheet_plot_command(
