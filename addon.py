@@ -361,7 +361,7 @@ def start_origin_mcp_bridge(
     ):
         actual_host, actual_port = existing.server_address
         _notify(
-            "Bridge is already running inside Origin. See the status file for connection details.",
+            "Bridge is already running inside Origin.",
             fields={"host": actual_host, "port": actual_port},
         )
         return {"running": True, "host": actual_host, "port": actual_port, "already_running": True}
@@ -414,7 +414,7 @@ def start_origin_mcp_bridge(
         "background": background,
     }
     _notify(
-        "Bridge is running inside Origin. See the status file for connection details.",
+        "Bridge is running inside Origin.",
         fields={
             "host": actual_host,
             "port": actual_port,

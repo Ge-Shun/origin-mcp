@@ -34,7 +34,7 @@ available, it looks for a sibling `src\origin_mcp` directory next to `addon.py`.
 The addon shows a Windows message box when the bridge is ready:
 
 ```text
-Bridge is running inside Origin. See the status file for connection details.
+Bridge is running inside Origin.
 ```
 
 By default the bridge serves requests in the Python console foreground with a
