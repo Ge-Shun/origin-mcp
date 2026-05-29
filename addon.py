@@ -287,10 +287,15 @@ def _pump_windows_messages() -> None:
 
 def _serve_foreground_cooperative(server: Any) -> None:
     server.timeout = 0.05
-    while True:
+    while not _bridge_shutdown_requested(server):
         server.handle_request()
         _pump_windows_messages()
         time.sleep(0.001)
+
+
+def _bridge_shutdown_requested(server: Any) -> bool:
+    event = getattr(server, "shutdown_requested", None)
+    return bool(event is not None and event.is_set())
 
 
 def _load_bridge_server(install_missing: bool) -> Any:
@@ -420,7 +425,13 @@ def start_origin_mcp_bridge(
 
     globals()["_origin_mcp_bridge_thread"] = None
     _emit("serving requests cooperatively; keep this Python Console running")
-    _serve_foreground_cooperative(server)
+    try:
+        _serve_foreground_cooperative(server)
+    finally:
+        server.server_close()
+        globals()["_origin_mcp_bridge_server"] = None
+        globals()["_origin_mcp_bridge_thread"] = None
+        _emit("stopped", fields={"running": False})
     return result
 
 
@@ -432,8 +443,7 @@ def stop_origin_mcp_bridge() -> dict[str, Any]:
     if server is None:
         return {"stopped": False, "reason": "not_running"}
 
-    if thread is not None and thread.is_alive():
-        server.shutdown()
+    server.shutdown()
     server.server_close()
     if thread is not None:
         thread.join(timeout=2)

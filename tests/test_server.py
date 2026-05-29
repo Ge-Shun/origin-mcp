@@ -30,7 +30,7 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     tools = asyncio.run(server.mcp.list_tools())
     names = {tool.name for tool in tools}
 
-    assert len(names) == 20
+    assert len(names) == 21
     assert names == server.COMPACT_TOOL_NAMES
     assert "origin_plot_line" not in names
 
@@ -51,7 +51,7 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 148
+    assert int(output.strip()) == 149
 
 
 def test_error_response_includes_stable_error_code() -> None:

@@ -43,6 +43,7 @@ from .tools.bridge import (
     origin_bridge_run_analysis,
     origin_bridge_run_labtalk,
     origin_bridge_save_project,
+    origin_bridge_shutdown,
     origin_bridge_status,
     origin_bridge_submit_task,
     origin_bridge_task_status,

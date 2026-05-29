@@ -156,6 +156,27 @@ def origin_bridge_status(
 
 
 @_mcp_tool()
+def origin_bridge_shutdown(
+    release_origin: bool = True,
+    host: str | None = None,
+    port: int | None = None,
+    token: str | None = None,
+    timeout: float | None = 2.0,
+) -> dict[str, Any]:
+    """Ask the Origin GUI bridge to stop serving requests."""
+
+    return _bridge_call(
+        "shutdown",
+        {"release_origin": release_origin},
+        host=host,
+        port=port,
+        token=token,
+        timeout=timeout,
+        success="Origin bridge shutdown requested.",
+    )
+
+
+@_mcp_tool()
 def origin_doctor(
     host: str | None = None,
     port: int | None = None,

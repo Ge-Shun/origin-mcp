@@ -84,8 +84,11 @@ MCP 客户端配置示例：
 `addon.py` 内不需要手动改源码目录。
 如果不确定 bridge 是否启动或为何连不上，先调用 `origin_doctor`；它会返回
 核心诊断信息。详细 checklist 可在知识库中搜索 `bridge diagnostics`。
+需要关闭 Origin 内前台 bridge 时，优先调用 `origin_bridge_shutdown`，默认会请求
+bridge 停止服务并释放 Origin 自动化连接；这样比在 Origin Python Console 里按
+`Ctrl+C` 更可靠。
 
-MCP server 默认使用 20 个工具的 compact profile，降低模型选工具成本。启动 server
+MCP server 默认使用 compact profile，降低模型选工具成本。启动 server
 前设置 `ORIGIN_MCP_TOOL_PROFILE=full` 可暴露所有 worksheet、graph、analysis 和
 `origin_plot_*` 专家工具。
 

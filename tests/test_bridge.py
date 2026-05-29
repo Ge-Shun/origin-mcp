@@ -21,6 +21,9 @@ from origin_mcp.origin_client import GraphRef, WorksheetRef
 
 
 class FakeOriginClient:
+    def __init__(self) -> None:
+        self.detached = False
+
     def connect(self, show: bool = True) -> dict[str, Any]:
         return {"connected": True, "visible": show, "origin_version": 10.3}
 
@@ -73,6 +76,10 @@ class FakeOriginClient:
     def run_labtalk(self, script: str) -> dict[str, Any]:
         return {"result": script == "type ok;", "script": script}
 
+    def detach(self) -> dict[str, Any]:
+        self.detached = True
+        return {"detached": True, "closed": False}
+
     def import_csv(self, *_args: Any, **_kwargs: Any) -> WorksheetRef:
         return WorksheetRef("Book1", "Sheet1", ["x", "y"], 2)
 
@@ -114,6 +121,7 @@ class FakeOriginClient:
 
 class BlockingOriginClient(FakeOriginClient):
     def __init__(self) -> None:
+        super().__init__()
         self.started = threading.Event()
         self.release = threading.Event()
 
@@ -368,6 +376,26 @@ def test_bridge_accepts_matching_token() -> None:
     assert result["bridge"] == "origin-mcp-bridge"
 
 
+def test_bridge_shutdown_stops_server_and_releases_origin() -> None:
+    fake_client = FakeOriginClient()
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["shutdown_requested"] is True
+    assert result["origin_release"] == {"detached": True, "closed": False}
+    assert fake_client.detached is True
+    assert not thread.is_alive()
+
+
 def test_bridge_task_lifecycle_completes() -> None:
     with running_bridge() as server:
         client = bridge_client(server)
@@ -483,6 +511,22 @@ def test_server_bridge_status_wraps_response(monkeypatch: pytest.MonkeyPatch) ->
 
     assert result["ok"] is True
     assert result["data"]["bridge"] == "ping"
+
+
+def test_server_bridge_shutdown_wraps_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake_request(method: str, params: dict[str, Any] | None = None, **_kwargs: Any):
+        calls.append((method, params))
+        return {"shutdown_requested": True, "release_origin": True}
+
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
+
+    result = mcp_server.origin_bridge_shutdown()
+
+    assert result["ok"] is True
+    assert result["data"]["shutdown_requested"] is True
+    assert calls == [("shutdown", {"release_origin": True})]
 
 
 def test_server_bridge_status_reports_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:

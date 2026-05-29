@@ -42,6 +42,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_export_graph",
         "origin_run_analysis",
         "origin_run_labtalk",
+        "origin_bridge_shutdown",
         "origin_bridge_submit_task",
         "origin_bridge_task_status",
         "origin_bridge_cancel_task",

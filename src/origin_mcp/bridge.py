@@ -280,6 +280,22 @@ class _OriginBridgeServerState:
         self.client = client or OriginClient()
         self.tasks = BridgeTaskManager(self.client, max_tasks=max_tasks)
         self.max_tasks = max(1, max_tasks)
+        self.shutdown_requested = threading.Event()
+
+    def request_shutdown(self) -> None:
+        self.shutdown_requested.set()
+
+    def shutdown(self) -> None:
+        self.request_shutdown()
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        previous_timeout = self.timeout
+        self.timeout = poll_interval
+        try:
+            while not self.shutdown_requested.is_set():
+                self.handle_request()
+        finally:
+            self.timeout = previous_timeout
 
 
 class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServer):
@@ -401,6 +417,8 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             return self.server.tasks.cancel(str(params.get("task_id") or ""))
         if method == "list_tasks":
             return self.server.tasks.list_tasks(limit=int(params.get("limit", 20)))
+        if method == "shutdown":
+            return self._shutdown_bridge(params)
         if method == "call_client":
             client_method = str(params.get("method") or "")
             args = params.get("args") or []
@@ -415,6 +433,32 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             f"Unsupported bridge method: {method}",
             error_code="unsupported_bridge_method",
         )
+
+    def _shutdown_bridge(self, params: dict[str, Any]) -> dict[str, Any]:
+        release_origin = bool(params.get("release_origin", True))
+        result: dict[str, Any] = {
+            "shutdown_requested": True,
+            "release_origin": release_origin,
+        }
+        if release_origin:
+            detach = getattr(self.server.client, "detach", None)
+            if callable(detach):
+                try:
+                    result["origin_release"] = detach()
+                except Exception as exc:
+                    result["origin_release_error"] = {
+                        "message": str(exc),
+                        "error_code": _error_code(exc),
+                        "error_type": type(exc).__name__,
+                    }
+            else:
+                result["origin_release_error"] = {
+                    "message": "Origin client does not provide detach().",
+                    "error_code": "origin_release_unavailable",
+                    "error_type": "AttributeError",
+                }
+        self.server.request_shutdown()
+        return result
 
     @staticmethod
     def _error_response(request_id: Any, exc: Exception) -> dict[str, Any]:
@@ -524,6 +568,8 @@ def _call_origin_method(
     method: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
+    # ``origin_ping``/``origin_capabilities`` are taskable aliases for client
+    # methods that carry a different name, so they cannot be routed generically.
     if method == "origin_ping":
         return client.connect(show=bool(params.get("show", True)))
     if method == "origin_capabilities":
@@ -531,115 +577,28 @@ def _call_origin_method(
             show=bool(params.get("show", False)),
             refresh=bool(params.get("refresh", False)),
         )
-    if method == "run_labtalk":
-        script = str(params.get("script") or "")
-        return client.run_labtalk(script)
-    if method == "import_table":
-        worksheet = client.import_table(
-            Path(str(params.get("path") or "")),
-            book_name=params.get("book_name"),
-            sheet_name=params.get("sheet_name"),
-            excel_sheet=params.get("excel_sheet", 0),
-            delimiter=params.get("delimiter"),
-            encoding=params.get("encoding"),
-            header=params.get("header", 0),
-            skiprows=params.get("skiprows"),
-            nrows=params.get("nrows"),
-            na_values=params.get("na_values"),
-        )
-        return {"worksheet": worksheet.as_dict()}
+    if method not in ALLOWED_CLIENT_METHODS:
+        raise OriginOperationError(f"Unsupported bridge method: {method}")
+
+    # ``plot_table`` returns a (worksheet, graph) pair and ``export_graph``
+    # returns a path dict; both enrich the response with an export inspection.
+    # Every other client method maps cleanly onto the generic call path, which
+    # already coerces path arguments and wraps WorksheetRef/GraphRef results.
     if method == "plot_table":
-        export_path = params.get("export_path")
-        worksheet, graph = client.plot_table(
-            path=Path(str(params.get("path") or "")),
-            kind=str(params.get("kind") or "line"),
-            x_col=params.get("x_col"),
-            y_cols=params.get("y_cols"),
-            book_name=params.get("book_name"),
-            sheet_name=params.get("sheet_name"),
-            excel_sheet=params.get("excel_sheet", 0),
-            delimiter=params.get("delimiter"),
-            encoding=params.get("encoding"),
-            header=params.get("header", 0),
-            skiprows=params.get("skiprows"),
-            nrows=params.get("nrows"),
-            na_values=params.get("na_values"),
-            graph_name=params.get("graph_name"),
-            template=params.get("template"),
-            title=params.get("title"),
-            x_label=params.get("x_label"),
-            y_label=params.get("y_label"),
-            z_col=params.get("z_col"),
-            y_error_col=params.get("y_error_col"),
-            x_error_col=params.get("x_error_col"),
-            show_legend=bool(params.get("show_legend", True)),
-            style_mode=str(params.get("style_mode") or "origin_default"),
-            export_path=Path(str(export_path)) if export_path else None,
-        )
+        worksheet, graph = _call_client_method(client, "plot_table", [], params)
         graph_data = graph.as_dict()
         response = {"worksheet": worksheet.as_dict(), "graph": graph_data}
         if graph_data.get("export_path"):
             response["export_inspection"] = client.inspect_export(Path(graph_data["export_path"]))
         return response
     if method == "export_graph":
-        exported = client.export_graph(
-            Path(str(params.get("path") or "")),
-            graph_name=params.get("graph_name"),
-            overwrite=bool(params.get("overwrite", True)),
-        )
+        exported = _call_client_method(client, "export_graph", [], params)
         return {
             **exported,
             "inspection": client.inspect_export(Path(str(exported["path"]))),
         }
-    if method == "run_analysis":
-        return client.run_analysis(
-            analysis=str(params.get("analysis") or ""),
-            worksheet=params.get("worksheet"),
-            x_col=params.get("x_col"),
-            y_col=params.get("y_col"),
-            output_sheet=params.get("output_sheet"),
-            options=params.get("options") or {},
-            include_output=bool(params.get("include_output", False)),
-            output_max_rows=int(params.get("output_max_rows", 100)),
-        )
-    if method == "new_project":
-        return client.new_project(show=bool(params.get("show", True)))
-    if method == "open_project":
-        return client.open_project(
-            Path(str(params.get("path") or "")),
-            readonly=bool(params.get("readonly", False)),
-            asksave=bool(params.get("asksave", False)),
-        )
-    if method == "save_project":
-        return client.save_project(Path(str(params.get("path") or "")))
-    if method == "list_project":
-        return client.list_project()
-    if method == "worksheet_info":
-        return client.worksheet_info(
-            book_name=params.get("book_name"),
-            sheet_name=params.get("sheet_name"),
-            label_types=params.get("label_types"),
-        )
-    if method == "read_worksheet":
-        return client.read_worksheet(
-            book_name=params.get("book_name"),
-            sheet_name=params.get("sheet_name"),
-            start_row=int(params.get("start_row", 0)),
-            max_rows=int(params.get("max_rows", 100)),
-            columns=params.get("columns"),
-        )
-    if method == "write_worksheet":
-        return client.write_worksheet(
-            rows=params.get("rows") or [],
-            columns=params.get("columns"),
-            book_name=params.get("book_name"),
-            sheet_name=params.get("sheet_name"),
-            start_col=params.get("start_col", 0),
-            create=bool(params.get("create", False)),
-        )
-    if method in ALLOWED_CLIENT_METHODS:
-        return _public_result(_call_client_method(client, method, [], params))
-    raise OriginOperationError(f"Unsupported bridge method: {method}")
+
+    return _public_result(_call_client_method(client, method, [], params))
 
 
 def _error_code(exc: Exception) -> str:

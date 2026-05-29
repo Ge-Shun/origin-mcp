@@ -60,8 +60,25 @@ behavior.
 Then run the MCP server or smoke test from a separate terminal. The MCP server
 connects to the same host and port through `OriginBridgeProxy`.
 
-To stop the foreground bridge, press `Ctrl+C` in the Origin Python console. If
-Origin does not return to the prompt, close Origin after saving any work.
+To stop the foreground bridge, request shutdown from the MCP side:
+
+```json
+{"release_origin": true}
+```
+
+Call this through `origin_bridge_shutdown`. The request stops the Origin-side
+serve loop and, by default, asks the Origin automation layer to detach without
+closing Origin. If the MCP client cannot expose that tool, send a raw bridge
+request from another terminal:
+
+```powershell
+python -c "from origin_mcp.bridge_client import request_bridge; print(request_bridge('shutdown', {'release_origin': True}))"
+```
+
+After the request succeeds, the Origin Python console should return to a prompt
+and Origin can be closed normally. `Ctrl+C` is only a fallback because some
+Origin embedded Python builds do not interrupt the cooperative serve loop
+reliably.
 
 No source directory needs to be edited in `addon.py`. If the file was copied
 away from the checkout and `origin-mcp` is not installed in Origin's Python, set
@@ -88,7 +105,7 @@ the tool modules so new public client calls must be added deliberately. Explicit
 `origin_bridge_*` functions remain available as diagnostics and bridge controls,
 with most of them exposed only in the full tool profile.
 
-The MCP server registers the compact 20-tool profile by default. Specialized
+The MCP server registers the compact tool profile by default. Specialized
 bridge and plotting wrappers remain available in Python and can be exposed to
 MCP clients by starting the server with `ORIGIN_MCP_TOOL_PROFILE=full`.
 
