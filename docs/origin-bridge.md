@@ -69,8 +69,12 @@ shut the Origin bridge down. That calls the `origin_bridge_shutdown` tool with:
 
 The request stops the Origin-side serve loop and, by default, asks the Origin
 automation layer to detach without closing Origin. No extra terminal or console
-input is needed. If the MCP client cannot expose that tool, send a raw bridge
-request from another terminal:
+input is needed.
+
+If you are not driving Origin through an assistant, double-click
+`scripts\stop-bridge.cmd` (or run `python scripts\stop_bridge.py`) to send the
+same shutdown request. Both honor the `ORIGIN_MCP_BRIDGE_HOST` / `PORT` /
+`TOKEN` / `TIMEOUT` environment variables. The equivalent raw call is:
 
 ```powershell
 python -c "from origin_mcp.bridge_client import request_bridge; print(request_bridge('shutdown', {'release_origin': True}))"

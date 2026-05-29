@@ -88,8 +88,11 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 控制台运行。
 
 **要关闭时，直接让你的 MCP 助手关闭 Origin bridge 即可** —— 它会调用
-`origin_bridge_shutdown`，无需另开终端或在控制台里输入。若缺少依赖包或 bridge 起不
-来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
+`origin_bridge_shutdown`，无需另开终端或在控制台里输入。如果不用助手，双击
+`scripts\stop-bridge.cmd`（或运行 `python scripts\stop_bridge.py`）即可发送同样的
+关闭请求：serve 的控制台会回到提示符，Origin 不会被关闭。
+
+若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
 
 ## 文档
 

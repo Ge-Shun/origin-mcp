@@ -95,6 +95,10 @@ running while you use the tools.
 
 **To stop, just ask your MCP assistant to shut the Origin bridge down** — it
 calls `origin_bridge_shutdown`, so no extra terminal or console input is needed.
+If you are not using an assistant, double-click `scripts\stop-bridge.cmd` (or
+run `python scripts\stop_bridge.py`) to send the same shutdown request. The
+serving console returns to its prompt and Origin stays open.
+
 If a package is missing or the bridge will not start, see
 [docs/origin-bridge.md](docs/origin-bridge.md).
 
