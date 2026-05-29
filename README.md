@@ -102,49 +102,6 @@ serving console returns to its prompt and Origin stays open.
 If a package is missing or the bridge will not start, see
 [docs/origin-bridge.md](docs/origin-bridge.md).
 
-## Documentation
-
-- [Tool and compatibility reference](docs/tools.md)
-- [MCP client configuration](docs/mcp-config.md)
-- [Origin GUI bridge](docs/origin-bridge.md)
-- [Agent bootstrap guide](docs/agentic/origin-mcp-bootstrap.md)
-
-After starting the bridge inside Origin with the root `addon.py`, run
-`python examples\smoke_bridge.py` to validate a real file-to-figure workflow.
-The addon does not require editing a source directory in the file.
-If bridge startup or connection state is unclear, call `origin_doctor` first;
-search the knowledge base for `bridge diagnostics` for the detailed checklist.
-
-The MCP server defaults to a compact tool profile to keep tool selection
-manageable. Set `ORIGIN_MCP_TOOL_PROFILE=full` before starting the server to
-expose every specialized worksheet, graph, analysis, and `origin_plot_*`
-wrapper.
-
-## Knowledge Base
-
-The server exposes a structured local knowledge base through MCP tools. Use
-`origin_query_knowledge` or the collection-specific query tools to search, and
-use `origin_browse_knowledge` or the collection-specific browse tools to inspect
-stable paths. The MCP tool index is generated from the current server tool
-docstrings so it tracks the implemented tool surface.
-
-Collections include `mcp_tools`, `reference`, `python_api`, `labtalk`, and
-`official_docs`. The knowledge base is a curated operational index; official
-OriginLab documentation entries include URLs plus `doc_family`, `doc_kind`,
-`versions`, and verification metadata for exact upstream syntax.
-The optional `scripts/update_official_docs_index.py` crawler can refresh a
-generated official-doc overlay for LabTalk command pages, X-Function pages, and
-originpro API pages.
-
-## Safety
-
-This server can read local data files, write exported figures/projects, and
-control a local Origin session. Run it only for trusted MCP clients. Use
-`ORIGIN_MCP_ALLOWED_ROOTS` to restrict file access when needed.
-
-If Origin says it is being controlled by another program, call `origin_detach`
-first. Use `origin_force_quit` only after confirming there is no unsaved work.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).

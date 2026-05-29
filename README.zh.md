@@ -94,47 +94,6 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 
 若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
 
-## 文档
-
-- [工具与兼容性参考](docs/tools.md)
-- [MCP 客户端配置](docs/mcp-config.md)
-- [Origin GUI bridge](docs/origin-bridge.md)
-- [Agent bootstrap 指南](docs/agentic/origin-mcp-bootstrap.md)
-
-在 Origin 内用根目录 `addon.py` 启动 bridge 后，可运行
-`python examples\smoke_bridge.py` 验证真实的导入、绘图、导出和保存项目流程。
-`addon.py` 内不需要手动改源码目录。
-如果不确定 bridge 是否启动或为何连不上，先调用 `origin_doctor`；它会返回
-核心诊断信息。详细 checklist 可在知识库中搜索 `bridge diagnostics`。
-需要关闭 Origin 内前台 bridge 时，优先调用 `origin_bridge_shutdown`，默认会请求
-bridge 停止服务并释放 Origin 自动化连接；这样比在 Origin Python Console 里按
-`Ctrl+C` 更可靠。
-
-MCP server 默认使用 compact profile，降低模型选工具成本。启动 server
-前设置 `ORIGIN_MCP_TOOL_PROFILE=full` 可暴露所有 worksheet、graph、analysis 和
-`origin_plot_*` 专家工具。
-
-## 知识库
-
-服务器通过 MCP 工具暴露结构化本地知识库。使用 `origin_query_knowledge` 或各集合
-专用 query 工具搜索；使用 `origin_browse_knowledge` 或各集合专用 browse 工具按稳定
-路径查看完整条目。MCP 工具索引会从当前 server 工具 docstring 自动生成，因此会跟随
-已实现工具面更新。
-
-当前集合包括 `mcp_tools`、`reference`、`python_api`、`labtalk` 和 `official_docs`。
-知识库是面向操作的精选索引；需要官方精确语法的条目会带 OriginLab 官方文档 URL，
-以及 `doc_family`、`doc_kind`、`versions` 和验证日期等元数据。
-可选脚本 `scripts/update_official_docs_index.py` 可刷新官方文档生成索引覆盖层，用于
-LabTalk command 页面、X-Function 页面和 originpro API 页面。
-
-## 安全说明
-
-该服务器可以读取本地数据文件、写入导出的图形和项目文件，并控制本地 Origin 会话。
-请只在可信 MCP 客户端中使用。必要时可用 `ORIGIN_MCP_ALLOWED_ROOTS` 限制文件访问范围。
-
-如果 Origin 提示正在被其他程序控制，请先调用 `origin_detach`。只有在确认没有未保存
-工作后，才使用 `origin_force_quit`。
-
 ## 许可证
 
 MIT。见 [LICENSE](LICENSE)。
