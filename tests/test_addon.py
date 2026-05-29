@@ -31,6 +31,40 @@ def test_addon_auto_detects_adjacent_src(monkeypatch) -> None:
     assert addon._ensure_origin_mcp_importable().endswith("origin_mcp")
 
 
+def test_request_stop_reports_not_running_when_no_server() -> None:
+    addon = load_addon_module()
+
+    assert addon.request_stop_origin_mcp_bridge() == {
+        "stop_requested": False,
+        "reason": "not_running",
+    }
+
+
+def test_request_stop_only_signals_shutdown_event() -> None:
+    addon = load_addon_module()
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.shutdown_requested_called = False
+            self.closed = False
+
+        def request_shutdown(self) -> None:
+            self.shutdown_requested_called = True
+
+        def server_close(self) -> None:  # would run on full teardown
+            self.closed = True
+
+    server = FakeServer()
+    addon._origin_mcp_bridge_server = server
+    try:
+        assert addon.request_stop_origin_mcp_bridge() == {"stop_requested": True}
+    finally:
+        addon._origin_mcp_bridge_server = None
+
+    assert server.shutdown_requested_called is True
+    assert server.closed is False
+
+
 def test_addon_status_file_is_json(monkeypatch, tmp_path) -> None:
     addon = load_addon_module()
     status_path = tmp_path / "bridge-status.json"

@@ -459,6 +459,24 @@ def stop_origin_mcp_bridge() -> dict[str, Any]:
     return {"stopped": True}
 
 
+def request_stop_origin_mcp_bridge() -> dict[str, Any]:
+    """Signal the foreground bridge loop to stop, without tearing it down here.
+
+    Safe to call from inside Origin while ``start_origin_mcp_bridge`` is serving
+    in the foreground -- for example from a toolbar button whose click is
+    dispatched through the message pump and therefore runs re-entrantly on the
+    serving thread. It only sets the shutdown event; the serving loop performs
+    the single teardown in its ``finally`` block. Use ``stop_origin_mcp_bridge``
+    instead for the background-thread case where the caller owns teardown.
+    """
+
+    server = globals().get("_origin_mcp_bridge_server")
+    if server is None:
+        return {"stop_requested": False, "reason": "not_running"}
+    server.request_shutdown()
+    return {"stop_requested": True}
+
+
 def origin_mcp_bridge_status() -> dict[str, Any]:
     """Return local status for the Origin-embedded bridge thread."""
 
