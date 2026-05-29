@@ -60,15 +60,16 @@ behavior.
 Then run the MCP server or smoke test from a separate terminal. The MCP server
 connects to the same host and port through `OriginBridgeProxy`.
 
-To stop the foreground bridge, request shutdown from the MCP side:
+The easiest way to stop the foreground bridge is to ask your MCP assistant to
+shut the Origin bridge down. That calls the `origin_bridge_shutdown` tool with:
 
 ```json
 {"release_origin": true}
 ```
 
-Call this through `origin_bridge_shutdown`. The request stops the Origin-side
-serve loop and, by default, asks the Origin automation layer to detach without
-closing Origin. If the MCP client cannot expose that tool, send a raw bridge
+The request stops the Origin-side serve loop and, by default, asks the Origin
+automation layer to detach without closing Origin. No extra terminal or console
+input is needed. If the MCP client cannot expose that tool, send a raw bridge
 request from another terminal:
 
 ```powershell

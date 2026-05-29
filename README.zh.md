@@ -72,6 +72,25 @@ MCP 客户端配置示例：
 请将 `C:\\path\\to\\origin-mcp` 替换为你的本地项目路径。更多示例见
 [docs/mcp-config.md](docs/mcp-config.md)。
 
+## 在 Origin 内启动 bridge
+
+bridge 跑在 Origin 自带的 Python 里，这样 `originpro` 始终在 Origin 的 UI 线程上
+执行。无需任何额外配置，每个 Origin 会话启动一次即可：
+
+1. 打开 Origin，再打开它的 **Python Console**。
+2. 粘贴这一行（把路径换成你的项目路径）：
+
+```python
+import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
+```
+
+看到 `Bridge is running inside Origin.` 提示框即表示启动成功，使用工具期间保持该
+控制台运行。
+
+**要关闭时，直接让你的 MCP 助手关闭 Origin bridge 即可** —— 它会调用
+`origin_bridge_shutdown`，无需另开终端或在控制台里输入。若缺少依赖包或 bridge 起不
+来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
+
 ## 文档
 
 - [工具与兼容性参考](docs/tools.md)
