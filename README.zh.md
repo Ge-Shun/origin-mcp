@@ -23,13 +23,21 @@ pull request。
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
 - 当前主要测试目标是 Origin/OriginPro 2026，其他 Origin 版本暂不保证兼容
-- MCP server 运行环境需要 Python 3.10+
-- 安装 Origin 自动化相关包时推荐 Python 3.11 或 3.12
-- Origin 的 `originpro` 包和 `pywin32`
+- Origin 的 `originpro` 包和 `pywin32`（供 Origin 侧 bridge 使用）
 
-MCP server core 目标是支持 Python 3.10+；本地检查目前已在 Python 3.12 和 3.14 上
-通过。Origin 自动化包可能滞后于较新的 Python 版本，因此需要导入 `originpro` 或
-`pywin32` 的环境建议使用 Python 3.11 或 3.12。
+### Python 版本支持
+
+`origin-mcp` 以两个协作进程运行，受支持的 Python 版本按角色区分：
+
+- **MCP server core**（`python -m origin_mcp` 进程，仅通过本机回环与 bridge
+  通信）：Python 3.10+。本地检查目前已在 Python 3.12 和 3.14 上通过，3.10/3.11/
+  3.13 预期同样可用。
+- **Origin bridge**（`addon.py`）：运行在 Origin 自带的内嵌 Python 中，版本由你
+  安装的 Origin 决定，无需自行选择。
+- **外部 `originpro` 自动化**（仅当你把 `originpro`/`pywin32` 直接导入 MCP core
+  进程、而非走 bridge 时）：请使用 Python 3.11 或 3.12。Python 3.13 为实验性，
+  3.14+ 不作为受支持的外部目标——因为 Origin 自动化包滞后于较新的 Python 版本，
+  此时请改为在 Origin 内嵌 Python 中启动 bridge。
 
 ## Agentic Setup
 

@@ -27,13 +27,23 @@ welcome.
 - Origin or OriginPro installed and licensed
 - Origin/OriginPro 2026 is the primary tested target; other Origin versions are
   not currently guaranteed
-- Python 3.10+ for the MCP server runtime
-- Python 3.11 or 3.12 recommended when installing Origin automation packages
-- Origin's `originpro` package and `pywin32`
+- Origin's `originpro` package and `pywin32` (for the Origin-side bridge)
 
-The MCP server core targets Python 3.10+. Local checks currently pass on Python
-3.12 and 3.14. Origin automation packages may lag newer Python releases, so use
-Python 3.11 or 3.12 for environments that import `originpro` or `pywin32`.
+### Python version support
+
+`origin-mcp` runs as two cooperating processes, and the supported Python
+versions differ by role:
+
+- **MCP server core** (the `python -m origin_mcp` process, which only talks to
+  the bridge over localhost): Python 3.10+. Local checks currently pass on
+  Python 3.12 and 3.14, and 3.10/3.11/3.13 are expected to work as well.
+- **Origin bridge** (`addon.py`): runs inside Origin's own embedded Python, so
+  its version is whatever your Origin install ships — there is nothing to pick.
+- **External `originpro` automation** (only if you import `originpro`/`pywin32`
+  directly into the MCP core process instead of using the bridge): use Python
+  3.11 or 3.12. Python 3.13 is experimental and 3.14+ is not a supported
+  external target, because Origin's automation packages lag newer Python
+  releases — start the bridge inside Origin's embedded Python instead.
 
 ## Agentic Setup
 

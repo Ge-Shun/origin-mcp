@@ -13,7 +13,8 @@ of parsing the message text.
 
 ## Tool Profiles
 
-The default profile is `compact`, which registers 20 high-level tools. It keeps
+The default profile is `compact`, which registers a small set of high-level
+tools (listed in `COMPACT_TOOL_NAMES` and reported by `origin_doctor`). It keeps
 the common workflow surface small while preserving the specialized wrappers as
 internal Python functions.
 
