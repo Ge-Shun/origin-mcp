@@ -10,27 +10,13 @@ Origin 生命周期管理等工具。
 本项目目前仍处于测试阶段。欢迎在真实 Origin 工作流中试用，提交 issue、改进建议或
 pull request。
 
-项目目标是让 AI 模型直接协作使用你本机安装的 Origin 环境，而不是只生成独立的绘图
-代码。
-
 ## 功能亮点
 
 - 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
 - 读取、写入、排序、清空和导出工作表数据。
-- 通过高层绘图入口创建常见 2D、3D、等高线、统计、极坐标、三元图、向量图、气泡图、
-  图像图和矩阵图。
-- 在本地知识库中索引 Origin 文档中的 Plot Type ID；需要专家 wrapper 时可启用 full
-  tool profile。
-- 检查和调整图页、图层、坐标轴、图例、标签、参考线、plot 样式和发表级样式。
-- 支持 Nature 风格预设、语义色板、chart atlas 路由、图像板块标签和 QA checklist。
-- 运行常见 Origin 分析，包括拟合、平滑、积分、微分、寻峰和描述统计。
-- 将分析输出工作表读回 JSON，并在可能时规范化拟合参数和指标。
-- 搜索和浏览本地 Origin 知识库，覆盖 MCP 工具、Plot Type ID、图形格式化、
-  分析适配器、OriginPro API 笔记，以及带版本元数据的 OriginLab 官方
-  LabTalk/X-Function/API 文档边界图。
-- 导出图形、预览导出图像、保存项目，并安全释放或关闭 Origin。
-- 通过本地 Origin GUI bridge 路由 Origin 操作，把 MCP server 运行环境与 Origin
-  自动化运行环境分离。
+- 创建并调整常见 2D、3D、等高线、统计和专用图形。
+- 运行拟合、平滑、积分、寻峰和描述统计等 Origin 分析。
+- 通过本地 Origin GUI bridge 导出图形和项目。
 
 ## 环境要求
 
