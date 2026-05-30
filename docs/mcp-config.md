@@ -9,36 +9,28 @@ MCP client to launch the server over stdio.
 {
   "mcpServers": {
     "origin": {
-      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["-m", "origin_mcp"]
     }
   }
 }
 ```
 
-Replace `C:\\path\\to\\origin-mcp` with your local checkout path.
+Use an absolute `python.exe` path if `python` is not the Python 3.10+
+interpreter where `origin-mcp` was installed.
 
-Using `python.exe` with `-m origin_mcp` avoids hard-coding the generated console
+Using `python` with `-m origin_mcp` avoids hard-coding the generated console
 script path and works reliably for editable installs.
 
-## First Test
+## After Configuration
 
-Start the Origin GUI bridge with `addon.py`, then verify MCP connectivity from
-your MCP client with `origin_doctor`:
+Restart or reconnect your MCP client after changing the configuration. Do not
+run `origin_doctor` automatically as part of normal setup.
 
-```json
-{"ping_origin": true}
-```
-
-For an MCP-client prompt, use a compact workflow:
-
-```text
-Use the origin MCP server to run origin_doctor with ping_origin=true.
-```
-
-This is enough for normal installation checks. The smoke script is an optional
-deeper validation tool for development or troubleshooting because it creates an
-Origin project, imports sample data, exports an image, and saves an OPJU file.
+Start the Origin GUI bridge with `addon.py` only when you are ready to use
+Origin tools. The smoke script is an optional deeper validation tool for
+development or troubleshooting because it creates an Origin project, imports
+sample data, exports an image, and saves an OPJU file.
 
 ## Troubleshooting
 

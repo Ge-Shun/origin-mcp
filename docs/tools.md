@@ -72,7 +72,7 @@ index in `src/origin_mcp/knowledge.py` and an optional generated overlay at
 `src/origin_mcp/official_docs.generated.json`. Refresh the overlay with:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\update_official_docs_index.py
+python scripts\update_official_docs_index.py
 ```
 
 The crawler follows OriginLab documentation links, classifies LabTalk command
@@ -89,14 +89,14 @@ require duplicate full indexes.
 To compare two generated indexes for Origin version drift:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\compare_official_docs_index.py old.json new.json --output diff.json
+python scripts\compare_official_docs_index.py old.json new.json --output diff.json
 ```
 
 To build a compact version-diff overlay from separately generated version
 indexes:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_official_docs_version_diffs.py --base origin2026.json --version-index 2025 origin2025.json --version-index 2024 origin2024.json --output src\origin_mcp\official_docs.version_diffs.json
+python scripts\build_official_docs_version_diffs.py --base origin2026.json --version-index 2025 origin2025.json --version-index 2024 origin2024.json --output src\origin_mcp\official_docs.version_diffs.json
 ```
 
 Browse calls use a path-like topic. Examples:

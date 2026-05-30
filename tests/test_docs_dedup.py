@@ -65,3 +65,24 @@ def test_docs_do_not_duplicate_origin_doctor_field_explanations() -> None:
     )
     for phrase in forbidden:
         assert phrase not in docs
+
+
+def test_setup_docs_do_not_prompt_origin_doctor_after_mcp_configuration() -> None:
+    docs = "\n".join(
+        _read_doc(path)
+        for path in (
+            "docs/mcp-config.md",
+            "docs/agentic/origin-mcp-bootstrap.md",
+            "docs/agentic/origin-mcp-bootstrap-codex.md",
+            "docs/agentic/origin-mcp-bootstrap-claude.md",
+        )
+    )
+
+    forbidden = (
+        "Use the origin MCP server to run origin_doctor",
+        '"ping_origin": true',
+        "First ask the MCP client to call",
+        "verified with `origin_doctor`",
+    )
+    for phrase in forbidden:
+        assert phrase not in docs

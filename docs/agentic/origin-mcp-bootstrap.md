@@ -8,7 +8,7 @@ on a Windows machine.
 1. The MCP client is configured to run the local `origin-mcp` server.
 2. The server runtime can import `origin_mcp`.
 3. The Origin GUI bridge is started from Origin's Python console with `addon.py`.
-4. The MCP pipeline is verified with `origin_doctor`.
+4. The MCP client is restarted or reconnected so the server is available.
 
 ## Agent Execution Rules
 
@@ -22,6 +22,8 @@ on a Windows machine.
   project, imports sample data, exports an image, and saves an OPJU file. Run it
   only when the user explicitly asks for end-to-end validation or when
   troubleshooting a plotting/export problem after `origin_doctor` passes.
+- Do not call `origin_doctor` automatically after configuring MCP. Reserve it
+  for troubleshooting or for an explicit user request.
 - If a command fails, report the exact command and important output, then apply
   the next fallback.
 - Respect step ownership labels:
@@ -40,7 +42,7 @@ Use the client-specific Step 1 profile when available:
 Apply this MCP launch contract in the client's native config format:
 
 - server id/name: `origin`
-- command: `C:\path\to\origin-mcp\.venv\Scripts\python.exe`
+- command: `python` or the absolute path to a Python 3.10+ `python.exe`
 - args: `["-m", "origin_mcp"]`
 - working directory: the `origin-mcp` checkout, if the client supports it
 - environment: include `ORIGIN_MCP_TOOL_PROFILE=compact` only when an explicit
@@ -52,7 +54,7 @@ Example stdio server object:
 {
   "mcpServers": {
     "origin": {
-      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["-m", "origin_mcp"]
     }
   }
@@ -70,9 +72,8 @@ usually avoids a "change directory, lose Origin tools" failure mode.
 From the `origin-mcp` checkout:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -U pip
-.\.venv\Scripts\python.exe -m pip install -e .
+python -m pip install -U pip
+python -m pip install -e .
 ```
 
 If the user's normal Python environment already supports Origin automation and
@@ -80,7 +81,7 @@ they want direct automation outside the bridge, install the optional Origin
 dependencies:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[origin]"
+python -m pip install -e ".[origin]"
 ```
 
 For the default bridge workflow, the MCP server process does not need to import
@@ -90,7 +91,7 @@ For the default bridge workflow, the MCP server process does not need to import
 Verify the server import:
 
 ```powershell
-.\.venv\Scripts\python.exe -c "import origin_mcp; print(origin_mcp.__version__)"
+python -c "import origin_mcp; print(origin_mcp.__version__)"
 ```
 
 ## Step 3 - Resolve Origin and Addon Paths
@@ -161,7 +162,7 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 Replace `C:\path\to\origin-mcp\addon.py` with the real checkout path.
 
 On a fresh Origin embedded Python, `pandas`, `openpyxl`, or `xlrd` may be
-missing even after the MCP server virtual environment has been installed.
+missing even after the MCP server runtime has been installed.
 `addon.py` attempts to install missing Origin-side runtime dependencies
 automatically. If the user does not want the addon to run `pip install`, set
 `ORIGIN_MCP_INSTALL_MISSING=0` before `runpy.run_path`:
@@ -193,29 +194,14 @@ os.environ["ORIGIN_MCP_BRIDGE_STATUS"] = r"C:\path\to\origin-mcp\origin-bridge.s
 Only set a token when the same token is also configured for the MCP server
 environment.
 
-## Step 5 - Verify from the MCP Client
+## Step 5 - Reconnect the MCP Client
 
 [AGENT]
 
 Restart or reconnect the MCP client after changing its server configuration.
-
-First ask the MCP client to call:
-
-```json
-{"ping_origin": true}
-```
-
-with `origin_doctor`.
-
-Success means:
-
-- the MCP tool is visible,
-- the server can read the expected bridge configuration,
-- the localhost bridge responds,
-- and, when `ping_origin=true`, Origin automation responds from inside Origin.
-
-Do not run additional workflow tests unless requested. `origin_doctor` success
-is enough to consider installation and MCP connectivity configured.
+Do not call `origin_doctor` as a normal post-configuration step. If the MCP
+client exposes a passive tool list or server status UI, use that to confirm the
+server is visible without executing Origin diagnostics.
 
 ## Optional Smoke Test
 
@@ -226,7 +212,7 @@ user asks for deeper end-to-end validation, or when `origin_doctor` passes but
 plotting/export still fails:
 
 ```powershell
-.\.venv\Scripts\python.exe examples\smoke_bridge.py --keep-origin-open
+python examples\smoke_bridge.py --keep-origin-open
 ```
 
 The smoke workflow creates a new Origin project, imports

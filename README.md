@@ -62,14 +62,15 @@ Example MCP client configuration:
 {
   "mcpServers": {
     "origin": {
-      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["-m", "origin_mcp"]
     }
   }
 }
 ```
 
-Replace `C:\\path\\to\\origin-mcp` with your local checkout path. More examples
+If `python` is not the Python 3.10+ interpreter you installed `origin-mcp`
+into, use that interpreter's absolute `python.exe` path instead. More examples
 are in [docs/mcp-config.md](docs/mcp-config.md).
 
 ## Start the Origin Bridge

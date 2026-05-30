@@ -56,15 +56,15 @@ MCP 客户端配置示例：
 {
   "mcpServers": {
     "origin": {
-      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "python",
       "args": ["-m", "origin_mcp"]
     }
   }
 }
 ```
 
-请将 `C:\\path\\to\\origin-mcp` 替换为你的本地项目路径。更多示例见
-[docs/mcp-config.md](docs/mcp-config.md)。
+如果 `python` 不是已安装 `origin-mcp` 的 Python 3.10+ 解释器，请改用该解释器的
+`python.exe` 绝对路径。更多示例见 [docs/mcp-config.md](docs/mcp-config.md)。
 
 ## 在 Origin 内启动 bridge
 

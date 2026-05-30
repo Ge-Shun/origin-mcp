@@ -10,11 +10,12 @@ editable checkout:
 
 ```toml
 [mcp_servers.origin]
-command = "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe"
+command = "python"
 args = ["-m", "origin_mcp"]
 ```
 
-Replace `C:\\path\\to\\origin-mcp` with the actual checkout path.
+Use an absolute Python 3.10+ `python.exe` path if `python` is not the
+interpreter where `origin-mcp` was installed.
 
 ## Agent Rules
 
@@ -25,13 +26,10 @@ Replace `C:\\path\\to\\origin-mcp` with the actual checkout path.
 - If an `origin` entry already exists, update only the launch fields needed for
   this server: `command`, `args`, and any Codex-supported environment fields.
 
-## Verification Prompt
+## After Configuration
 
-After restarting or reconnecting Codex, ask it to call:
-
-```text
-Use the origin MCP server to run origin_doctor with ping_origin=true.
-```
+After changing the MCP configuration, restart or reconnect Codex so the server
+entry is reloaded. Do not call `origin_doctor` automatically.
 
 If the tools are not visible, restart the Codex session fully and retry before
 changing the Origin bridge setup.
