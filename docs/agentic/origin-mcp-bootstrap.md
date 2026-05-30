@@ -235,7 +235,10 @@ running it.
   `origin-mcp` into Origin's Python environment, or set `ORIGIN_MCP_SRC` to the
   checkout `src` directory before running the addon.
 - `originpro` or table dependencies missing inside Origin Python: `addon.py`
-  attempts to install them automatically by default. If automatic installation
-  fails, check network/proxy access or install the missing packages into
-  Origin's Python manually. Set `ORIGIN_MCP_INSTALL_MISSING=0` only when the
-  user wants to disable automatic installation.
+  attempts to install them automatically by default. When Origin's global
+  site-packages is not writable (for example under `C:\Program Files`), the
+  addon adds `--user` so the install does not require administrator rights. If
+  automatic installation still fails, check network/proxy access or install the
+  missing packages into Origin's Python manually. Set
+  `ORIGIN_MCP_INSTALL_MISSING=0` only when the user wants to disable automatic
+  installation.

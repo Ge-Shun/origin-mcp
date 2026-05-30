@@ -6,6 +6,7 @@ import os
 import platform
 import site
 import sys
+import sysconfig
 import threading
 import time
 import traceback
@@ -227,6 +228,39 @@ def _pip(args: list[str]) -> int:
         sys.stderr = original_stderr
 
 
+def _path_is_writable(path: str) -> bool:
+    probe = Path(path)
+    try:
+        probe.mkdir(parents=True, exist_ok=True)
+        test_file = probe / ".origin-mcp-write-test"
+        test_file.write_text("", encoding="utf-8")
+        test_file.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def _user_install_flag() -> list[str]:
+    """Return ``['--user']`` when the global site-packages is not writable.
+
+    Origin is frequently installed under ``C:\\Program Files`` where the
+    embedded Python's site-packages requires administrator rights. Older pip
+    versions do not always fall back to a user install on their own, so detect
+    an unwritable target and request ``--user`` explicitly. ``--user`` is
+    rejected by pip inside a virtual environment, so skip it there.
+    """
+
+    if sys.prefix != sys.base_prefix:
+        return []
+    try:
+        target = sysconfig.get_path("purelib")
+    except Exception:
+        return []
+    if not target or _path_is_writable(target):
+        return []
+    return ["--user"]
+
+
 def _install_missing_runtime_packages() -> None:
     missing = _missing_runtime_packages()
     if not missing:
@@ -236,7 +270,7 @@ def _install_missing_runtime_packages() -> None:
         "installing runtime dependencies into Origin Python: "
         + ", ".join(missing)
     )
-    status = _pip(["install", "--progress-bar", "off", *missing])
+    status = _pip(["install", "--progress-bar", "off", *_user_install_flag(), *missing])
     if status:
         raise RuntimeError(
             "Failed to install origin-mcp runtime dependencies into Origin Python: "

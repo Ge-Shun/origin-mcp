@@ -50,7 +50,8 @@ source, Python executable/version, and `last_error` when startup fails.
 By default the addon attempts to install missing runtime packages into Origin's
 embedded Python. If `originpro`, `pandas`, `openpyxl`, or `xlrd` is missing, the
 addon runs `pip install` for the missing requirements before starting the
-bridge. Set `ORIGIN_MCP_INSTALL_MISSING=0` immediately before the launch snippet
+bridge, adding `--user` automatically when Origin's global site-packages is not
+writable. Set `ORIGIN_MCP_INSTALL_MISSING=0` immediately before the launch snippet
 to disable automatic installation and fail fast instead. If automatic
 installation fails, check network/proxy access or install the listed packages
 into Origin's embedded Python manually. Search the knowledge base for

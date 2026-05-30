@@ -98,6 +98,48 @@ def test_addon_status_file_is_json(monkeypatch, tmp_path) -> None:
     assert data["python_executable"]
 
 
+def test_user_install_flag_added_when_site_packages_not_writable(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.setattr(addon.sys, "prefix", addon.sys.base_prefix, raising=False)
+    monkeypatch.setattr(addon, "_path_is_writable", lambda path: False)
+
+    assert addon._user_install_flag() == ["--user"]
+
+
+def test_user_install_flag_skipped_when_site_packages_writable(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.setattr(addon.sys, "prefix", addon.sys.base_prefix, raising=False)
+    monkeypatch.setattr(addon, "_path_is_writable", lambda path: True)
+
+    assert addon._user_install_flag() == []
+
+
+def test_user_install_flag_skipped_in_virtualenv(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.setattr(addon.sys, "base_prefix", "/base", raising=False)
+    monkeypatch.setattr(addon.sys, "prefix", "/venv", raising=False)
+    monkeypatch.setattr(addon, "_path_is_writable", lambda path: False)
+
+    assert addon._user_install_flag() == []
+
+
+def test_install_missing_uses_user_flag_when_not_writable(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.setattr(addon, "_missing_runtime_packages", lambda: ["pandas>=2.0"])
+    monkeypatch.setattr(addon, "_user_install_flag", lambda: ["--user"])
+    monkeypatch.setattr(addon, "_ensure_user_site_on_path", lambda: None)
+    captured: dict[str, list[str]] = {}
+
+    def fake_pip(args: list[str]) -> int:
+        captured["args"] = args
+        return 0
+
+    monkeypatch.setattr(addon, "_pip", fake_pip)
+    addon._install_missing_runtime_packages()
+
+    assert captured["args"] == ["install", "--progress-bar", "off", "--user", "pandas>=2.0"]
+
+
 def test_missing_dependency_message_includes_origin_console_retry_snippet() -> None:
     addon = load_addon_module()
 
