@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +26,8 @@ from ..chart_palette import (
 )
 from ..errors import OriginDependencyError, OriginOperationError
 from ..file_io import check_path_allowed, read_table, safe_filename, validate_file
+from ..refs import GraphRef as GraphRef
+from ..refs import WorksheetRef as WorksheetRef
 from ..runtime import python_runtime_profile
 from ..text_format import normalize_label_text, origin_rich_text
 
@@ -34,47 +35,6 @@ TABLE_PLOTXYZ_IDS = {103, 183, 184, 185, 240, 242, 243, 245}
 TABLE_WORKSHEET_PLOT_IDS = {183, 184, 206}
 MATRIX_PLOTM_IDS = {101, 103, 105, 220, 226, 242}
 ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth"}
-
-
-@dataclass(frozen=True)
-class WorksheetRef:
-    book_name: str
-    sheet_name: str
-    columns: list[str]
-    rows: int
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "book_name": self.book_name,
-            "sheet_name": self.sheet_name,
-            "columns": self.columns,
-            "rows": self.rows,
-        }
-
-
-
-@dataclass(frozen=True)
-class GraphRef:
-    graph_name: str
-    export_path: str | None = None
-    template: str | None = None
-    style_mode: str = "origin_default"
-    requested_graph_name: str | None = None
-    display_name: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        data = {
-            "graph_name": self.graph_name,
-            "export_path": self.export_path,
-            "template": self.template,
-            "style_mode": self.style_mode,
-        }
-        if self.requested_graph_name is not None:
-            data["requested_graph_name"] = self.requested_graph_name
-        if self.display_name is not None:
-            data["display_name"] = self.display_name
-        return data
-
 
 
 class _OriginClientBase:

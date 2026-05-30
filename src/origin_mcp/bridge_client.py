@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import OriginBridgeError
-from .origin_client import GraphRef, WorksheetRef
+from .refs import GraphRef, WorksheetRef
 
 DEFAULT_BRIDGE_HOST = "127.0.0.1"
 DEFAULT_BRIDGE_PORT = 47631
