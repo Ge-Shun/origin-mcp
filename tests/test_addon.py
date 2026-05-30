@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 
@@ -21,6 +22,22 @@ def test_addon_status_path_defaults_next_to_addon(monkeypatch) -> None:
     monkeypatch.delenv("ORIGIN_MCP_BRIDGE_STATUS", raising=False)
 
     assert addon._status_path() == ROOT / "origin-bridge.status.txt"
+
+
+def test_addon_installs_missing_dependencies_by_default(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.delenv("ORIGIN_MCP_INSTALL_MISSING", raising=False)
+
+    assert addon._env_bool("ORIGIN_MCP_INSTALL_MISSING", True) is True
+    signature = inspect.signature(addon.start_origin_mcp_bridge)
+    assert signature.parameters["install_missing"].default is True
+
+
+def test_addon_can_disable_dependency_install(monkeypatch) -> None:
+    addon = load_addon_module()
+    monkeypatch.setenv("ORIGIN_MCP_INSTALL_MISSING", "0")
+
+    assert addon._env_bool("ORIGIN_MCP_INSTALL_MISSING", True) is False
 
 
 def test_addon_auto_detects_adjacent_src(monkeypatch) -> None:
@@ -79,3 +96,15 @@ def test_addon_status_file_is_json(monkeypatch, tmp_path) -> None:
     assert data["port"] == 1234
     assert data["status_path"] == str(status_path)
     assert data["python_executable"]
+
+
+def test_missing_dependency_message_includes_origin_console_retry_snippet() -> None:
+    addon = load_addon_module()
+
+    message = addon._missing_dependency_message(["pandas>=2.0"])
+
+    assert "Origin's embedded Python is missing" in message
+    assert "Automatic installation is disabled" in message
+    assert 'os.environ["ORIGIN_MCP_INSTALL_MISSING"] = "1"' in message
+    assert "runpy.run_path" in message
+    assert str(ROOT / "addon.py") in message

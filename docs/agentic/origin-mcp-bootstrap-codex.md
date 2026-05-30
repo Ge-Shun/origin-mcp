@@ -10,11 +10,11 @@ editable checkout:
 
 ```toml
 [mcp_servers.origin]
-command = "D:\\origin-mcp\\.venv\\Scripts\\python.exe"
+command = "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe"
 args = ["-m", "origin_mcp"]
 ```
 
-Replace `D:\\origin-mcp` with the actual checkout path.
+Replace `C:\\path\\to\\origin-mcp` with the actual checkout path.
 
 ## Agent Rules
 

@@ -23,21 +23,22 @@ script path and works reliably for editable installs.
 
 ## First Test
 
-Start the Origin GUI bridge with `addon.py`, then run the smoke script from a
-separate terminal:
+Start the Origin GUI bridge with `addon.py`, then verify MCP connectivity from
+your MCP client with `origin_doctor`:
 
-```powershell
-python examples\smoke_bridge.py --keep-origin-open
+```json
+{"ping_origin": true}
 ```
 
 For an MCP-client prompt, use a compact workflow:
 
 ```text
-Use the origin MCP server to run origin_doctor. If the bridge is healthy, import
-<path-to-origin-mcp>\examples\sample_data.csv, create a suitable line plot for
-signal_a and signal_b against time, and export the graph to
-<path-to-origin-mcp>\output\sample_plot.png.
+Use the origin MCP server to run origin_doctor with ping_origin=true.
 ```
+
+This is enough for normal installation checks. The smoke script is an optional
+deeper validation tool for development or troubleshooting because it creates an
+Origin project, imports sample data, exports an image, and saves an OPJU file.
 
 ## Troubleshooting
 

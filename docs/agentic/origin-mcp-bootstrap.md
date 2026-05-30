@@ -8,8 +8,7 @@ on a Windows machine.
 1. The MCP client is configured to run the local `origin-mcp` server.
 2. The server runtime can import `origin_mcp`.
 3. The Origin GUI bridge is started from Origin's Python console with `addon.py`.
-4. The MCP pipeline is verified with `origin_doctor` and, when possible, the
-   smoke file-to-figure workflow.
+4. The MCP pipeline is verified with `origin_doctor`.
 
 ## Agent Execution Rules
 
@@ -19,6 +18,10 @@ on a Windows machine.
   configuration only if the user-level target is unavailable or write-blocked.
 - When editing MCP configuration, merge only the `origin` server entry. Do not
   overwrite unrelated MCP servers.
+- Do not run the smoke file-to-figure workflow by default. It creates an Origin
+  project, imports sample data, exports an image, and saves an OPJU file. Run it
+  only when the user explicitly asks for end-to-end validation or when
+  troubleshooting a plotting/export problem after `origin_doctor` passes.
 - If a command fails, report the exact command and important output, then apply
   the next fallback.
 - Respect step ownership labels:
@@ -37,7 +40,7 @@ Use the client-specific Step 1 profile when available:
 Apply this MCP launch contract in the client's native config format:
 
 - server id/name: `origin`
-- command: `<origin-mcp-checkout>\\.venv\\Scripts\\python.exe`
+- command: `C:\path\to\origin-mcp\.venv\Scripts\python.exe`
 - args: `["-m", "origin_mcp"]`
 - working directory: the `origin-mcp` checkout, if the client supports it
 - environment: include `ORIGIN_MCP_TOOL_PROFILE=compact` only when an explicit
@@ -49,7 +52,7 @@ Example stdio server object:
 {
   "mcpServers": {
     "origin": {
-      "command": "D:\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
       "args": ["-m", "origin_mcp"]
     }
   }
@@ -97,7 +100,7 @@ Verify the server import:
 The addon path is normally:
 
 ```text
-<origin-mcp-checkout>\addon.py
+C:\path\to\origin-mcp\addon.py
 ```
 
 Use bounded common-path probes to find the Origin executable when the user has
@@ -152,11 +155,21 @@ In Origin/OriginPro:
 2. Run the checkout addon by path:
 
 ```python
-import runpy
-runpy.run_path(r"D:\origin-mcp\addon.py", run_name="__main__")
+import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
-Replace `D:\origin-mcp\addon.py` with the real checkout path.
+Replace `C:\path\to\origin-mcp\addon.py` with the real checkout path.
+
+On a fresh Origin embedded Python, `pandas`, `openpyxl`, or `xlrd` may be
+missing even after the MCP server virtual environment has been installed.
+`addon.py` attempts to install missing Origin-side runtime dependencies
+automatically. If the user does not want the addon to run `pip install`, set
+`ORIGIN_MCP_INSTALL_MISSING=0` before `runpy.run_path`:
+
+```python
+import os; os.environ["ORIGIN_MCP_INSTALL_MISSING"] = "0"
+import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
+```
 
 Expected result:
 
@@ -174,7 +187,7 @@ import os
 os.environ["ORIGIN_MCP_BRIDGE_HOST"] = "127.0.0.1"
 os.environ["ORIGIN_MCP_BRIDGE_PORT"] = "47631"
 os.environ["ORIGIN_MCP_BRIDGE_TOKEN"] = "replace-with-a-local-secret"
-os.environ["ORIGIN_MCP_BRIDGE_STATUS"] = r"D:\origin-mcp\origin-bridge.status.txt"
+os.environ["ORIGIN_MCP_BRIDGE_STATUS"] = r"C:\path\to\origin-mcp\origin-bridge.status.txt"
 ```
 
 Only set a token when the same token is also configured for the MCP server
@@ -201,14 +214,25 @@ Success means:
 - the localhost bridge responds,
 - and, when `ping_origin=true`, Origin automation responds from inside Origin.
 
-Then validate a real file-to-figure workflow from a separate terminal:
+Do not run additional workflow tests unless requested. `origin_doctor` success
+is enough to consider installation and MCP connectivity configured.
+
+## Optional Smoke Test
+
+[AGENT - ONLY WHEN REQUESTED OR TROUBLESHOOTING]
+
+Validate a real file-to-figure workflow from a separate terminal only when the
+user asks for deeper end-to-end validation, or when `origin_doctor` passes but
+plotting/export still fails:
 
 ```powershell
 .\.venv\Scripts\python.exe examples\smoke_bridge.py --keep-origin-open
 ```
 
-The smoke workflow imports `examples\sample_data.csv`, reads worksheet rows,
-creates a plot, exports a PNG, inspects the export, and saves an OPJU project.
+The smoke workflow creates a new Origin project, imports
+`examples\sample_data.csv`, reads worksheet rows, creates a plot, exports a PNG,
+inspects the export, and saves an OPJU project. Report those side effects before
+running it.
 
 ## Troubleshooting
 
@@ -224,6 +248,8 @@ creates a plot, exports a PNG, inspects the export, and saves an OPJU project.
   from the checkout root so it can detect the adjacent `src` directory, install
   `origin-mcp` into Origin's Python environment, or set `ORIGIN_MCP_SRC` to the
   checkout `src` directory before running the addon.
-- `originpro` or table dependencies missing inside Origin Python: rerun
-  `addon.py` with `ORIGIN_MCP_INSTALL_MISSING` unset or set to `1`; the addon
-  attempts to install missing runtime dependencies into Origin's Python.
+- `originpro` or table dependencies missing inside Origin Python: `addon.py`
+  attempts to install them automatically by default. If automatic installation
+  fails, check network/proxy access or install the missing packages into
+  Origin's Python manually. Set `ORIGIN_MCP_INSTALL_MISSING=0` only when the
+  user wants to disable automatic installation.

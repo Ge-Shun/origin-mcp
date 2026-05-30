@@ -20,11 +20,10 @@ Python version mismatches.
 3. Open or paste `addon.py`, or run it by path:
 
 ```python
-import runpy
-runpy.run_path(r"<path-to-origin-mcp>\addon.py", run_name="__main__")
+import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
-Replace `<path-to-origin-mcp>` with the local checkout path.
+Replace `C:\path\to\origin-mcp` with the local checkout path.
 
 `addon.py` does not hard-code the checkout directory. It first tries to import
 an installed `origin_mcp` package from Origin's embedded Python. If that is not
@@ -48,16 +47,17 @@ The addon also writes JSON status to `origin-bridge.status.txt` next to
 file location. The status includes the latest message, host, port, package
 source, Python executable/version, and `last_error` when startup fails.
 
-By default the addon does **not** install missing runtime packages into
-Origin's embedded Python. If `originpro`, `pandas`, `openpyxl`, or `xlrd` is
-missing the addon fails fast and lists the packages so you can install them
-yourself. Pass `install_missing=True` to `start_origin_mcp_bridge` or set
-`ORIGIN_MCP_INSTALL_MISSING=1` to let the addon run `pip install` inside
-Origin's embedded Python automatically. Search the knowledge base for
+By default the addon attempts to install missing runtime packages into Origin's
+embedded Python. If `originpro`, `pandas`, `openpyxl`, or `xlrd` is missing, the
+addon runs `pip install` for the missing requirements before starting the
+bridge. Set `ORIGIN_MCP_INSTALL_MISSING=0` immediately before the launch snippet
+to disable automatic installation and fail fast instead. If automatic
+installation fails, check network/proxy access or install the listed packages
+into Origin's embedded Python manually. Search the knowledge base for
 `bridge startup` to inspect the full environment variable list and startup
 behavior.
 
-Then run the MCP server or smoke test from a separate terminal. The MCP server
+Then run the MCP server from a separate terminal or MCP client. The MCP server
 connects to the same host and port through `OriginBridgeProxy`.
 
 The easiest way to stop the foreground bridge is to ask your MCP assistant to
@@ -167,14 +167,15 @@ troubleshooting checklist.
 ## High-Level Bridge Workflows
 
 The bridge can run file-to-figure workflows without `originpro` calls in the MCP
-server process. Use the smoke script as the canonical validation path, or search
-the knowledge base for `bridge file to figure` when an MCP client needs the
-workflow steps.
+server process. Use `origin_doctor` for normal connectivity checks; reserve the
+smoke script for optional end-to-end validation. Search the knowledge base for
+`bridge file to figure` when an MCP client needs the workflow steps.
 
 ## Smoke Test
 
-Use the smoke script to validate the real Origin installation after changing the
-bridge. It exercises the MCP tool layer rather than calling `OriginClient`
+Use the smoke script only when you want deeper end-to-end validation after
+changing the bridge, or when `origin_doctor` passes but plotting/export still
+fails. It exercises the MCP tool layer rather than calling `OriginClient`
 directly.
 
 After starting the bridge as described above, run this in another terminal:

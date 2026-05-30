@@ -12,14 +12,14 @@ server entry:
 {
   "mcpServers": {
     "origin": {
-      "command": "D:\\origin-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\origin-mcp\\.venv\\Scripts\\python.exe",
       "args": ["-m", "origin_mcp"]
     }
   }
 }
 ```
 
-Replace `D:\\origin-mcp` with the actual checkout path. If the file already
+Replace `C:\\path\\to\\origin-mcp` with the actual checkout path. If the file already
 contains other MCP servers, merge this entry without removing them.
 
 ## Claude Code
@@ -28,7 +28,7 @@ Use Claude Code's native MCP configuration mechanism when available, but keep
 the same launch contract:
 
 - server name: `origin`
-- command: `D:\origin-mcp\.venv\Scripts\python.exe`
+- command: `C:\path\to\origin-mcp\.venv\Scripts\python.exe`
 - args: `-m origin_mcp`
 
 Prefer user/global configuration for the same reason as the main bootstrap
