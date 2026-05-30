@@ -30,9 +30,10 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     tools = asyncio.run(server.mcp.list_tools())
     names = {tool.name for tool in tools}
 
-    assert len(names) == 21
+    assert len(names) == len(server.COMPACT_TOOL_NAMES)
     assert names == server.COMPACT_TOOL_NAMES
-    assert "origin_plot_line" not in names
+    assert "origin_plot_line" in names
+    assert "origin_set_axis" in names
 
 
 def test_full_mcp_tool_profile_registers_all_tools() -> None:

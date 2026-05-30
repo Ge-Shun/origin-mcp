@@ -104,9 +104,9 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "columns and create the graph. Use origin_plot_chart_atlas for semantic intents "
             "such as correlation, distribution, composition, matrix, image_plate, and "
             "time_series. Use origin_plot_table_id for a specific Origin Plot Type ID. "
-            "Named direct wrappers such as origin_plot_line and origin_plot_scatter are "
-            "available in the full/expert tool profile and remain internal compatibility "
-            "routes."
+            "Core direct wrappers such as origin_plot_line and origin_plot_scatter are "
+            "available in the compact profile; specialized matrix/3D wrappers remain in "
+            "the full/expert profile."
         ),
         keywords=("plot", "workflow", "compact", "profile", "template", "plot type id"),
     ),
@@ -120,9 +120,10 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "routes to a suitable chart, and can export the result. Use origin_recommend_chart "
             "when you only need a recommendation. Use origin_plot_chart_atlas when the user "
             "states a semantic intent rather than a chart type. Use origin_plot_table_id when "
-            "the user gives a concrete Origin Plot Type ID or template route. Direct wrappers "
-            "like origin_plot_line, origin_plot_scatter, origin_plot_column, and specialized "
-            "matrix/3D wrappers are expert/full-profile tools."
+            "the user gives a concrete Origin Plot Type ID or template route. Core direct "
+            "wrappers like origin_plot_line, origin_plot_scatter, and origin_plot_column are "
+            "also available in compact mode. Specialized matrix/3D wrappers are expert/"
+            "full-profile tools."
         ),
         keywords=(
             "plot",
@@ -139,6 +140,10 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
                 "origin_plot_auto",
                 "origin_plot_chart_atlas",
                 "origin_plot_table_id",
+                "origin_plot_line",
+                "origin_plot_scatter",
+                "origin_plot_line_symbol",
+                "origin_plot_column",
             ],
             "expert_profile": "ORIGIN_MCP_TOOL_PROFILE=full",
         },

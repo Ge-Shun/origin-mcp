@@ -11,10 +11,15 @@ from ._shared import (
 
 
 @_mcp_tool()
-def origin_run_labtalk(script: str) -> dict[str, Any]:
-    """Execute LabTalk script text inside Origin."""
+def origin_run_labtalk(script: str, capture_log: bool = True) -> dict[str, Any]:
+    """Execute LabTalk script text inside Origin and optionally return captured output."""
 
-    return _wrap(lambda: _ok("Executed LabTalk script.", **client.run_labtalk(script)))
+    return _wrap(
+        lambda: _ok(
+            "Executed LabTalk script.",
+            **client.run_labtalk(script, capture_log=capture_log),
+        )
+    )
 
 
 @_mcp_tool()

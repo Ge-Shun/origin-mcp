@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +144,7 @@ class _LifecycleMixin(_OriginClientBase):
         self._capabilities = None
         return {"closed": True, "forced": False}
 
-    def run_labtalk(self, script: str) -> dict[str, Any]:
+    def run_labtalk(self, script: str, capture_log: bool = False) -> dict[str, Any]:
         if not script.strip():
             raise OriginOperationError("LabTalk script is empty.")
 
@@ -154,6 +156,49 @@ class _LifecycleMixin(_OriginClientBase):
                 error_code="labtalk_unavailable",
             )
 
-        result = func(script)
-        return {"result": result}
+        if not capture_log:
+            return {"result": func(script)}
+
+        log_path = Path(tempfile.gettempdir()) / f"origin-mcp-labtalk-{uuid.uuid4().hex}.log"
+        safe_log_path = self._escape_labtalk(str(log_path))
+        start_result: Any = None
+        end_result: Any = None
+        try:
+            start_result = func(f'type -gb "{safe_log_path}";')
+            result = func(script)
+        finally:
+            try:
+                end_result = func("type -ge;")
+            except Exception as exc:  # pragma: no cover - defensive cleanup
+                end_result = {"error_type": type(exc).__name__, "message": str(exc)}
+
+        message_log = self._read_labtalk_capture(log_path)
+        message_log["start_result"] = start_result
+        message_log["end_result"] = end_result
+        return {"result": result, "message_log": message_log}
+
+    @staticmethod
+    def _read_labtalk_capture(path: Path) -> dict[str, Any]:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+        except OSError as exc:
+            return {
+                "captured": False,
+                "source": "LabTalk type -gb/type -ge",
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+        finally:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        lines = [line.rstrip("\r") for line in text.splitlines()]
+        return {
+            "captured": True,
+            "source": "LabTalk type -gb/type -ge",
+            "line_count": len(lines),
+            "lines": lines,
+        }
 

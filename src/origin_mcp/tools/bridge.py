@@ -336,6 +336,7 @@ def origin_bridge_capabilities(
 @_mcp_tool()
 def origin_bridge_run_labtalk(
     script: str,
+    capture_log: bool = True,
     host: str | None = None,
     port: int | None = None,
     token: str | None = None,
@@ -345,7 +346,7 @@ def origin_bridge_run_labtalk(
 
     return _bridge_call(
         "run_labtalk",
-        {"script": script},
+        {"script": script, "capture_log": capture_log},
         host=host,
         port=port,
         token=token,

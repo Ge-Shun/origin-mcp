@@ -588,6 +588,61 @@ def test_get_graph_info_reports_layers_and_plots(monkeypatch: pytest.MonkeyPatch
     assert result["layers_count"] == 1
     assert result["layers"][0]["plots_count"] == 1
     assert result["layers"][0]["axes"]["x"]["scale"] == "linear"
+    assert result["layers"][0]["axes"]["x"]["scale_name"] == "linear"
+
+
+def test_set_axis_returns_readback_and_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    layer = FakeLayer()
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+
+    result = client.set_axis(
+        graph_name="Graph1",
+        axis="x",
+        scale="log10",
+        start=1,
+        end=10000,
+        title="Suction",
+    )
+
+    assert layer.axis("x").scale == 2
+    assert layer.axis("x").limits == (1, 10000, None)
+    assert result["axis_info"]["scale"] == 2
+    assert result["axis_info"]["scale_name"] == "log10"
+    assert result["axis_info"]["limits"] == (1, 10000, None)
+    assert result["verified"] is True
+
+
+def test_run_labtalk_can_capture_message_log() -> None:
+    client = OriginClient()
+
+    class FakeOp:
+        def __init__(self) -> None:
+            self.scripts: list[str] = []
+            self.log_path: Path | None = None
+
+        def lt_exec(self, script: str) -> bool:
+            self.scripts.append(script)
+            if script.startswith('type -gb "'):
+                self.log_path = Path(script.split('"')[1])
+                return True
+            if script == "type -ge;":
+                return True
+            assert self.log_path is not None
+            self.log_path.write_text("message line\n", encoding="utf-8")
+            return script == "type ok;"
+
+    fake_op = FakeOp()
+    client._op = fake_op
+
+    result = client.run_labtalk("type ok;", capture_log=True)
+
+    assert result["result"] is True
+    assert result["message_log"]["captured"] is True
+    assert result["message_log"]["lines"] == ["message line"]
+    assert fake_op.scripts[1] == "type ok;"
 
 
 def test_get_graph_info_tolerates_origin_plot_property_errors(

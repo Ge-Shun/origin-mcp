@@ -78,13 +78,34 @@ class _GraphFormattingMixin(_OriginClientBase):
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
         ax = layer.axis(axis)
         if scale is not None:
-            ax.scale = scale
+            scale_value = self._axis_scale_value(scale)
+            try:
+                ax.scale = scale_value
+            except Exception:
+                if scale_value == scale:
+                    raise
+                ax.scale = scale
         if start is not None or end is not None or step is not None:
             ax.limits = (start, end, step)
-        if title:
-            ax.title = self._label_text(title)
+        axis_title = self._label_text(title) if title is not None else None
+        if axis_title is not None:
+            ax.title = axis_title
         self._rescale(layer) if start is None and end is None else None
-        return {"graph_name": self._object_name(graph, default=graph_name or ""), "axis": axis}
+        axis_info = self._axis_info(ax)
+        requested = {
+            "scale": scale,
+            "start": start,
+            "end": end,
+            "step": step,
+            "title": axis_title,
+        }
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "axis": axis,
+            "requested": {key: value for key, value in requested.items() if value is not None},
+            "axis_info": axis_info,
+            "verified": self._axis_settings_verified(requested, axis_info),
+        }
 
     def set_plot_style(
         self,
@@ -985,11 +1006,7 @@ class _GraphFormattingMixin(_OriginClientBase):
             axis = getattr(layer, "axis", lambda _name: None)(axis_name)
             if axis is None:
                 continue
-            axes[axis_name] = {
-                "title": self._safe_origin_attr(axis, "title"),
-                "scale": self._safe_origin_attr(axis, "scale"),
-                "limits": self._safe_origin_attr(axis, "limits"),
-            }
+            axes[axis_name] = self._axis_info(axis)
         return {
             "index": layer_index,
             "name": self._object_name(layer, default=f"Layer{layer_index + 1}"),
@@ -1012,6 +1029,69 @@ class _GraphFormattingMixin(_OriginClientBase):
             "symbol_size": self._safe_origin_attr(plot, "symbol_size"),
             "transparency": self._safe_origin_attr(plot, "transparency"),
         }
+
+    @classmethod
+    def _axis_info(cls, axis: Any) -> dict[str, Any]:
+        scale = cls._safe_origin_attr(axis, "scale")
+        return {
+            "title": cls._safe_origin_attr(axis, "title"),
+            "scale": scale,
+            "scale_name": cls._axis_scale_name(scale),
+            "limits": cls._safe_origin_attr(axis, "limits"),
+        }
+
+    @classmethod
+    def _axis_settings_verified(
+        cls,
+        requested: dict[str, Any],
+        axis_info: dict[str, Any],
+    ) -> bool | None:
+        checks: list[bool] = []
+        if requested.get("scale") is not None:
+            checks.append(
+                cls._axis_scale_name(requested["scale"]) == axis_info.get("scale_name")
+                or requested["scale"] == axis_info.get("scale")
+            )
+        if requested.get("title") is not None:
+            checks.append(axis_info.get("title") == requested["title"])
+        limits = axis_info.get("limits")
+        if isinstance(limits, (list, tuple)):
+            for index, key in enumerate(("start", "end", "step")):
+                if requested.get(key) is not None and index < len(limits):
+                    checks.append(limits[index] == requested[key])
+        elif any(requested.get(key) is not None for key in ("start", "end", "step")):
+            checks.append(False)
+        return all(checks) if checks else None
+
+    @staticmethod
+    def _axis_scale_value(scale: str | int) -> str | int:
+        if isinstance(scale, int):
+            return scale
+        aliases = {
+            "linear": 1,
+            "lin": 1,
+            "log": 2,
+            "log10": 2,
+            "logarithmic": 2,
+        }
+        return aliases.get(scale.strip().lower(), scale)
+
+    @staticmethod
+    def _axis_scale_name(scale: Any) -> str | None:
+        if scale is None:
+            return None
+        if isinstance(scale, str):
+            value = scale.strip().lower()
+            if value in {"lin", "linear"}:
+                return "linear"
+            if value in {"log", "log10", "logarithmic"}:
+                return "log10"
+            return value
+        names = {
+            1: "linear",
+            2: "log10",
+        }
+        return names.get(scale, str(scale))
 
     @staticmethod
     def _layer_labels(layer: Any) -> list[dict[str, Any]]:
