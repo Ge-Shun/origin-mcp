@@ -23,7 +23,7 @@ pull request。
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
 - 当前主要测试目标是 Origin/OriginPro 2026，其他 Origin 版本暂不保证兼容
-- Origin 的 `originpro` 包和 `pywin32`（供 Origin 侧 bridge 使用）
+- Origin 内嵌 Python 及其预装的 `originpro` 包
 
 ### Python 版本支持
 
@@ -34,10 +34,9 @@ pull request。
   3.13 预期同样可用。
 - **Origin bridge**（`addon.py`）：运行在 Origin 自带的内嵌 Python 中，版本由你
   安装的 Origin 决定，无需自行选择。
-- **外部 `originpro` 自动化**（仅当你把 `originpro`/`pywin32` 直接导入 MCP core
-  进程、而非走 bridge 时）：请使用 Python 3.11 或 3.12。Python 3.13 为实验性，
-  3.14+ 不作为受支持的外部目标——因为 Origin 自动化包滞后于较新的 Python 版本，
-  此时请改为在 Origin 内嵌 Python 中启动 bridge。
+
+本项目不把外部 `originpro` 自动化作为受支持的 MCP backend。请在 Origin 内嵌
+Python 中启动 bridge，再让 MCP server 通过本机回环连接它。
 
 ## Agentic Setup
 
