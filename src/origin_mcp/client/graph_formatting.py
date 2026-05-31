@@ -67,6 +67,7 @@ class _GraphFormattingMixin(_OriginClientBase):
     def set_axis(
         self,
         graph_name: str | None = None,
+        layer_index: int = 0,
         axis: str = "x",
         scale: str | int | None = None,
         start: float | None = None,
@@ -75,7 +76,7 @@ class _GraphFormattingMixin(_OriginClientBase):
         title: str | None = None,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
-        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        layer = self._graph_layer(graph, layer_index)
         ax = layer.axis(axis)
         if scale is not None:
             scale_value = self._axis_scale_value(scale)
@@ -101,6 +102,7 @@ class _GraphFormattingMixin(_OriginClientBase):
         }
         return {
             "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
             "axis": axis,
             "requested": {key: value for key, value in requested.items() if value is not None},
             "axis_info": axis_info,

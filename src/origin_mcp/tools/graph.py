@@ -170,6 +170,7 @@ def origin_format_graph(
 @_mcp_tool()
 def origin_set_axis(
     graph_name: str | None = None,
+    layer_index: int = 0,
     axis: str = "x",
     scale: str | int | None = None,
     start: float | None = None,
@@ -182,6 +183,7 @@ def origin_set_axis(
     def run() -> dict[str, Any]:
         req = AxisSettingsRequest(
             graph_name=graph_name,
+            layer_index=layer_index,
             axis=axis,
             scale=scale,
             start=start,
