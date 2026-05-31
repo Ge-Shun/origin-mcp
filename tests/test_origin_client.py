@@ -1146,7 +1146,7 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert 'xb.text$="\\f:Arial(Axis)";' in scripts[-1]
     assert 'yl.text$="\\f:Arial(Axis)";' in scripts[-1]
     assert "legend.font=font(Arial);" in scripts[-1]
-    assert "legend.fsize=12;" in scripts[-1]
+    assert "legend.fsize=18;" in scripts[-1]
     assert "range __omcpNaturePlot1 = !1;" in scripts[-1]
     assert "set __omcpNaturePlot1 -w 1500;" in scripts[-1]
     assert "set __omcpNaturePlot1 -wp 3.0;" in scripts[-1]

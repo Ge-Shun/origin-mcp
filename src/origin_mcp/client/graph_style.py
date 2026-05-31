@@ -89,7 +89,7 @@ class _GraphStyleMixin(_OriginClientBase):
         font_family: str = "Arial",
         axis_title_size: int = 10,
         tick_label_size: int = 9,
-        legend_font_size: int = 12,
+        legend_font_size: int = 18,
         line_width: float = 3.0,
         symbol_size: float = 4.5,
         tick_length: int = 3,
