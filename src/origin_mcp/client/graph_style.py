@@ -89,8 +89,8 @@ class _GraphStyleMixin(_OriginClientBase):
         font_family: str = "Arial",
         axis_title_size: int = 10,
         tick_label_size: int = 9,
-        legend_font_size: int = 10,
-        line_width: float = 1.8,
+        legend_font_size: int = 12,
+        line_width: float = 3.0,
         symbol_size: float = 4.5,
         tick_length: int = 3,
         show_legend: bool = True,
@@ -141,6 +141,7 @@ class _GraphStyleMixin(_OriginClientBase):
             layer = self._graph_layer(graph, index)
             x_title = self._nature_axis_title_text(layer, "x", safe_font)
             y_title = self._nature_axis_title_text(layer, "y", safe_font)
+            plot_count = len(self._layer_plots(layer))
             script_parts.extend(
                 [
                     f"layer -s {index + 1};",
@@ -162,6 +163,10 @@ class _GraphStyleMixin(_OriginClientBase):
                     f"layer.y.ticks.len={tick_length};",
                 ]
             )
+            if actual_line_width is not None:
+                script_parts.extend(
+                    self._nature_plot_line_width_script(plot_count, actual_line_width)
+                )
             if show_legend:
                 script_parts.extend(
                     [
@@ -212,12 +217,27 @@ class _GraphStyleMixin(_OriginClientBase):
         return f"\\f:{safe_font}({text})"
 
     def _set_nature_plot_line_width(self, plot: Any, line_width: float) -> None:
-        self._set_plot_command(plot, f"-w {line_width}")
+        native_width = int(round(line_width * 500))
+        self._set_plot_command(plot, f"-w {native_width}")
+        self._set_plot_command(plot, f"-wp {line_width}")
         for property_name in ("line_width", "width"):
             try:
                 self._set_origin_property(plot, property_name, line_width)
             except OriginOperationError:
                 pass
+
+    @staticmethod
+    def _nature_plot_line_width_script(plot_count: int, line_width: float) -> list[str]:
+        native_width = int(round(line_width * 500))
+        return [
+            command
+            for plot_index in range(1, plot_count + 1)
+            for command in (
+                f"range __omcpNaturePlot{plot_index} = !{plot_index};",
+                f"set __omcpNaturePlot{plot_index} -w {native_width};",
+                f"set __omcpNaturePlot{plot_index} -wp {line_width};",
+            )
+        ]
 
     def diagnose_graph(
         self,
