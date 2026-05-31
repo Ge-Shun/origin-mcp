@@ -60,9 +60,7 @@ def check_path_allowed(path: Path) -> None:
         return
     resolved = path.expanduser().resolve()
     roots = [
-        Path(root).expanduser().resolve()
-        for root in raw_roots.split(os.pathsep)
-        if root.strip()
+        Path(root).expanduser().resolve() for root in raw_roots.split(os.pathsep) if root.strip()
     ]
     if not any(resolved == root or root in resolved.parents for root in roots):
         raise OriginOperationError(

@@ -472,7 +472,6 @@ class _PlotRoutingMixin(_OriginClientBase):
             ],
         }
 
-
     @staticmethod
     def _atlas_selected_columns(
         intent: str,
@@ -513,8 +512,6 @@ class _PlotRoutingMixin(_OriginClientBase):
             )
         except OriginOperationError as exc:
             return {"warning": str(exc)}
-
-
 
     def _origin_template_paths(self) -> dict[str, str]:
         paths: dict[str, str] = {}
@@ -560,4 +557,3 @@ class _PlotRoutingMixin(_OriginClientBase):
                     }
                 )
         return discovered
-

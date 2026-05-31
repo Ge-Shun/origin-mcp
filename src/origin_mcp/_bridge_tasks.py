@@ -173,13 +173,8 @@ class BridgeTaskManager:
         if overflow <= 0:
             return
         removable = sorted(
-            (
-                task
-                for task in self._tasks.values()
-                if task.status in TERMINAL_TASK_STATUSES
-            ),
+            (task for task in self._tasks.values() if task.status in TERMINAL_TASK_STATUSES),
             key=lambda task: task.submitted_at,
         )
         for task in removable[:overflow]:
             self._tasks.pop(task.task_id, None)
-

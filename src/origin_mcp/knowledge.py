@@ -96,9 +96,7 @@ def query_knowledge(
 
     if collection is not None:
         collection = _normalize_collection(collection)
-    entries = _entries(
-        official_docs_version=version if collection == "official_docs" else None
-    )
+    entries = _entries(official_docs_version=version if collection == "official_docs" else None)
     if collection is not None:
         entries = [entry for entry in entries if entry.collection == collection]
     if version:
@@ -287,9 +285,7 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
             collection="reference",
             path="plot-style-capabilities",
             title="Plot style capability registry",
-            summary=(
-                "Semantic registry for plot style controls across common Origin chart types."
-            ),
+            summary=("Semantic registry for plot style controls across common Origin chart types."),
             body=(
                 "This registry is the source of truth for semantic style controls exposed by "
                 "origin-mcp. It maps user terms such as 柱宽, 折线粗细, 点大小, 色带, and "
@@ -318,10 +314,7 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
                 collection="reference",
                 path=f"plot-style-capabilities/plot-types/{profile['id']}",
                 title=f"Plot Type {profile['id']} style profile",
-                summary=(
-                    f"{profile['name']} maps to style chart type "
-                    f"{profile['chart_type']}."
-                ),
+                summary=(f"{profile['name']} maps to style chart type {profile['chart_type']}."),
                 body=(
                     f"Origin Plot Type ID {profile['id']} ({profile['name']}) belongs to "
                     f"category {profile['category']} and uses input {profile['input']}. "

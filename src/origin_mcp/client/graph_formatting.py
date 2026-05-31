@@ -549,4 +549,3 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             "graph_name": graph_name_actual,
             "formatted": True,
         }
-

@@ -675,5 +675,3 @@ def origin_plot_table_id(
         style_mode=style_mode,
         export_path=export_path,
     )
-
-

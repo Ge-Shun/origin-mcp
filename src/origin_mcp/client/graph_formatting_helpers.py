@@ -766,4 +766,3 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         if layer_index == 0:
             return graph
         raise OriginOperationError("Graph object does not expose multiple layers.")
-

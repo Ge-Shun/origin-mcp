@@ -1976,11 +1976,7 @@ def test_plot_table_by_id_uses_worksheet_command_for_box_plot(
 
 
 def test_all_documented_table_plot_ids_use_expected_labtalk_routes() -> None:
-    matrix_only_ids = {
-        item["id"]
-        for item in PLOT_TYPE_CATALOG
-        if item["input"] == "Matrix Object"
-    }
+    matrix_only_ids = {item["id"] for item in PLOT_TYPE_CATALOG if item["input"] == "Matrix Object"}
     expected_plotxyz_ids = {103, 185, 240, 242, 243, 245}
     expected_worksheet_ids = {183, 184, 206}
 

@@ -250,5 +250,3 @@ def origin_plot_chart_atlas(
             ),
         )
     )
-
-

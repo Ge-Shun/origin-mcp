@@ -443,7 +443,6 @@ class _TablePlotMixin(_OriginClientBase):
         symbols = {1: "Y", 4: "X", 6: "Z"}
         return "".join(symbols.get(column_type, "Y") for column_type in type_pattern)
 
-
     def _new_graph(self, kind: str, graph_name: str | None, template: str | None = None) -> Any:
         if graph_name:
             graph = self._find_graph_optional(graph_name)
@@ -506,8 +505,4 @@ class _TablePlotMixin(_OriginClientBase):
             if reuse_existing
             else f"ogl:=<new template:={safe_template} name:={safe_graph}>"
         )
-        return (
-            f"{command} {range_option}:={data_range} plot:={plot_type_id} "
-            f"{output_graph};"
-        )
-
+        return f"{command} {range_option}:={data_range} plot:={plot_type_id} {output_graph};"

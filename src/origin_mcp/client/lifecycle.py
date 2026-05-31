@@ -96,9 +96,7 @@ class _LifecycleMixin(_OriginClientBase):
             except Exception as exc:
                 fallback_error = f"{type(exc).__name__}: {exc}"
                 method = "labtalk.pe_save"
-                result = self.run_labtalk(
-                    f'pe_save fname:="{self._escape_labtalk(str(path))}";'
-                )
+                result = self.run_labtalk(f'pe_save fname:="{self._escape_labtalk(str(path))}";')
                 if result.get("result") is False:
                     raise OriginOperationError(
                         f"Origin project save failed via originpro.save and pe_save: "
@@ -235,4 +233,3 @@ class _LifecycleMixin(_OriginClientBase):
             "line_count": len(lines),
             "lines": lines,
         }
-

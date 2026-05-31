@@ -277,8 +277,7 @@ def records_for_version(
         return []
 
     records = {
-        record.path: _record_for_version(record, version, "baseline")
-        for record in base_records
+        record.path: _record_for_version(record, version, "baseline") for record in base_records
     }
     if version == BASE_OFFICIAL_DOC_VERSION:
         return [records[path] for path in sorted(records)]
@@ -470,8 +469,10 @@ def _classify_originpro_url(
         return None
     class_name = module_parts[-1]
     module_path = "/".join(module_parts[:-1])
-    path = f"python/originpro-api/{module_path}/{class_name}" if module_path else (
-        f"python/originpro-api/{class_name}"
+    path = (
+        f"python/originpro-api/{module_path}/{class_name}"
+        if module_path
+        else (f"python/originpro-api/{class_name}")
     )
     title = f"originpro.{'.'.join(module_parts)}"
     return OfficialDocRecord(

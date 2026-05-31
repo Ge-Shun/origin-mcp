@@ -307,4 +307,3 @@ class _AnalysisMixin(_OriginClientBase):
         if worksheet:
             return worksheet
         return f"({x_col},{y_col})" if x_col is not None else f"({y_col})"
-

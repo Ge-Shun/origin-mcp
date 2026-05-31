@@ -219,9 +219,7 @@ def select_palette_for_count(plot_count: int) -> tuple[str, dict[str, Any]]:
         and _palette_colors_count(palette) == target
     ]
     if not matches:
-        raise OriginOperationError(
-            f"No lcpmgh/colors palette is available for {target} colors."
-        )
+        raise OriginOperationError(f"No lcpmgh/colors palette is available for {target} colors.")
     matches.sort(key=lambda item: int(item[1].get("source_index") or 0))
     return matches[0]
 

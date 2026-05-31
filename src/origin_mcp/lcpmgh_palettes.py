@@ -257,11 +257,7 @@ def lcpmgh_palette_records() -> list[dict[str, Any]]:
         if counters.get(colors_count):
             continue
         parent = next(
-            (
-                record
-                for record in records
-                if int(record["colors_count"]) > colors_count
-            ),
+            (record for record in records if int(record["colors_count"]) > colors_count),
             None,
         )
         if parent is None:

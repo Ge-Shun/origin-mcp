@@ -61,4 +61,3 @@ def error_code(exc: Exception) -> str:
     if isinstance(exc, OriginMcpError):
         return exc.error_code
     return "unexpected_error"
-

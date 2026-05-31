@@ -156,16 +156,12 @@ def running_bridge(
 
 def bridge_client(server: OriginBridgeServer, token: str | None = None) -> OriginBridgeClient:
     host, port = server.server_address
-    return OriginBridgeClient(
-        OriginBridgeConfig(host=host, port=port, token=token, timeout=2.0)
-    )
+    return OriginBridgeClient(OriginBridgeConfig(host=host, port=port, token=token, timeout=2.0))
 
 
 def bridge_proxy(server: OriginBridgeServer, token: str | None = None) -> OriginBridgeProxy:
     host, port = server.server_address
-    return OriginBridgeProxy(
-        OriginBridgeConfig(host=host, port=port, token=token, timeout=2.0)
-    )
+    return OriginBridgeProxy(OriginBridgeConfig(host=host, port=port, token=token, timeout=2.0))
 
 
 def wait_for_status(
@@ -462,9 +458,7 @@ def test_bridge_task_cancel_queued_task() -> None:
         cancelled = client.request("cancel_task", {"task_id": second["task"]["task_id"]})
         fake_client.release.set()
         first_task = wait_for_status(client, first["task"]["task_id"], "completed")
-        second_task = client.request("task_status", {"task_id": second["task"]["task_id"]})[
-            "task"
-        ]
+        second_task = client.request("task_status", {"task_id": second["task"]["task_id"]})["task"]
 
     assert cancelled["changed"] is True
     assert cancelled["interruptible"] is True

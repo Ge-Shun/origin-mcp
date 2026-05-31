@@ -82,7 +82,9 @@ def test_discover_records_from_html_fixture() -> None:
 def test_discover_xfunction_category_page_places_functions_under_category() -> None:
     html = '<html><body><a href="/x-function/ref/plotxy/">plotxy</a></body></html>'
 
-    records = discover_records_from_html(html, "https://docs.originlab.com/x-function/ref/plotting/")
+    records = discover_records_from_html(
+        html, "https://docs.originlab.com/x-function/ref/plotting/"
+    )
 
     assert records[0].path == "x-function/plotting/plotxy"
     assert records[0].doc_kind == "xfunction"
@@ -91,7 +93,9 @@ def test_discover_xfunction_category_page_places_functions_under_category() -> N
 def test_discover_labtalk_category_page_places_commands_under_category() -> None:
     html = '<html><body><a href="/labtalk/ref/legend-cmd/">legend</a></body></html>'
 
-    records = discover_records_from_html(html, "https://docs.originlab.com/labtalk/ref/display-control/")
+    records = discover_records_from_html(
+        html, "https://docs.originlab.com/labtalk/ref/display-control/"
+    )
 
     assert records[0].path == "labtalk/commands/display-control/legend"
     assert records[0].doc_kind == "command"

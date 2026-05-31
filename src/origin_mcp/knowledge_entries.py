@@ -1164,9 +1164,7 @@ LABTALK_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "common project open/save/list/rename/delete operations."
         ),
         keywords=("project", "window", "list", "rename", "delete", "save"),
-        metadata={
-            "official_url": "https://docs.originlab.com/labtalk/ref/project-management/"
-        },
+        metadata={"official_url": "https://docs.originlab.com/labtalk/ref/project-management/"},
     ),
     KnowledgeEntry(
         collection="labtalk",
@@ -1355,9 +1353,7 @@ XFUNCTION_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "Current adapters include smooth and pkFind."
         ),
         keywords=("signal processing", "smooth", "pkFind", "peak", "filter"),
-        metadata={
-            "official_url": "https://docs.originlab.com/x-function/ref/signal-processing/"
-        },
+        metadata={"official_url": "https://docs.originlab.com/x-function/ref/signal-processing/"},
     ),
     KnowledgeEntry(
         collection="labtalk",
@@ -1369,9 +1365,6 @@ XFUNCTION_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "provides high-level import and export wrappers with file validation and diagnostics."
         ),
         keywords=("import", "export", "file", "data connector"),
-        metadata={
-            "official_url": "https://docs.originlab.com/x-function/ref/import-and-export/"
-        },
+        metadata={"official_url": "https://docs.originlab.com/x-function/ref/import-and-export/"},
     ),
 )
-

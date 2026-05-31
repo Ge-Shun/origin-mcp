@@ -199,5 +199,3 @@ def _plot_table_id(
         )
 
     return _wrap(run)
-
-

@@ -149,4 +149,3 @@ class _ExportMixin(_OriginClientBase):
         info["quality_passed"] = not quality_issues
         info["looks_nonempty"] = export_looks_nonempty(info)
         return info
-

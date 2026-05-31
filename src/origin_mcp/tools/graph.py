@@ -470,20 +470,14 @@ def _plot_style_setter_coverage(
         plot_type = result["plot_type"]
 
     implemented = [
-        item
-        for item in capabilities
-        if item["status"] == "implemented" and item.get("setter")
+        item for item in capabilities if item["status"] == "implemented" and item.get("setter")
     ]
     executable = [
         {**item, "route": _plot_style_dispatch_route(item)}
         for item in implemented
         if _plot_style_dispatch_route(item) is not None
     ]
-    unhandled = [
-        item
-        for item in implemented
-        if _plot_style_dispatch_route(item) is None
-    ]
+    unhandled = [item for item in implemented if _plot_style_dispatch_route(item) is None]
     planned = [item for item in capabilities if item["status"] == "planned"]
     return {
         "chart_type": normalized_chart,

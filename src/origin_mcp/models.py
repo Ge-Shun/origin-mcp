@@ -350,9 +350,7 @@ class FigureSpec(BaseModel):
             if plot.layer not in layer_ids:
                 raise ValueError(f"Plot {plot.id!r} references unknown layer {plot.layer!r}.")
             if plot.data_ref is not None and plot.data_ref not in data_ids:
-                raise ValueError(
-                    f"Plot {plot.id!r} references unknown data_ref {plot.data_ref!r}."
-                )
+                raise ValueError(f"Plot {plot.id!r} references unknown data_ref {plot.data_ref!r}.")
         for annotation in self.annotations:
             if annotation.layer is not None and annotation.layer not in layer_ids:
                 raise ValueError(

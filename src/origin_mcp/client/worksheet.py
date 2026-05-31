@@ -669,4 +669,3 @@ class _WorksheetMixin(_OriginClientBase):
             columns=columns,
             rows=rows if rows is not None else int(getattr(wks, "rows", 0)),
         )
-
