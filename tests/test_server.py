@@ -352,6 +352,46 @@ def test_error_response_defaults_for_unmarked_operation_errors() -> None:
     assert result["error_code"] == "origin_operation_failed"
 
 
+def test_plot_type_id_routes_keep_expected_origin_ids() -> None:
+    assert plotting_tools.PLOT_TYPE_ID_ROUTES == {
+        "area": (204, "area"),
+        "stack_area": (214, "stackarea"),
+        "fill_area": (249, "fillarea"),
+        "bar": (215, "bar"),
+        "stack_bar": (216, "bar"),
+        "floating_bar": (207, "floatbar"),
+        "column_stack": (213, "column"),
+        "pie": (225, "pie"),
+        "ternary": (245, "ternary"),
+        "ternary_contour": (185, "TernaryContour"),
+        "bubble": (193, "scatter"),
+        "bubble_color_mapped": (248, "scatter"),
+        "color_mapped": (247, "scatter"),
+        "vector_xyam": (208, "vector"),
+        "vector_xyxy": (218, "vectxyxy"),
+        "vector_3d": (183, "gl3DVector"),
+        "high_low_close": (205, "hclose"),
+        "candlestick": (221, "Candlestick"),
+        "waterfall": (210, "walls"),
+        "ribbon_3d": (211, "ribbon"),
+        "bars_3d": (212, "bar3d"),
+        "errorbar_3d": (184, "gl3DError"),
+        "polar_xr_ytheta": (186, "PolarXrYTheta"),
+        "smith": (191, "SmithCht"),
+        "dendrogram": (108, "Cluster"),
+    }
+
+
+def test_matrix_plot_type_id_routes_keep_expected_origin_ids() -> None:
+    assert plotting_tools.MATRIX_PLOT_TYPE_ID_ROUTES == {
+        "scatter_3d": (101, "gl3DScatterMat"),
+        "surface_3d": (103, "glmesh"),
+        "heatmap": (105, "heatmap"),
+        "contour": (226, "contour"),
+        "image": (220, "image"),
+    }
+
+
 def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(
     monkeypatch,
     tmp_path: Path,
