@@ -17,7 +17,11 @@ from .official_docs import (
 from .official_docs import (
     OfficialDocRecord as OfficialDocPage,
 )
-from .plot_style_registry import all_plot_style_capabilities, plot_style_capability_count
+from .plot_style_registry import (
+    all_plot_style_capabilities,
+    all_plot_type_style_profiles,
+    plot_style_capability_count,
+)
 
 
 @dataclass(frozen=True)
@@ -1642,6 +1646,36 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
             metadata={"capability_count": plot_style_capability_count()},
         )
     ]
+    for profile in all_plot_type_style_profiles():
+        entries.append(
+            KnowledgeEntry(
+                collection="reference",
+                path=f"plot-style-capabilities/plot-types/{profile['id']}",
+                title=f"Plot Type {profile['id']} style profile",
+                summary=(
+                    f"{profile['name']} maps to style chart type "
+                    f"{profile['chart_type']}."
+                ),
+                body=(
+                    f"Origin Plot Type ID {profile['id']} ({profile['name']}) belongs to "
+                    f"category {profile['category']} and uses input {profile['input']}. "
+                    f"Templates: {', '.join(profile['templates']) or 'not specified'}. "
+                    f"Style chart type: {profile['chart_type']}. "
+                    f"Style sources: {', '.join(profile['style_sources']) or 'core only'}."
+                ),
+                keywords=(
+                    "plot style",
+                    "plot type id",
+                    str(profile["id"]),
+                    str(profile["name"]),
+                    str(profile["category"]),
+                    str(profile["chart_type"]),
+                    *(profile["templates"]),
+                    *(profile["style_sources"]),
+                ),
+                metadata=profile,
+            )
+        )
     for item in all_plot_style_capabilities():
         entries.append(
             KnowledgeEntry(

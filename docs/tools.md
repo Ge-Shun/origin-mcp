@@ -119,17 +119,20 @@ Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make
 columns or bars narrower. FigureSpec plot `style` entries can use the same
 fields for supported plot primitives.
 
-Use `origin_plot_style_capabilities(chart_type, query)` before changing an
-unfamiliar chart type. It is backed by the same registry as the knowledge base:
-`core.json` holds the small common capability set, while chart-specific JSON
-extensions such as `column_bar.json`, `field_color.json`, `distribution.json`,
-`errorbar.json`, `image.json`, and `three_d.json` are loaded only when the
-requested chart type or query needs them. The registry maps user-facing terms
-such as `柱宽`, `折线粗细`, `点大小`, `色带`, and `误差棒帽宽` to MCP setter
-parameters, Origin/LabTalk routes, readable fields, and implementation status.
-Properties marked `implemented` have stable MCP entry points; properties marked
-`planned` are intentionally documented so the assistant can report that a
-semantic setter is not yet available instead of guessing a LabTalk flag.
+Use `origin_plot_style_capabilities(chart_type, plot_type_id, query)` before
+changing an unfamiliar chart type. It is backed by the same registry as the
+knowledge base: `core.json` holds the small common capability set, while
+chart-specific JSON extensions such as `column_bar.json`, `field_color.json`,
+`distribution.json`, `errorbar.json`, `image.json`, `three_d.json`,
+`area_pie.json`, `financial.json`, and `specialized.json` are loaded only when
+the requested chart type, Plot Type ID, or query needs them. Every Plot Type ID
+in `PLOT_TYPE_CATALOG` has a style profile that maps it to one of these chart
+style families. The registry maps user-facing terms such as `柱宽`, `折线粗细`,
+`点大小`, `色带`, and `误差棒帽宽` to MCP setter parameters, Origin/LabTalk
+routes, readable fields, and implementation status. Properties marked
+`implemented` have stable MCP entry points; properties marked `planned` are
+intentionally documented so the assistant can report that a semantic setter is
+not yet available instead of guessing a LabTalk flag.
 
 ## Knowledge Base Tools
 

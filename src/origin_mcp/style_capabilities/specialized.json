@@ -1,0 +1,50 @@
+[
+  {
+    "name": "vector_scale",
+    "controls": "vector arrow length scale",
+    "aliases": ["矢量箭头长度", "箭头比例", "vector scale", "arrow length"],
+    "chart_types": ["vector", "vector3d"],
+    "status": "planned",
+    "origin_route": "Origin vector plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "vector_arrowhead",
+    "controls": "vector arrowhead size and style",
+    "aliases": ["箭头大小", "箭头样式", "arrowhead", "arrow head"],
+    "chart_types": ["vector", "vector3d"],
+    "status": "planned",
+    "origin_route": "Origin vector arrow settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "polar_angle_direction",
+    "controls": "polar angle direction, zero angle, and radial label behavior",
+    "aliases": ["极坐标角度", "零角度", "polar angle", "theta direction"],
+    "chart_types": ["polar"],
+    "status": "planned",
+    "origin_route": "Origin polar axis/plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "ternary_axis_style",
+    "controls": "ternary axis and grid styling",
+    "aliases": ["三元图坐标", "三元图网格", "ternary axis", "ternary grid"],
+    "chart_types": ["ternary"],
+    "status": "planned",
+    "origin_route": "Origin ternary graph settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "smith_grid_style",
+    "controls": "Smith chart grid and impedance/admittance display",
+    "aliases": ["史密斯图网格", "smith grid", "smith impedance"],
+    "chart_types": ["smith"],
+    "status": "planned",
+    "origin_route": "Origin Smith chart settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "dendrogram_branch_style",
+    "controls": "dendrogram branch line and label styling",
+    "aliases": ["树状图分支", "聚类树线型", "dendrogram branch", "cluster branch"],
+    "chart_types": ["dendrogram"],
+    "status": "planned",
+    "origin_route": "Origin dendrogram plot details; not yet exposed as a stable semantic tool"
+  }
+]

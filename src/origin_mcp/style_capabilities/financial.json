@@ -1,0 +1,26 @@
+[
+  {
+    "name": "ohlc_bar_width",
+    "controls": "OHLC/high-low-close bar width and spacing",
+    "aliases": ["OHLC宽度", "高低收盘线宽", "ohlc width", "hilo width"],
+    "chart_types": ["financial"],
+    "status": "planned",
+    "origin_route": "Origin financial plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "candlestick_body_width",
+    "controls": "candlestick body width and spacing",
+    "aliases": ["蜡烛图宽度", "K线宽度", "candlestick width", "candle body width"],
+    "chart_types": ["financial"],
+    "status": "planned",
+    "origin_route": "Origin candlestick plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "financial_up_down_colors",
+    "controls": "up/down colors for financial charts",
+    "aliases": ["涨跌颜色", "K线颜色", "up down color", "bull bear color"],
+    "chart_types": ["financial"],
+    "status": "planned",
+    "origin_route": "Origin financial color settings; not yet exposed as a stable semantic tool"
+  }
+]

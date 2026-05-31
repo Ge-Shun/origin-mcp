@@ -137,6 +137,15 @@ def test_query_reference_finds_style_registry_for_other_chart_types() -> None:
     assert "plot-style-capabilities/colormap" in [item["path"] for item in colormap["results"]]
 
 
+def test_browse_reference_has_plot_type_style_profile() -> None:
+    result = browse_knowledge("reference", "plot-style-capabilities/plot-types/203")
+
+    entry = result["entry"]
+    assert entry["metadata"]["id"] == 203
+    assert entry["metadata"]["chart_type"] == "column"
+    assert entry["metadata"]["style_sources"] == ["column_bar.json"]
+
+
 def test_browse_python_api_by_dot_path() -> None:
     result = browse_knowledge("python_api", "originpro.find_graph")
 

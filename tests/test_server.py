@@ -67,6 +67,26 @@ def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
     assert result["data"]["capabilities"][0]["origin_route"] == "LabTalk set -vg"
 
 
+def test_plot_style_capabilities_tool_accepts_plot_type_id() -> None:
+    result = server.origin_plot_style_capabilities(plot_type_id=203, query="柱宽")
+
+    assert result["ok"] is True
+    assert result["data"]["plot_type"]["id"] == 203
+    assert result["data"]["plot_type"]["chart_type"] == "column"
+    assert result["data"]["loaded_sources"] == ["core.json", "column_bar.json"]
+    assert result["data"]["capabilities"][0]["name"] == "bar_gap"
+
+
+def test_plot_style_capabilities_maps_all_catalog_plot_types() -> None:
+    from origin_mcp.compat import PLOT_TYPE_CATALOG
+    from origin_mcp.plot_style_registry import plot_type_style_profile
+
+    profiles = [plot_type_style_profile(item["id"]) for item in PLOT_TYPE_CATALOG]
+
+    assert all(profile is not None for profile in profiles)
+    assert all(profile["chart_type"] for profile in profiles if profile is not None)
+
+
 def test_plot_style_capabilities_tool_reports_planned_image_controls() -> None:
     result = server.origin_plot_style_capabilities(chart_type="热图", query="色带")
 
@@ -74,6 +94,15 @@ def test_plot_style_capabilities_tool_reports_planned_image_controls() -> None:
     assert result["data"]["loaded_sources"] == ["core.json", "field_color.json", "image.json"]
     assert result["data"]["capabilities"][0]["name"] == "colormap"
     assert result["data"]["capabilities"][0]["status"] == "planned"
+
+
+def test_plot_style_capabilities_tool_reports_specialized_profiles() -> None:
+    result = server.origin_plot_style_capabilities(plot_type_id=221, query="涨跌颜色")
+
+    assert result["ok"] is True
+    assert result["data"]["plot_type"]["chart_type"] == "financial"
+    assert result["data"]["loaded_sources"] == ["core.json", "financial.json"]
+    assert result["data"]["capabilities"][0]["name"] == "financial_up_down_colors"
 
 
 def test_plot_style_capabilities_keeps_core_small_without_query() -> None:

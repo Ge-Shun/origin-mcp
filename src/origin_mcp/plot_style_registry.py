@@ -6,6 +6,8 @@ from functools import cache
 from importlib import resources
 from typing import Any
 
+from .compat import PLOT_TYPE_CATALOG
+
 COMMON_CHART_TYPES = (
     "line",
     "scatter",
@@ -38,6 +40,21 @@ CHART_TYPE_ALIASES = {
     "stack_column": "column",
     "stacked_column": "column",
     "grouped_bar": "bar",
+    "floating_bar": "bar",
+    "stack_bar": "bar",
+    "stacked_bar": "bar",
+    "stack_area": "area",
+    "stacked_area": "area",
+    "color_mapped": "scatter",
+    "ternary_contour": "contour",
+    "smith": "smith",
+    "smith_chart": "smith",
+    "high_low_close": "financial",
+    "ohlc": "financial",
+    "candlestick": "financial",
+    "dendrogram": "dendrogram",
+    "3d_vector": "vector3d",
+    "3d_bars": "bar3d",
     "柱状图": "column",
     "柱形图": "column",
     "柱图": "column",
@@ -55,16 +72,24 @@ CHART_TYPE_ALIASES = {
     "图像": "image",
     "三维散点": "scatter3d",
     "三维曲面": "surface3d",
+    "三维柱": "bar3d",
+    "三维矢量": "vector3d",
 }
 
 
 EXTENSIONS_BY_CHART_TYPE = {
     "column": ("column_bar.json",),
     "bar": ("column_bar.json",),
+    "bar3d": ("column_bar.json", "three_d.json"),
+    "area": ("area_pie.json",),
+    "pie": ("area_pie.json",),
     "histogram": ("distribution.json",),
     "box": ("distribution.json",),
+    "dendrogram": ("distribution.json", "specialized.json"),
     "line_symbol": ("errorbar.json",),
     "scatter": ("errorbar.json",),
+    "bubble": ("errorbar.json",),
+    "errorbar": ("errorbar.json",),
     "heatmap": ("field_color.json", "image.json"),
     "contour": ("field_color.json",),
     "image": ("field_color.json", "image.json"),
@@ -73,6 +98,12 @@ EXTENSIONS_BY_CHART_TYPE = {
     "surface3d": ("field_color.json", "three_d.json"),
     "waterfall": ("three_d.json",),
     "ribbon3d": ("three_d.json",),
+    "vector": ("specialized.json",),
+    "vector3d": ("specialized.json", "three_d.json"),
+    "polar": ("specialized.json",),
+    "smith": ("specialized.json",),
+    "ternary": ("specialized.json",),
+    "financial": ("financial.json",),
 }
 
 
@@ -138,9 +169,13 @@ def normalize_chart_type(chart_type: str | None) -> str | None:
 
 def plot_style_capabilities(
     chart_type: str | None = None,
+    plot_type_id: int | None = None,
     query: str | None = None,
 ) -> dict[str, Any]:
-    normalized_chart = normalize_chart_type(chart_type)
+    plot_type_profile = plot_type_style_profile(plot_type_id) if plot_type_id is not None else None
+    normalized_chart = normalize_chart_type(chart_type) or (
+        plot_type_profile["chart_type"] if plot_type_profile else None
+    )
     query_terms = _query_terms(query)
     resources_to_load = _resources_for_query(normalized_chart, query_terms)
     capabilities = _load_capabilities(resources_to_load)
@@ -151,6 +186,7 @@ def plot_style_capabilities(
     ]
     return {
         "chart_type": normalized_chart,
+        "plot_type": plot_type_profile,
         "query": query,
         "loaded_sources": list(resources_to_load),
         "count": len(matches),
@@ -164,6 +200,32 @@ def all_plot_style_capabilities() -> tuple[PlotStyleCapability, ...]:
 
 def plot_style_capability_count() -> int:
     return len(all_plot_style_capabilities())
+
+
+def plot_type_style_profile(plot_type_id: int | None) -> dict[str, Any] | None:
+    if plot_type_id is None:
+        return None
+    item = next((plot for plot in PLOT_TYPE_CATALOG if plot["id"] == plot_type_id), None)
+    if item is None:
+        return None
+    chart_type = _chart_type_for_plot_type(item)
+    return {
+        "id": item["id"],
+        "name": item["name"],
+        "category": item["category"],
+        "input": item["input"],
+        "templates": item.get("templates", []),
+        "chart_type": chart_type,
+        "style_sources": list(_dedupe(EXTENSIONS_BY_CHART_TYPE.get(chart_type, ()))),
+    }
+
+
+def all_plot_type_style_profiles() -> tuple[dict[str, Any], ...]:
+    return tuple(
+        profile
+        for profile in (plot_type_style_profile(item["id"]) for item in PLOT_TYPE_CATALOG)
+        if profile is not None
+    )
 
 
 def _resources_for_query(
@@ -238,3 +300,61 @@ def _query_terms(query: str | None) -> tuple[str, ...]:
         return ()
     normalized = query.lower().replace("/", " ").replace("_", " ").replace("-", " ")
     return tuple(term for term in normalized.split() if term)
+
+
+def _chart_type_for_plot_type(item: dict[str, Any]) -> str:
+    plot_id = int(item["id"])
+    explicit = {
+        101: "scatter3d",
+        103: "surface3d",
+        105: "matrix_heatmap",
+        108: "dendrogram",
+        183: "vector3d",
+        184: "scatter3d",
+        185: "contour",
+        186: "polar",
+        191: "smith",
+        192: "polar",
+        193: "bubble",
+        194: "bubble",
+        205: "financial",
+        208: "vector",
+        210: "waterfall",
+        211: "ribbon3d",
+        212: "bar3d",
+        218: "vector",
+        220: "image",
+        221: "financial",
+        225: "pie",
+        226: "contour",
+        231: "errorbar",
+        233: "errorbar",
+        240: "scatter3d",
+        242: "surface3d",
+        243: "contour",
+        245: "ternary",
+        247: "scatter",
+        248: "bubble",
+    }
+    if plot_id in explicit:
+        return explicit[plot_id]
+    name = str(item["name"]).lower()
+    templates = " ".join(str(template).lower() for template in item.get("templates", []))
+    text = f"{name} {templates}"
+    if "column" in text:
+        return "column"
+    if "bar" in text:
+        return "bar"
+    if "area" in text:
+        return "area"
+    if "box" in text:
+        return "box"
+    if "hist" in text:
+        return "histogram"
+    if "contour" in text:
+        return "contour"
+    if "scatter" in text:
+        return "scatter"
+    if "line" in text:
+        return "line"
+    return normalize_chart_type(str(item.get("category", ""))) or "line"

@@ -30,14 +30,19 @@ def origin_palette_catalog() -> dict[str, Any]:
 @_mcp_tool()
 def origin_plot_style_capabilities(
     chart_type: str | None = None,
+    plot_type_id: int | None = None,
     query: str | None = None,
 ) -> dict[str, Any]:
-    """List semantic plot style controls by chart type or user-facing term."""
+    """List semantic plot style controls by chart type, Plot Type ID, or term."""
 
     return _wrap(
         lambda: _ok(
             "Listed Origin MCP plot style capabilities.",
-            **plot_style_capabilities(chart_type=chart_type, query=query),
+            **plot_style_capabilities(
+                chart_type=chart_type,
+                plot_type_id=plot_type_id,
+                query=query,
+            ),
         )
     )
 

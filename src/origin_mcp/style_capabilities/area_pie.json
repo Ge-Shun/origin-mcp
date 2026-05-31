@@ -1,0 +1,26 @@
+[
+  {
+    "name": "area_fill_baseline",
+    "controls": "area/fill baseline and fill-to target",
+    "aliases": ["面积基线", "填充基线", "fill baseline", "fill to"],
+    "chart_types": ["area"],
+    "status": "planned",
+    "origin_route": "Origin area/fill plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "pie_slice_explode",
+    "controls": "pie slice explosion/offset",
+    "aliases": ["饼图分离", "扇区分离", "explode slice", "pie explode"],
+    "chart_types": ["pie"],
+    "status": "planned",
+    "origin_route": "Origin pie plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "pie_label_format",
+    "controls": "pie label content, percentage display, and label placement",
+    "aliases": ["饼图标签", "百分比标签", "pie label", "percentage label"],
+    "chart_types": ["pie"],
+    "status": "planned",
+    "origin_route": "Origin pie label settings; not yet exposed as a stable semantic tool"
+  }
+]
