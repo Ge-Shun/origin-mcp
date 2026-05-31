@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import inspect
+from pathlib import Path
+from typing import Any
+
+from ._bridge_protocol import public_result, restore_bridge_value
+from .errors import OriginOperationError
+from .origin_client import OriginClient
+
+ALLOWED_CLIENT_METHODS = {
+    "connect",
+    "capabilities",
+    "plot_type_coverage",
+    "default_plot_config",
+    "new_project",
+    "open_project",
+    "save_project",
+    "quit",
+    "detach",
+    "force_quit",
+    "run_labtalk",
+    "import_csv",
+    "import_table",
+    "import_file_connector",
+    "append_table",
+    "worksheet_info",
+    "read_worksheet",
+    "write_worksheet",
+    "add_calculated_column",
+    "sort_worksheet",
+    "get_cell_value",
+    "set_cell_value",
+    "delete_columns",
+    "clear_worksheet",
+    "export_worksheet_csv",
+    "plot_table",
+    "plot_table_by_id",
+    "plot_matrix_by_id",
+    "list_project",
+    "rename_object",
+    "delete_object",
+    "set_axis",
+    "set_plot_style",
+    "apply_nature_style",
+    "diagnose_graph",
+    "recommend_chart",
+    "plot_auto",
+    "chart_atlas_route",
+    "plot_chart_atlas",
+    "apply_image_panel_style",
+    "add_plot_to_graph",
+    "remove_plot_from_graph",
+    "change_plot_type",
+    "change_plot_data",
+    "set_graph_page",
+    "arrange_layers",
+    "add_graph_label",
+    "add_reference_line",
+    "set_column_labels",
+    "set_column_designations",
+    "format_legend",
+    "linear_fit_result",
+    "export_all_graphs",
+    "plot_range",
+    "batch_plot_from_template",
+    "list_graph_templates",
+    "get_graph_info",
+    "get_layer_info",
+    "list_fit_functions",
+    "nonlinear_fit_structured",
+    "run_analysis",
+    "format_graph",
+    "export_graph",
+    "export_preview",
+    "inspect_export",
+}
+TASKABLE_METHODS = {
+    "origin_ping",
+    "origin_capabilities",
+    *ALLOWED_CLIENT_METHODS,
+}
+
+
+def call_client_method(
+    client: OriginClient,
+    method: str,
+    args: list[Any],
+    kwargs: dict[str, Any],
+) -> Any:
+    if method not in ALLOWED_CLIENT_METHODS:
+        raise OriginOperationError(
+            f"Unsupported bridge client method: {method}",
+            error_code="unsupported_bridge_client_method",
+        )
+    func = getattr(client, method, None)
+    if not callable(func):
+        raise OriginOperationError(
+            f"Origin client method is not available: {method}",
+            error_code="origin_client_method_unavailable",
+        )
+    restored_args = [restore_bridge_value(arg) for arg in args]
+    restored_kwargs = {key: restore_bridge_value(value) for key, value in kwargs.items()}
+    coerced_args, coerced_kwargs = coerce_path_args(func, restored_args, restored_kwargs)
+    return func(*coerced_args, **coerced_kwargs)
+
+
+def coerce_path_args(
+    func: Any,
+    args: list[Any],
+    kwargs: dict[str, Any],
+) -> tuple[list[Any], dict[str, Any]]:
+    signature = inspect.signature(func)
+    path_names = {"path", "output_dir", "template_dir", "export_path"}
+    coerced_args = list(args)
+    params = list(signature.parameters.values())
+    for index, value in enumerate(coerced_args):
+        if index >= len(params):
+            break
+        if params[index].name in path_names and isinstance(value, str):
+            coerced_args[index] = Path(value)
+    coerced_kwargs = dict(kwargs)
+    for key, value in list(coerced_kwargs.items()):
+        if key in path_names and isinstance(value, str):
+            coerced_kwargs[key] = Path(value)
+    return coerced_args, coerced_kwargs
+
+
+def call_origin_method(
+    client: OriginClient,
+    method: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    # ``origin_ping``/``origin_capabilities`` are taskable aliases for client
+    # methods that carry a different name, so they cannot be routed generically.
+    if method == "origin_ping":
+        return client.connect(show=bool(params.get("show", True)))
+    if method == "origin_capabilities":
+        return client.capabilities(
+            show=bool(params.get("show", False)),
+            refresh=bool(params.get("refresh", False)),
+        )
+    if method not in ALLOWED_CLIENT_METHODS:
+        raise OriginOperationError(f"Unsupported bridge method: {method}")
+
+    # ``plot_table`` returns a (worksheet, graph) pair and ``export_graph``
+    # returns a path dict; both enrich the response with an export inspection.
+    # Every other client method maps cleanly onto the generic call path, which
+    # already coerces path arguments and wraps WorksheetRef/GraphRef results.
+    if method == "plot_table":
+        worksheet, graph = call_client_method(client, "plot_table", [], params)
+        graph_data = graph.as_dict()
+        response = {"worksheet": worksheet.as_dict(), "graph": graph_data}
+        if graph_data.get("export_path"):
+            response["export_inspection"] = client.inspect_export(Path(graph_data["export_path"]))
+        return response
+    if method == "export_graph":
+        exported = call_client_method(client, "export_graph", [], params)
+        return {
+            **exported,
+            "inspection": client.inspect_export(Path(str(exported["path"]))),
+        }
+
+    return public_result(call_client_method(client, method, [], params))
+
