@@ -8,6 +8,7 @@ from pathlib import Path
 import origin_mcp.server as server
 import origin_mcp.tools.graph as graph_tools
 import origin_mcp.tools.plotting as plotting_tools
+import origin_mcp.tools.plotting_basic as plotting_basic_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
 from origin_mcp.server import _error, _json_safe
 
@@ -404,7 +405,7 @@ def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(
         calls.append(kwargs)
         return {"ok": True, "message": "ok", "data": {}}
 
-    monkeypatch.setattr(plotting_tools, "_plot_table_id", fake_plot_table_id)
+    monkeypatch.setattr(plotting_basic_tools, "_plot_table_id", fake_plot_table_id)
 
     result = server.origin_plot_heatmap(
         path=str(path),
@@ -430,7 +431,7 @@ def test_xyz_3d_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path)
         calls.append(kwargs)
         return {"ok": True, "message": "ok", "data": {}}
 
-    monkeypatch.setattr(plotting_tools, "_plot_table_id", fake_plot_table_id)
+    monkeypatch.setattr(plotting_basic_tools, "_plot_table_id", fake_plot_table_id)
 
     scatter = server.origin_plot_3d_scatter(str(path), "x", "y", "z", graph_name="Scatter3D")
     surface = server.origin_plot_3d_surface(str(path), "x", "y", "z", graph_name="Surface3D")
