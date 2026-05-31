@@ -79,6 +79,7 @@ from .tools.graph import (
     origin_list_project,
     origin_palette_catalog,
     origin_plot_style_capabilities,
+    origin_plot_style_setter_coverage,
     origin_remove_plot_from_graph,
     origin_rename_object,
     origin_set_axis,

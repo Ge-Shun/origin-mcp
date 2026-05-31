@@ -122,10 +122,16 @@ fields for supported plot primitives.
 For natural-language or registry-backed edits, `origin_set_plot_property`
 resolves a semantic `property_name` such as `柱宽`, `折线粗细`, `点大小`, or
 `误差棒帽宽` against the plot style capability registry. It only applies
-properties that are marked `implemented` and map to a known safe
-`origin_set_plot_style` keyword. Known-but-planned properties return
+properties that are marked `implemented` and map to a known safe route such as
+`origin_set_plot_style`, `origin_apply_nature_style`, or
+`origin_apply_image_panel_style`. Known-but-planned properties return
 `applied=false` with the matching capability and safe alternatives instead of
 guessing an Origin/LabTalk route.
+
+Use `origin_plot_style_setter_coverage(chart_type, plot_type_id)` to audit
+whether registry entries marked `implemented` are executable through safe MCP
+routes. This is useful after adding a new style capability file or changing
+capability status.
 
 Use `origin_plot_style_capabilities(chart_type, plot_type_id, query)` before
 changing an unfamiliar chart type. It is backed by the same registry as the

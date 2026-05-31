@@ -1550,6 +1550,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_browse_official_docs",
         "origin_query_official_docs",
         "origin_plot_style_capabilities",
+        "origin_plot_style_setter_coverage",
     }:
         return "knowledge"
     if name.startswith(("origin_import_", "origin_append_", "origin_read_", "origin_write_")):

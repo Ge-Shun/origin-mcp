@@ -20,6 +20,14 @@ class FakeGraphClient:
         self.calls.append(("set_plot_style", kwargs))
         return {"styled_plots": 1, **kwargs}
 
+    def apply_nature_style(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("apply_nature_style", kwargs))
+        return {"styled_plots": 1, **kwargs}
+
+    def apply_image_panel_style(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("apply_image_panel_style", kwargs))
+        return {"styled_layers": 1, **kwargs}
+
 
 def test_json_safe_replaces_non_finite_floats() -> None:
     data = {
@@ -45,6 +53,7 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     assert "origin_plot_line" in names
     assert "origin_palette_catalog" in names
     assert "origin_plot_style_capabilities" in names
+    assert "origin_plot_style_setter_coverage" in names
     assert "origin_set_plot_property" in names
     assert "origin_set_axis" in names
 
@@ -65,7 +74,7 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 153
+    assert int(output.strip()) == 154
 
 
 def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
@@ -108,6 +117,86 @@ def test_set_plot_property_resolves_chinese_bar_width_alias(monkeypatch) -> None
     ]
 
 
+def test_set_plot_property_routes_palette_name_to_nature_style(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="配色",
+        value="nature_material",
+        graph_name="Graph1",
+        layer_index=0,
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["applied"] is True
+    assert result["data"]["property_name"] == "palette_name"
+    assert result["data"]["route"] == {
+        "tool": "origin_apply_nature_style",
+        "kwarg": "palette_name",
+    }
+    assert fake.calls == [
+        (
+            "apply_nature_style",
+            {
+                "graph_name": "Graph1",
+                "layer_index": 0,
+                "chart_type": None,
+                "palette_name": "nature_material",
+            },
+        )
+    ]
+
+
+def test_set_plot_property_routes_image_annotations_with_structured_value(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="比例尺",
+        value={"panel_label": "a", "scale_bar_label": "10 mm", "dark_panel": True},
+        graph_name="Heat",
+        layer_index=1,
+        chart_type="热图",
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["applied"] is True
+    assert result["data"]["property_name"] == "image_panel_annotations"
+    assert result["data"]["route"] == {
+        "tool": "origin_apply_image_panel_style",
+        "kwarg": "annotations",
+    }
+    assert fake.calls == [
+        (
+            "apply_image_panel_style",
+            {
+                "graph_name": "Heat",
+                "layer_index": 1,
+                "panel_label": "a",
+                "scale_bar_label": "10 mm",
+                "dark_panel": True,
+            },
+        )
+    ]
+
+
+def test_set_plot_property_rejects_unstructured_image_annotations(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="比例尺",
+        value="10 mm",
+        chart_type="热图",
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_request"
+    assert "image_panel_annotations value must be an object" in result["message"]
+    assert fake.calls == []
+
+
 def test_set_plot_property_reports_planned_capability_without_mutating(monkeypatch) -> None:
     fake = FakeGraphClient()
     monkeypatch.setattr(graph_tools, "client", fake)
@@ -140,6 +229,29 @@ def test_set_plot_property_rejects_unknown_property(monkeypatch) -> None:
     assert result["error_code"] == "invalid_request"
     assert "Unsupported plot style property" in result["message"]
     assert fake.calls == []
+
+
+def test_plot_style_setter_coverage_has_no_unhandled_implemented_entries() -> None:
+    result = server.origin_plot_style_setter_coverage()
+
+    assert result["ok"] is True
+    assert result["data"]["implemented_count"] == result["data"]["executable_count"]
+    assert result["data"]["unhandled_implemented_count"] == 0
+    routes = {item["name"]: item["route"]["tool"] for item in result["data"]["executable"]}
+    assert routes["bar_gap"] == "origin_set_plot_style"
+    assert routes["palette_name"] == "origin_apply_nature_style"
+    assert routes["image_panel_annotations"] == "origin_apply_image_panel_style"
+
+
+def test_plot_style_setter_coverage_filters_by_chart_type() -> None:
+    result = server.origin_plot_style_setter_coverage(chart_type="热图")
+
+    assert result["ok"] is True
+    assert result["data"]["chart_type"] == "heatmap"
+    names = {item["name"] for item in result["data"]["executable"]}
+    assert "image_panel_annotations" in names
+    assert "palette_name" in names
+    assert result["data"]["unhandled_implemented_count"] == 0
 
 
 def test_plot_style_capabilities_tool_accepts_plot_type_id() -> None:

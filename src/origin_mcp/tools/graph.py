@@ -11,6 +11,7 @@ from origin_mcp.models import (
     ProjectObjectRequest,
 )
 from origin_mcp.plot_style_registry import (
+    all_plot_style_capabilities,
     plot_style_capabilities,
     resolve_plot_style_capability,
 )
@@ -33,6 +34,15 @@ _SET_PLOT_STYLE_PROPERTIES = {
     "bar_border_width": "line_width",
     "errorbar_width": "line_width",
     "three_d_symbol_size": "symbol_size",
+}
+_IMAGE_PANEL_STYLE_PROPERTIES = {
+    "panel_label",
+    "channel_label",
+    "scale_bar_label",
+    "dynamic_range_label",
+    "dark_panel",
+    "font_size",
+    "run_diagnostics",
 }
 
 
@@ -59,6 +69,21 @@ def origin_plot_style_capabilities(
                 plot_type_id=plot_type_id,
                 query=query,
             ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_plot_style_setter_coverage(
+    chart_type: str | None = None,
+    plot_type_id: int | None = None,
+) -> dict[str, Any]:
+    """Report which implemented style registry entries have executable safe setters."""
+
+    return _wrap(
+        lambda: _ok(
+            "Collected Origin MCP plot style setter coverage.",
+            **_plot_style_setter_coverage(chart_type=chart_type, plot_type_id=plot_type_id),
         )
     )
 
@@ -293,12 +318,12 @@ def origin_set_plot_property(
             plot_type_id=plot_type_id,
         )
         capability = resolved["capability"]
-        target_kwarg = _plot_style_target_kwarg(capability)
-        if capability["status"] != "implemented" or not target_kwarg:
+        route = _plot_style_dispatch_route(capability)
+        if capability["status"] != "implemented" or route is None:
             alternatives = [
                 item
                 for item in resolved["capabilities"]
-                if item["status"] == "implemented" and _plot_style_target_kwarg(item)
+                if item["status"] == "implemented" and _plot_style_dispatch_route(item)
             ]
             return _ok(
                 "Plot style property is known but not implemented as a safe setter.",
@@ -311,11 +336,13 @@ def origin_set_plot_property(
                 plot_type=resolved["plot_type"],
                 loaded_sources=resolved["loaded_sources"],
             )
-        result = client.set_plot_style(
+        result = _apply_plot_property_route(
+            route=route,
+            value=value,
             graph_name=graph_name,
             layer_index=layer_index,
             plot_index=plot_index,
-            **{target_kwarg: value},
+            chart_type=resolved["chart_type"],
         )
         return _ok(
             "Updated Origin plot style property.",
@@ -324,6 +351,7 @@ def origin_set_plot_property(
             property_name=capability["name"],
             value=value,
             capability=capability,
+            route=route,
             chart_type=resolved["chart_type"],
             plot_type=resolved["plot_type"],
             loaded_sources=resolved["loaded_sources"],
@@ -333,10 +361,116 @@ def origin_set_plot_property(
     return _wrap(run)
 
 
-def _plot_style_target_kwarg(capability: dict[str, Any]) -> str | None:
+def _plot_style_dispatch_route(capability: dict[str, Any]) -> dict[str, str] | None:
     if capability.get("status") != "implemented" or not capability.get("setter"):
         return None
-    return _SET_PLOT_STYLE_PROPERTIES.get(str(capability["name"]))
+    name = str(capability["name"])
+    target_kwarg = _SET_PLOT_STYLE_PROPERTIES.get(name)
+    if target_kwarg:
+        return {"tool": "origin_set_plot_style", "kwarg": target_kwarg}
+    if name == "palette_name":
+        return {"tool": "origin_apply_nature_style", "kwarg": "palette_name"}
+    if name == "image_panel_annotations":
+        return {"tool": "origin_apply_image_panel_style", "kwarg": "annotations"}
+    return None
+
+
+def _apply_plot_property_route(
+    route: dict[str, str],
+    value: Any,
+    graph_name: str | None,
+    layer_index: int,
+    plot_index: int | None,
+    chart_type: str | None,
+) -> dict[str, Any]:
+    if route["tool"] == "origin_set_plot_style":
+        return client.set_plot_style(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            plot_index=plot_index,
+            **{route["kwarg"]: value},
+        )
+    if plot_index is not None:
+        raise ValueError(f"plot_index is not supported by {route['tool']}.")
+    if route["tool"] == "origin_apply_nature_style":
+        return client.apply_nature_style(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            chart_type=chart_type,
+            palette_name=value,
+        )
+    if route["tool"] == "origin_apply_image_panel_style":
+        return client.apply_image_panel_style(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            **_image_panel_style_kwargs(value),
+        )
+    raise ValueError(f"Unsupported plot style route: {route['tool']}.")
+
+
+def _image_panel_style_kwargs(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(
+            "image_panel_annotations value must be an object with keys such as "
+            "panel_label, channel_label, scale_bar_label, dynamic_range_label, "
+            "dark_panel, or font_size."
+        )
+    unknown = sorted(str(key) for key in value if str(key) not in _IMAGE_PANEL_STYLE_PROPERTIES)
+    if unknown:
+        supported = ", ".join(sorted(_IMAGE_PANEL_STYLE_PROPERTIES))
+        raise ValueError(
+            f"Unsupported image panel annotation keys: {unknown}. Supported: {supported}."
+        )
+    if not value:
+        raise ValueError("image_panel_annotations value must include at least one setting.")
+    return {str(key): item for key, item in value.items()}
+
+
+def _plot_style_setter_coverage(
+    chart_type: str | None = None,
+    plot_type_id: int | None = None,
+) -> dict[str, Any]:
+    if chart_type is None and plot_type_id is None:
+        capabilities = [item.as_dict() for item in all_plot_style_capabilities()]
+        loaded_sources: list[str] | None = None
+        normalized_chart = None
+        plot_type = None
+    else:
+        result = plot_style_capabilities(chart_type=chart_type, plot_type_id=plot_type_id)
+        capabilities = result["capabilities"]
+        loaded_sources = result["loaded_sources"]
+        normalized_chart = result["chart_type"]
+        plot_type = result["plot_type"]
+
+    implemented = [
+        item
+        for item in capabilities
+        if item["status"] == "implemented" and item.get("setter")
+    ]
+    executable = [
+        {**item, "route": _plot_style_dispatch_route(item)}
+        for item in implemented
+        if _plot_style_dispatch_route(item) is not None
+    ]
+    unhandled = [
+        item
+        for item in implemented
+        if _plot_style_dispatch_route(item) is None
+    ]
+    planned = [item for item in capabilities if item["status"] == "planned"]
+    return {
+        "chart_type": normalized_chart,
+        "plot_type": plot_type,
+        "loaded_sources": loaded_sources,
+        "total_capabilities": len(capabilities),
+        "implemented_count": len(implemented),
+        "executable_count": len(executable),
+        "planned_count": len(planned),
+        "unhandled_implemented_count": len(unhandled),
+        "executable": executable,
+        "unhandled_implemented": unhandled,
+        "planned": planned,
+    }
 
 
 @_mcp_tool()
