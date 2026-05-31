@@ -1,5 +1,7 @@
 # origin-mcp
 
+![origin-mcp cover](docs/assets/github-readme-cover.png)
+
 [简体中文](README.zh.md)
 
 `origin-mcp` is a local Model Context Protocol (MCP) server that lets AI
