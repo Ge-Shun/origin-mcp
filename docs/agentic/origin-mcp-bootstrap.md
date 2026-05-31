@@ -72,21 +72,19 @@ usually avoids a "change directory, lose Origin tools" failure mode.
 From the `origin-mcp` checkout:
 
 ```powershell
+python -m pip install -e .
+```
+
+If installation fails with an old `pip`, editable install, or build backend
+error, upgrade `pip` and retry:
+
+```powershell
 python -m pip install -U pip
 python -m pip install -e .
 ```
 
-If the user's normal Python environment already supports Origin automation and
-they want direct automation outside the bridge, install the optional Origin
-dependencies:
-
-```powershell
-python -m pip install -e ".[origin]"
-```
-
-For the default bridge workflow, the MCP server process does not need to import
-`originpro`; Origin automation runs inside the Origin GUI process after
-`addon.py` starts the bridge.
+The MCP server process does not need to import `originpro`; Origin automation
+runs inside the Origin GUI process after `addon.py` starts the bridge.
 
 Verify the server import:
 
