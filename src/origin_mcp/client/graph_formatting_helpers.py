@@ -91,14 +91,15 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         self,
         requested_graph_name: str,
         existing_graphs: set[str],
+        prefer_created: bool = False,
     ) -> str:
-        graph = self._find_graph_optional(requested_graph_name)
-        if graph is not None:
-            return self._object_name(graph, default=requested_graph_name)
-
         created = self._graph_page_names() - existing_graphs
         if len(created) == 1:
             return next(iter(created))
+
+        graph = self._find_graph_optional(requested_graph_name)
+        if graph is not None:
+            return self._object_name(graph, default=requested_graph_name)
         return requested_graph_name
 
     def _find_graph_optional(self, graph_name: str) -> Any | None:

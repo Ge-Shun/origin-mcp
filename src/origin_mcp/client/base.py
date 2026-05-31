@@ -38,8 +38,17 @@ from ..refs import WorksheetRef as WorksheetRef
 from ..runtime import python_runtime_profile
 from ..text_format import normalize_label_text, origin_rich_text
 
-TABLE_PLOTXYZ_IDS = {103, 183, 184, 185, 240, 242, 243, 245}
-TABLE_WORKSHEET_PLOT_IDS = {183, 184, 206}
+TABLE_PLOTXYZ_IDS = {103, 185, 240, 242, 243, 245}
+TABLE_WORKSHEET_PLOT_IDS = {
+    183,
+    184,
+    206,
+    214,
+    215,
+    216,
+    225,
+    249,
+}
 MATRIX_PLOTM_IDS = {101, 103, 105, 220, 226, 242}
 ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth"}
 

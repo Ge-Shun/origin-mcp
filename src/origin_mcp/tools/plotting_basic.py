@@ -4,7 +4,7 @@ from typing import Any
 
 from origin_mcp.models import PlotKind
 
-from ._shared import _mcp_tool
+from ._shared import _mcp_tool, client
 from .plotting_shared import _plot_csv, _plot_table_id
 
 
@@ -355,29 +355,41 @@ def origin_plot_histogram(
 ) -> dict[str, Any]:
     """Import table data and create a histogram graph."""
 
-    return _plot_csv(
-        kind=PlotKind.histogram,
-        path=path,
-        x_col=x_col,
-        y_cols=y_cols,
-        book_name=book_name,
-        sheet_name=sheet_name,
-        excel_sheet=excel_sheet,
-        delimiter=delimiter,
-        encoding=encoding,
-        header=header,
-        skiprows=skiprows,
-        nrows=nrows,
-        na_values=na_values,
-        graph_name=graph_name,
-        template=template,
-        title=title,
-        x_label=x_label,
-        y_label=y_label,
-        show_legend=show_legend,
-        style_mode=style_mode,
-        export_path=export_path,
-    )
+    def run() -> dict[str, Any]:
+        result = _plot_table_id(
+            path=path,
+            plot_type_id=219,
+            template=template or "hist",
+            selected_cols=y_cols or ([x_col] if x_col is not None else None),
+            book_name=book_name,
+            sheet_name=sheet_name,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+            graph_name=graph_name,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            style_mode=style_mode,
+            export_path=export_path,
+        )
+        _apply_plot_id_legend_visibility(result, show_legend)
+        return result
+
+    return run()
+
+
+def _apply_plot_id_legend_visibility(result: dict[str, Any], show_legend: bool) -> None:
+    if not result.get("ok"):
+        return
+    graph_data = result.get("data", {}).get("graph", {})
+    graph_name = graph_data.get("graph_name")
+    if graph_name:
+        client.format_graph(graph_name=graph_name, show_legend=show_legend, rescale=False)
 
 
 @_mcp_tool()
@@ -405,11 +417,11 @@ def origin_plot_box(
 ) -> dict[str, Any]:
     """Import table data and create a box plot."""
 
-    return _plot_csv(
-        kind=PlotKind.box,
+    result = _plot_table_id(
         path=path,
-        x_col=x_col,
-        y_cols=y_cols,
+        plot_type_id=206,
+        template=template or "box",
+        selected_cols=y_cols or ([x_col] if x_col is not None else None),
         book_name=book_name,
         sheet_name=sheet_name,
         excel_sheet=excel_sheet,
@@ -420,14 +432,14 @@ def origin_plot_box(
         nrows=nrows,
         na_values=na_values,
         graph_name=graph_name,
-        template=template,
         title=title,
         x_label=x_label,
         y_label=y_label,
-        show_legend=show_legend,
         style_mode=style_mode,
         export_path=export_path,
     )
+    _apply_plot_id_legend_visibility(result, show_legend)
+    return result
 
 
 @_mcp_tool()

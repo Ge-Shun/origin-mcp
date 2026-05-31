@@ -1975,10 +1975,99 @@ def test_plot_table_by_id_uses_worksheet_command_for_box_plot(
     assert not any("plotxy" in script and "plot:=206" in script for script in scripts)
 
 
+@pytest.mark.parametrize(
+    ("plot_type_id", "template"),
+    [
+        (214, "stackarea"),
+        (215, "bar"),
+        (216, "bar"),
+        (225, "pie"),
+        (249, "fillarea"),
+    ],
+)
+def test_plot_table_by_id_uses_worksheet_command_for_selection_plot_types(
+    plot_type_id: int,
+    template: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=plot_type_id,
+        template=template,
+        selected_cols=["x", "y", "z"],
+        graph_name="SelectionPlot",
+    )
+
+    assert command["command"] == "worksheet"
+    assert command["range_option"] == "selection"
+    assert f"worksheet -s 1 0 3 0; worksheet -p {plot_type_id} {template};" in scripts
+    assert not any(f"plot:={plot_type_id}" in script for script in scripts)
+
+
+def test_plot_table_by_id_worksheet_command_prefers_new_graph_over_existing_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    existing = GPage(FakeLayer())
+    existing.name = "BoxPlot"
+    created = GPage(FakeLayer())
+    created.name = "Graph9"
+    scripts = []
+
+    class FakeOrigin:
+        def find_graph(self, name: str) -> GPage | None:
+            return existing if name == "BoxPlot" else None
+
+        def pages(self) -> list[GPage]:
+            if any("worksheet -p 206 box;" in script for script in scripts):
+                return [existing, created]
+            return [existing]
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, graph_ref, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=206,
+        template="box",
+        selected_cols=["x", "y"],
+        graph_name="BoxPlot",
+    )
+
+    assert graph_ref.graph_name == "Graph9"
+    assert graph_ref.requested_graph_name == "BoxPlot"
+    assert command["warning"] == (
+        "Origin did not create or expose the requested graph 'BoxPlot'; "
+        "using actual graph 'Graph9'."
+    )
+
+
 def test_all_documented_table_plot_ids_use_expected_labtalk_routes() -> None:
     matrix_only_ids = {item["id"] for item in PLOT_TYPE_CATALOG if item["input"] == "Matrix Object"}
     expected_plotxyz_ids = {103, 185, 240, 242, 243, 245}
-    expected_worksheet_ids = {183, 184, 206}
+    expected_worksheet_ids = {183, 184, 206, 214, 215, 216, 225, 249}
 
     for item in PLOT_TYPE_CATALOG:
         plot_type_id = item["id"]
@@ -2133,6 +2222,10 @@ def test_plot_table_by_id_records_alias_when_origin_uses_different_short_name(
     assert graph_ref.graph_name == "Graph7"
     assert graph_ref.requested_graph_name == "RequestedHeatmap"
     assert graph_ref.display_name == "Generated Graph"
+    assert _command["warning"] == (
+        "Origin did not create or expose the requested graph 'RequestedHeatmap'; "
+        "using actual graph 'Graph7'."
+    )
 
     formatted = client.format_legend("RequestedHeatmap", position="inside_upper_left")
 

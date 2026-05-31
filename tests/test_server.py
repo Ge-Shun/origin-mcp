@@ -422,6 +422,49 @@ def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(
     assert calls[0]["graph_name"] == "Heat"
 
 
+def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "distribution.csv"
+    path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
+    calls = []
+    legend_calls = []
+
+    def fake_plot_table_id(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "message": "ok",
+            "data": {"graph": {"graph_name": kwargs["graph_name"]}},
+        }
+
+    monkeypatch.setattr(plotting_basic_tools, "_plot_table_id", fake_plot_table_id)
+    monkeypatch.setattr(
+        plotting_basic_tools.client,
+        "format_graph",
+        lambda **kwargs: legend_calls.append(kwargs) or {"formatted": True},
+    )
+
+    histogram = server.origin_plot_histogram(
+        str(path),
+        x_col="y",
+        graph_name="Hist",
+        show_legend=False,
+    )
+    box = server.origin_plot_box(str(path), y_cols=["y", "z"], graph_name="Box")
+
+    assert histogram["ok"] is True
+    assert box["ok"] is True
+    assert [(call["plot_type_id"], call["template"]) for call in calls] == [
+        (219, "hist"),
+        (206, "box"),
+    ]
+    assert calls[0]["selected_cols"] == ["y"]
+    assert calls[1]["selected_cols"] == ["y", "z"]
+    assert legend_calls == [
+        {"graph_name": "Hist", "show_legend": False, "rescale": False},
+        {"graph_name": "Box", "show_legend": True, "rescale": False},
+    ]
+
+
 def test_xyz_3d_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:
     path = tmp_path / "xyz.csv"
     path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")

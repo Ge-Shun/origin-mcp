@@ -215,7 +215,7 @@ class _TablePlotMixin(_OriginClientBase):
         wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
         wks.from_df(df)
         command, range_option = self._table_plot_command_options(plot_type_id)
-        if command in {"plotxyz", "worksheet"}:
+        if command == "plotxyz" or plot_type_id in {183, 184}:
             self._set_plotxyz_designations(wks, columns, selected, plot_type_id)
         data_range = self._worksheet_range_expr(wks, columns, selected)
         graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
@@ -248,6 +248,11 @@ class _TablePlotMixin(_OriginClientBase):
         graph_name_actual = self._created_graph_name(
             requested_graph_name=graph_name_actual,
             existing_graphs=existing_graphs,
+            prefer_created=command == "worksheet",
+        )
+        output_warning = self._plot_command_output_warning(
+            requested_graph_name=graph_name or graph_name_actual,
+            actual_graph_name=graph_name_actual,
         )
         self._remember_graph_alias(graph_name, graph_name_actual)
         if title or x_label or y_label:
@@ -296,6 +301,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "selected_columns": selected,
                 "command": command,
                 "range_option": range_option,
+                "warning": output_warning,
             },
         )
 
@@ -345,6 +351,20 @@ class _TablePlotMixin(_OriginClientBase):
         if plot_type_id in TABLE_PLOTXYZ_IDS:
             return "plotxyz", "iz"
         return "plotxy", "iy"
+
+    @staticmethod
+    def _plot_command_output_warning(
+        requested_graph_name: str | None,
+        actual_graph_name: str | None,
+    ) -> str | None:
+        if not requested_graph_name or not actual_graph_name:
+            return None
+        if requested_graph_name == actual_graph_name:
+            return None
+        return (
+            f"Origin did not create or expose the requested graph {requested_graph_name!r}; "
+            f"using actual graph {actual_graph_name!r}."
+        )
 
     def _assert_plot_type_command(
         self,
