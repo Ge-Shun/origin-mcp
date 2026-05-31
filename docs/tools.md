@@ -104,12 +104,18 @@ Minimal JSON shape:
 ```
 
 For Nature-style graph formatting, `origin_palette_catalog()` lists the built-in
-palette registry, including semantic roles, source links, and license notes.
+palette registry, including semantic roles, source links, color counts, and
+license notes. By default the catalog returns a lightweight summary and omits
+full HEX color arrays; pass `include_colors=true` when exact colors are needed.
 `origin_apply_nature_style`, `origin_diagnose_graph`, `origin_plot_auto`,
 `origin_plot_chart_atlas`, and FigureSpec `style.palette_name` can select a
-palette such as `nature`, `nmi_pastel`, `nature_imaging`,
-`nature_material`, `nature_clinical`, or `nature_genomics`. The default remains
-`nature`, now backed by the Nature Skills semantic palette. Set
+palette such as `nature`, `lcpmgh_auto`, or a local `lcpmgh_006_001` style
+palette. The default remains `nature`, now backed by the local lcpmgh/colors
+Nature-style editorial palette. Use
+`origin_palette_catalog(colors_count=6, family="lcpmgh/colors",
+include_colors=true)` to list 6-color lcpmgh palettes, or
+`origin_palette_catalog(min_colors=2, max_colors=16, family="lcpmgh/colors")`
+to browse the local 2-16 color snapshot without returning every HEX value. Set
 `ORIGIN_MCP_NATURE_PALETTE` or `ORIGIN_MCP_PALETTE` to change the process-wide
 default.
 

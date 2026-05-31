@@ -50,6 +50,13 @@ class _GraphStyleMixin(_OriginClientBase):
             self._set_origin_property(graph, "height", page_height)
 
         indexes = self._selected_layer_indexes(graph, layer_index)
+        total_plots = sum(
+            len(self._layer_plots(self._graph_layer(graph, index))) for index in indexes
+        )
+        auto_palette = None
+        if palette_name_actual == "lcpmgh_auto":
+            palette_name_actual, _palette_meta = self._select_palette_for_count(total_plots)
+            auto_palette = self._auto_palette_notice(total_plots, palette_name_actual)
         palette = self._named_palette(palette_name_actual)
         semantic_palette = self._named_semantic_palette(palette_name_actual)
         chart_style = self._nature_chart_style(chart_type, line_width, symbol_size)
@@ -144,6 +151,8 @@ class _GraphStyleMixin(_OriginClientBase):
             "script": script,
             **result,
         }
+        if auto_palette is not None:
+            response["auto_palette"] = auto_palette
         if run_diagnostics:
             response["diagnostics"] = self.diagnose_graph(
                 graph_name=graph_name_actual,
@@ -151,6 +160,8 @@ class _GraphStyleMixin(_OriginClientBase):
                 palette_role=palette_role,
                 palette_name=palette_name_actual,
             )
+            if auto_palette is not None:
+                response["diagnostics"]["auto_palette"] = auto_palette
         return response
 
     def _nature_axis_title_text(self, layer: Any, axis_name: str, safe_font: str) -> str:

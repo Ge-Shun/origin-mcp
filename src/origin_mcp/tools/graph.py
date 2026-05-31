@@ -53,10 +53,31 @@ _IMAGE_PANEL_STYLE_PROPERTIES = {
 
 
 @_mcp_tool()
-def origin_palette_catalog() -> dict[str, Any]:
+def origin_palette_catalog(
+    palette_name: str | None = None,
+    colors_count: int | None = None,
+    min_colors: int | None = None,
+    max_colors: int | None = None,
+    family: str | None = None,
+    include_colors: bool = False,
+    limit: int | None = 50,
+) -> dict[str, Any]:
     """List built-in palette names, semantic roles, and source links."""
 
-    return _wrap(lambda: _ok("Listed Origin MCP palettes.", palettes=palette_catalog()))
+    return _wrap(
+        lambda: _ok(
+            "Listed Origin MCP palettes.",
+            palettes=palette_catalog(
+                palette_name=palette_name,
+                colors_count=colors_count,
+                min_colors=min_colors,
+                max_colors=max_colors,
+                family=family,
+                include_colors=include_colors,
+                limit=limit,
+            ),
+        )
+    )
 
 
 @_mcp_tool()

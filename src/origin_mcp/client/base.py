@@ -27,6 +27,8 @@ from ..chart_palette import (
     normalize_chart_type,
     normalize_palette_name,
     palette_roles,
+    select_palette_for_count,
+    auto_palette_notice,
 )
 from ..errors import OriginDependencyError, OriginOperationError
 from ..file_io import check_path_allowed, read_table, safe_filename, validate_file
@@ -96,6 +98,8 @@ class _OriginClientBase:
     _named_semantic_palette = staticmethod(named_semantic_palette)
     _named_acceptable_palette = staticmethod(named_acceptable_palette)
     _palette_roles = staticmethod(palette_roles)
+    _select_palette_for_count = staticmethod(select_palette_for_count)
+    _auto_palette_notice = staticmethod(auto_palette_notice)
     _normalize_chart_type = staticmethod(normalize_chart_type)
     _nature_chart_style = staticmethod(nature_chart_style)
     _nature_chart_type_for_plot_id = staticmethod(nature_chart_type_for_plot_id)

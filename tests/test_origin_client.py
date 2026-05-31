@@ -1251,7 +1251,7 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert plot.line_width == 3.0
     assert plot.width == 3.0
     assert plot.symbol_size == 4.5
-    assert plot.color == (15, 77, 146)
+    assert plot.color == (39, 68, 124)
     assert plot.transparency == 0
     assert "layer.x.label.font=font(Arial);" in scripts[-1]
     assert "layer.x.ticklabel.font=font(Arial);" in scripts[-1]
@@ -1325,20 +1325,49 @@ def test_apply_nature_style_uses_semantic_palette_roles(
 
     result = client.apply_nature_style("Graph1", palette_role="hero,baseline")
 
-    assert hero.color == (15, 77, 146)
-    assert baseline.color == (182, 67, 66)
+    assert hero.color == (39, 68, 124)
+    assert baseline.color == (231, 60, 54)
     assert result["applied_palette_roles"] == ["hero", "baseline"]
     assert result["diagnostics"]["checklist"][3]["name"] == "palette"
     assert result["diagnostics"]["checklist"][3]["passed"] is True
 
 
-def test_palette_catalog_exposes_nature_skill_source() -> None:
+def test_palette_catalog_exposes_lcpmgh_nature_source() -> None:
     catalog = palette_catalog()
 
-    assert catalog["nature"]["semantic_roles"]["hero"] == "#0F4D92"
-    assert catalog["nature"]["source_url"] == "https://github.com/Yuan1z0825/nature-skills"
+    assert catalog["nature"]["semantic_roles"]["hero"] == "#27447C"
+    assert catalog["nature"]["source_url"] == "https://github.com/lcpmgh/colors"
+    assert "colors" not in catalog["nature"]
     with pytest.raises(OriginOperationError):
         normalize_palette_name("nature_skill")
+
+
+@pytest.mark.parametrize("colors_count", range(2, 17))
+def test_palette_catalog_exposes_lcpmgh_counts(colors_count: int) -> None:
+    catalog = palette_catalog(
+        colors_count=colors_count,
+        family="lcpmgh/colors",
+        include_colors=True,
+        limit=None,
+    )
+
+    assert catalog
+    assert all(entry["colors_count"] == colors_count for entry in catalog.values())
+    assert all(len(entry["colors"]) == colors_count for entry in catalog.values())
+
+
+def test_palette_catalog_filters_lcpmgh_color_range() -> None:
+    catalog = palette_catalog(
+        min_colors=6,
+        max_colors=8,
+        family="lcpmgh/colors",
+        include_colors=False,
+        limit=None,
+    )
+
+    assert catalog
+    assert all(6 <= entry["colors_count"] <= 8 for entry in catalog.values())
+    assert all("colors" not in entry for entry in catalog.values())
 
 
 def test_apply_nature_style_uses_named_palette(
@@ -1358,11 +1387,58 @@ def test_apply_nature_style_uses_named_palette(
         palette_name="nature",
     )
 
-    assert hero.color == (15, 77, 146)
-    assert baseline.color == (182, 67, 66)
+    assert hero.color == (39, 68, 124)
+    assert baseline.color == (231, 60, 54)
     assert result["palette_name"] == "nature"
     assert result["diagnostics"]["palette_name"] == "nature"
     assert result["diagnostics"]["checklist"][3]["passed"] is True
+
+
+def test_apply_nature_style_rejects_removed_legacy_palette(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    hero = FakePlot()
+    baseline = FakePlot()
+    graph = FakeGraph(FakeLayer([hero, baseline]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    with pytest.raises(OriginOperationError):
+        client.apply_nature_style(
+            "Graph1",
+            palette_role="hero,baseline",
+            palette_name="nature_skills_legacy",
+        )
+
+
+@pytest.mark.parametrize(
+    ("plot_count", "expected_count", "warns"),
+    [(1, 2, False), (2, 2, False), (6, 6, False), (16, 16, False), (17, 16, True)],
+)
+def test_apply_nature_style_auto_selects_lcpmgh_palette(
+    monkeypatch: pytest.MonkeyPatch,
+    plot_count: int,
+    expected_count: int,
+    warns: bool,
+) -> None:
+    client = OriginClient()
+    plots = [FakePlot() for _ in range(plot_count)]
+    graph = FakeGraph(FakeLayer(plots))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", palette_name="lcpmgh_auto")
+
+    assert result["palette_name"].startswith(f"lcpmgh_{expected_count:03d}_")
+    assert result["auto_palette"]["colors_count"] == expected_count
+    if warns:
+        assert result["auto_palette"]["warning"] is not None
+    else:
+        assert result["auto_palette"]["warning"] is None
+    assert len(result["palette"]) == expected_count
 
 
 def test_diagnose_graph_reports_missing_axis_title(
@@ -1387,7 +1463,7 @@ def test_diagnose_graph_reports_semantic_palette_mismatch(
 ) -> None:
     client = OriginClient()
     plot = FakePlot()
-    plot.color = (182, 67, 66)
+    plot.color = (39, 68, 124)
     plot.transparency = 0
     layer = FakeLayer([plot])
     layer.axis("x").title = "Time"

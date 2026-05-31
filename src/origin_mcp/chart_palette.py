@@ -14,6 +14,13 @@ import os
 from typing import Any
 
 from .errors import OriginOperationError
+from .lcpmgh_palettes import (
+    LCMPGH_DEFAULT_NATURE_COLORS,
+    LCMPGH_LICENSE,
+    LCMPGH_SOURCE_URL,
+    LCMPGH_WEB_URL,
+    lcpmgh_palette_records,
+)
 
 Rgb = tuple[int, int, int]
 
@@ -30,139 +37,76 @@ def _rgb(hex_color: str) -> Rgb:
 
 _PALETTES: dict[str, dict[str, Any]] = {
     "nature": {
-        "display_name": "Nature Skills Semantic",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
+        "display_name": "lcpmgh Nature Editorial",
+        "source_url": LCMPGH_SOURCE_URL,
+        "web_url": LCMPGH_WEB_URL,
+        "license": LCMPGH_LICENSE,
+        "family": "lcpmgh/colors",
         "best_for": (
-            "Nature-style method comparisons with hero, baseline, positive, "
-            "and neutral roles."
+            "Nature-style editorial scientific figures with balanced blue, red, "
+            "ochre, and teal contrast."
         ),
-        "palette": [
-            "#0F4D92",
-            "#8BCF8B",
-            "#B64342",
-            "#42949E",
-            "#9A4D8E",
-            "#CFCECE",
-        ],
+        "palette": list(LCMPGH_DEFAULT_NATURE_COLORS),
         "semantic": {
-            "hero": "#0F4D92",
-            "baseline": "#B64342",
-            "positive": "#8BCF8B",
-            "negative": "#B64342",
-            "neutral": "#767676",
-            "accent": "#42949E",
-            "secondary": "#3775BA",
-            "warning": "#FFD700",
-            "background": "#CFCECE",
-        },
-    },
-    "nmi_pastel": {
-        "display_name": "Nature Machine Intelligence Pastel",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
-        "best_for": "Dense method-family pages where related methods should stay visually unified.",
-        "palette": [
-            "#484878",
-            "#7884B4",
-            "#B4C0E4",
-            "#E4E4F0",
-            "#E4CCD8",
-            "#F0C0CC",
-        ],
-        "semantic": {
-            "hero": "#E4CCD8",
-            "baseline": "#484878",
-            "positive": "#2E9E44",
-            "negative": "#E53935",
-            "neutral": "#A8A8A8",
-            "accent": "#7884B4",
-            "secondary": "#F0C0CC",
-            "warning": "#E53935",
-            "background": "#E0E0F0",
-        },
-    },
-    "nature_imaging": {
-        "display_name": "Nature Skills Imaging",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
-        "best_for": "Dark microscopy/image plates with grayscale context and fluorescent channels.",
-        "palette": ["#22D7E6", "#FF2AD4", "#FFFFFF", "#B8B8B8", "#000000"],
-        "semantic": {
-            "hero": "#22D7E6",
-            "baseline": "#B8B8B8",
-            "positive": "#22D7E6",
-            "negative": "#FF2AD4",
-            "neutral": "#B8B8B8",
-            "accent": "#FF2AD4",
-            "secondary": "#FFFFFF",
-            "warning": "#FF2AD4",
-            "background": "#000000",
-        },
-    },
-    "nature_material": {
-        "display_name": "Nature Skills Material",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
-        "best_for": "Materials and schematic-led scientific figure pages.",
-        "palette": ["#77D7D1", "#33B5A5", "#B9A7E8", "#7C6CCF", "#E53935", "#D9D9D9"],
-        "semantic": {
-            "hero": "#33B5A5",
-            "baseline": "#D9D9D9",
-            "positive": "#77D7D1",
-            "negative": "#E53935",
-            "neutral": "#D9D9D9",
-            "accent": "#7C6CCF",
-            "secondary": "#B9A7E8",
-            "warning": "#E53935",
-        },
-    },
-    "nature_clinical": {
-        "display_name": "Nature Skills Clinical",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
-        "best_for": "Clinical composites and longitudinal follow-up plots.",
-        "palette": ["#272727", "#E28E2C", "#D24B40", "#5B8FD6", "#7BAA5B", "#C45AD6"],
-        "semantic": {
-            "hero": "#5B8FD6",
-            "baseline": "#272727",
-            "positive": "#7BAA5B",
-            "negative": "#D24B40",
-            "neutral": "#F2E6D9",
-            "accent": "#C45AD6",
-            "secondary": "#E28E2C",
-            "warning": "#D24B40",
-        },
-    },
-    "nature_genomics": {
-        "display_name": "Nature Skills Genomics",
-        "source_url": "https://github.com/Yuan1z0825/nature-skills",
-        "license": "MIT",
-        "best_for": "Genomics, single-cell, and systems biology figures.",
-        "palette": ["#D8D8D8", "#8F8F8F", "#D9544D", "#5B7FCA", "#B89BD9", "#4D4D4D"],
-        "semantic": {
-            "hero": "#5B7FCA",
-            "baseline": "#8F8F8F",
-            "positive": "#D9544D",
-            "negative": "#5B7FCA",
-            "neutral": "#D8D8D8",
-            "accent": "#B89BD9",
-            "secondary": "#4D4D4D",
-            "warning": "#D9544D",
+            "hero": "#27447C",
+            "secondary": "#4871B3",
+            "baseline": "#E73C36",
+            "negative": "#991F22",
+            "accent": "#B88640",
+            "warning": "#B88640",
+            "positive": "#168676",
+            "neutral": "#6B6B6B",
+            "background": "#F4F3EE",
         },
     },
 }
 
+
+def _semantic_from_palette(colors: list[str]) -> dict[str, str]:
+    if not colors:
+        return {}
+    return {
+        "hero": colors[0],
+        "secondary": colors[1] if len(colors) > 1 else colors[0],
+        "baseline": colors[1] if len(colors) > 1 else colors[0],
+        "positive": colors[2] if len(colors) > 2 else colors[0],
+        "negative": colors[3] if len(colors) > 3 else colors[-1],
+        "accent": colors[4] if len(colors) > 4 else colors[-1],
+        "warning": colors[4] if len(colors) > 4 else colors[-1],
+        "neutral": "#6B6B6B",
+        "background": "#F4F3EE",
+    }
+
+
+for _record in lcpmgh_palette_records():
+    _name = _record["name"]
+    if _name in _PALETTES:
+        continue
+    _colors = list(_record["colors"])
+    _ordinal = _name.rsplit("_", 1)[-1]
+    _PALETTES[_name] = {
+        "display_name": f"lcpmgh/colors {int(_record['colors_count'])}-color #{_ordinal}",
+        "source_url": _record["source_url"],
+        "web_url": _record["web_url"],
+        "license": _record["license"],
+        "family": _record["family"],
+        "source_index": _record["source_index"],
+        "derived_from": _record.get("derived_from"),
+        "colors_count": _record["colors_count"],
+        "best_for": f"lcpmgh/colors local snapshot palette with {_record['colors_count']} colors.",
+        "palette": _colors,
+        "semantic": _semantic_from_palette(_colors),
+    }
+
 _PALETTE_ALIASES = {
     "default": "nature",
     "origin_mcp": "nature",
-    "nmi": "nmi_pastel",
-    "nmi-pastel": "nmi_pastel",
-    "imaging": "nature_imaging",
-    "material": "nature_material",
-    "clinical": "nature_clinical",
-    "genomics": "nature_genomics",
+    "lcpmgh": "nature",
+    "lcpmgh_nature": "nature",
+    "nature_lcpmgh": "nature",
 }
+
+_AUTO_PALETTE_NAMES = {"lcpmgh_auto"}
 
 
 def normalize_palette_name(palette_name: str | None = None) -> str:
@@ -172,8 +116,10 @@ def normalize_palette_name(palette_name: str | None = None) -> str:
         or os.environ.get("ORIGIN_MCP_PALETTE")
         or "nature"
     )
-    normalized = str(value).strip().lower().replace(" ", "_")
+    normalized = str(value).strip().lower().replace(" ", "_").replace("-", "_")
     normalized = _PALETTE_ALIASES.get(normalized, normalized)
+    if normalized in _AUTO_PALETTE_NAMES:
+        return normalized
     if normalized not in _PALETTES:
         supported = ", ".join(sorted(_PALETTES))
         raise OriginOperationError(
@@ -182,33 +128,117 @@ def normalize_palette_name(palette_name: str | None = None) -> str:
     return normalized
 
 
-def palette_catalog() -> dict[str, dict[str, Any]]:
+def _palette_colors_count(palette: dict[str, Any]) -> int:
+    return int(palette.get("colors_count") or len(palette["palette"]))
+
+
+def _catalog_entry(name: str, palette: dict[str, Any], *, include_colors: bool) -> dict[str, Any]:
+    entry = {
+        "name": name,
+        "display_name": palette["display_name"],
+        "source_url": palette.get("source_url"),
+        "web_url": palette.get("web_url"),
+        "license": palette.get("license"),
+        "family": palette.get("family"),
+        "source_index": palette.get("source_index"),
+        "derived_from": palette.get("derived_from"),
+        "best_for": palette.get("best_for"),
+        "colors_count": _palette_colors_count(palette),
+        "semantic_roles": dict(palette["semantic"]),
+    }
+    if include_colors:
+        entry["colors"] = list(palette["palette"])
+    return entry
+
+
+def palette_catalog(
+    palette_name: str | None = None,
+    colors_count: int | None = None,
+    min_colors: int | None = None,
+    max_colors: int | None = None,
+    family: str | None = None,
+    include_colors: bool = False,
+    limit: int | None = 50,
+) -> dict[str, dict[str, Any]]:
     catalog = {}
+    family_normalized = family.strip().lower() if family else None
+    selected_name = normalize_palette_name(palette_name) if palette_name else None
+    if selected_name in _AUTO_PALETTE_NAMES:
+        selected_name = None
     for name, palette in _PALETTES.items():
-        catalog[name] = {
-            "name": name,
-            "display_name": palette["display_name"],
-            "source_url": palette.get("source_url"),
-            "license": palette.get("license"),
-            "best_for": palette.get("best_for"),
-            "colors": list(palette["palette"]),
-            "semantic_roles": dict(palette["semantic"]),
-        }
+        count = _palette_colors_count(palette)
+        palette_family = str(palette.get("family") or "").lower()
+        if selected_name and name != selected_name:
+            continue
+        if colors_count is not None and count != colors_count:
+            continue
+        if min_colors is not None and count < min_colors:
+            continue
+        if max_colors is not None and count > max_colors:
+            continue
+        if family_normalized and palette_family != family_normalized:
+            continue
+        catalog[name] = _catalog_entry(name, palette, include_colors=include_colors)
+        if limit is not None and limit > 0 and len(catalog) >= limit:
+            break
     return catalog
 
 
 def named_palette(palette_name: str | None = None) -> list[Rgb]:
-    palette = _PALETTES[normalize_palette_name(palette_name)]
+    normalized = normalize_palette_name(palette_name)
+    if normalized in _AUTO_PALETTE_NAMES:
+        normalized = "nature"
+    palette = _PALETTES[normalized]
     return [_rgb(color) for color in palette["palette"]]
 
 
 def named_semantic_palette(palette_name: str | None = None) -> dict[str, Rgb]:
-    palette = _PALETTES[normalize_palette_name(palette_name)]
+    normalized = normalize_palette_name(palette_name)
+    if normalized in _AUTO_PALETTE_NAMES:
+        normalized = "nature"
+    palette = _PALETTES[normalized]
     return {role: _rgb(color) for role, color in palette["semantic"].items()}
 
 
 def named_acceptable_palette(palette_name: str | None = None) -> set[Rgb]:
     return set(named_palette(palette_name)) | set(named_semantic_palette(palette_name).values())
+
+
+def select_palette_for_count(plot_count: int) -> tuple[str, dict[str, Any]]:
+    if plot_count <= 1:
+        target = 2
+    elif plot_count > 16:
+        target = 16
+    else:
+        target = plot_count
+    matches = [
+        (name, palette)
+        for name, palette in _PALETTES.items()
+        if name.startswith("lcpmgh_")
+        and palette.get("family") == "lcpmgh/colors"
+        and _palette_colors_count(palette) == target
+    ]
+    if not matches:
+        raise OriginOperationError(
+            f"No lcpmgh/colors palette is available for {target} colors."
+        )
+    matches.sort(key=lambda item: int(item[1].get("source_index") or 0))
+    return matches[0]
+
+
+def auto_palette_notice(plot_count: int, palette_name: str) -> dict[str, Any]:
+    return {
+        "requested_palette_name": "lcpmgh_auto",
+        "resolved_palette_name": palette_name,
+        "plot_count": plot_count,
+        "colors_count": 2 if plot_count <= 1 else min(plot_count, 16),
+        "warning": (
+            "Plot count exceeds the recommended lcpmgh/colors range of 16; "
+            "the selected 16-color palette is reused cyclically."
+            if plot_count > 16
+            else None
+        ),
+    }
 
 
 def nature_palette() -> list[Rgb]:

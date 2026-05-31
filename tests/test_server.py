@@ -77,6 +77,21 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
     assert int(output.strip()) == 154
 
 
+def test_palette_catalog_tool_filters_by_color_count() -> None:
+    result = server.origin_palette_catalog(
+        colors_count=6,
+        family="lcpmgh/colors",
+        include_colors=True,
+        limit=3,
+    )
+
+    assert result["ok"] is True
+    palettes = result["data"]["palettes"]
+    assert len(palettes) == 3
+    assert all(entry["colors_count"] == 6 for entry in palettes.values())
+    assert all(len(entry["colors"]) == 6 for entry in palettes.values())
+
+
 def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
     result = server.origin_plot_style_capabilities(chart_type="柱状图", query="柱宽")
 
@@ -123,7 +138,7 @@ def test_set_plot_property_routes_palette_name_to_nature_style(monkeypatch) -> N
 
     result = server.origin_set_plot_property(
         property_name="配色",
-        value="nature_material",
+        value="lcpmgh_006_001",
         graph_name="Graph1",
         layer_index=0,
     )
@@ -142,7 +157,7 @@ def test_set_plot_property_routes_palette_name_to_nature_style(monkeypatch) -> N
                 "graph_name": "Graph1",
                 "layer_index": 0,
                 "chart_type": None,
-                "palette_name": "nature_material",
+                "palette_name": "lcpmgh_006_001",
             },
         )
     ]

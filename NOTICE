@@ -1,7 +1,7 @@
 origin-mcp third-party notices
 
-The built-in Nature palette is adapted from Yuan1z0825/nature-skills:
-https://github.com/Yuan1z0825/nature-skills
+The built-in Nature palette and local lcpmgh/colors snapshot are adapted from:
+https://github.com/lcpmgh/colors
+https://lcpmgh.com/colors/
 
-Copyright (c) 2026 Yuan Yizhe
 Licensed under the MIT License.
