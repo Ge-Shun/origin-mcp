@@ -14,6 +14,7 @@ from ..analysis_outputs import (
     structure_fit_result,
 )
 from ..chart_palette import (
+    auto_palette_notice,
     chart_atlas_routes,
     named_acceptable_palette,
     named_palette,
@@ -28,7 +29,6 @@ from ..chart_palette import (
     normalize_palette_name,
     palette_roles,
     select_palette_for_count,
-    auto_palette_notice,
 )
 from ..errors import OriginDependencyError, OriginOperationError
 from ..file_io import check_path_allowed, read_table, safe_filename, validate_file

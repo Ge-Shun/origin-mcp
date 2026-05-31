@@ -58,3 +58,17 @@ extend-exclude = [".venv*", "output"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".git",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".venv*",
+  "__pycache__",
+  "build",
+  "dist",
+  "output",
+  "pytest-tmp",
+  "pytest-tmp-*",
+]

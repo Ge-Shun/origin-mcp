@@ -43,6 +43,29 @@ def origin_run_analysis(
     return _wrap(run)
 
 
+def _run_named_analysis(
+    analysis: str,
+    *,
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_col: str | int | None = None,
+    output_sheet: str | None = None,
+    options: dict[str, Any] | None = None,
+    include_output: bool = False,
+    output_max_rows: int = 100,
+) -> dict[str, Any]:
+    return origin_run_analysis(
+        analysis=analysis,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
+    )
+
+
 @_mcp_tool()
 def origin_linear_fit(
     worksheet: str | None = None,
@@ -68,15 +91,15 @@ def origin_linear_fit(
                 ),
             )
         )
-    return origin_run_analysis(
+    return _run_named_analysis(
         "linear_fit",
-        worksheet,
-        x_col,
-        y_col,
-        output_sheet,
-        options,
-        include_output,
-        output_max_rows,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -92,15 +115,15 @@ def origin_polynomial_fit(
 ) -> dict[str, Any]:
     """Run Origin polynomial fitting."""
 
-    return origin_run_analysis(
+    return _run_named_analysis(
         "polynomial_fit",
-        worksheet,
-        x_col,
-        y_col,
-        output_sheet,
-        options,
-        include_output,
-        output_max_rows,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -116,8 +139,15 @@ def origin_smooth(
 ) -> dict[str, Any]:
     """Run Origin smoothing."""
 
-    return origin_run_analysis(
-        "smooth", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    return _run_named_analysis(
+        "smooth",
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -133,8 +163,15 @@ def origin_peak_find(
 ) -> dict[str, Any]:
     """Run Origin peak finding."""
 
-    return origin_run_analysis(
-        "peak_find", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    return _run_named_analysis(
+        "peak_find",
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -150,15 +187,15 @@ def origin_differentiate(
 ) -> dict[str, Any]:
     """Run Origin differentiation."""
 
-    return origin_run_analysis(
+    return _run_named_analysis(
         "differentiate",
-        worksheet,
-        x_col,
-        y_col,
-        output_sheet,
-        options,
-        include_output,
-        output_max_rows,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -174,8 +211,15 @@ def origin_integrate(
 ) -> dict[str, Any]:
     """Run Origin integration."""
 
-    return origin_run_analysis(
-        "integrate", worksheet, x_col, y_col, output_sheet, options, include_output, output_max_rows
+    return _run_named_analysis(
+        "integrate",
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -191,15 +235,15 @@ def origin_descriptive_stats(
 ) -> dict[str, Any]:
     """Run Origin descriptive statistics."""
 
-    return origin_run_analysis(
+    return _run_named_analysis(
         "descriptive_stats",
-        worksheet,
-        x_col,
-        y_col,
-        output_sheet,
-        options,
-        include_output,
-        output_max_rows,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 
@@ -215,15 +259,15 @@ def origin_nonlinear_fit(
 ) -> dict[str, Any]:
     """Run Origin nonlinear fitting."""
 
-    return origin_run_analysis(
+    return _run_named_analysis(
         "nonlinear_fit",
-        worksheet,
-        x_col,
-        y_col,
-        output_sheet,
-        options,
-        include_output,
-        output_max_rows,
+        worksheet=worksheet,
+        x_col=x_col,
+        y_col=y_col,
+        output_sheet=output_sheet,
+        options=options,
+        include_output=include_output,
+        output_max_rows=output_max_rows,
     )
 
 

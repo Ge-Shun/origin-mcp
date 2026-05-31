@@ -17,6 +17,42 @@ from ._shared import (
     client,
 )
 
+PLOT_TYPE_ID_ROUTES: dict[str, tuple[int, str]] = {
+    "area": (204, "area"),
+    "stack_area": (214, "stackarea"),
+    "fill_area": (249, "fillarea"),
+    "bar": (215, "bar"),
+    "stack_bar": (216, "bar"),
+    "floating_bar": (207, "floatbar"),
+    "column_stack": (213, "column"),
+    "pie": (225, "pie"),
+    "ternary": (245, "ternary"),
+    "ternary_contour": (185, "TernaryContour"),
+    "bubble": (193, "scatter"),
+    "bubble_color_mapped": (248, "scatter"),
+    "color_mapped": (247, "scatter"),
+    "vector_xyam": (208, "vector"),
+    "vector_xyxy": (218, "vectxyxy"),
+    "vector_3d": (183, "gl3DVector"),
+    "high_low_close": (205, "hclose"),
+    "candlestick": (221, "Candlestick"),
+    "waterfall": (210, "walls"),
+    "ribbon_3d": (211, "ribbon"),
+    "bars_3d": (212, "bar3d"),
+    "errorbar_3d": (184, "gl3DError"),
+    "polar_xr_ytheta": (186, "PolarXrYTheta"),
+    "smith": (191, "SmithCht"),
+    "dendrogram": (108, "Cluster"),
+}
+
+MATRIX_PLOT_TYPE_ID_ROUTES: dict[str, tuple[int, str]] = {
+    "scatter_3d": (101, "gl3DScatterMat"),
+    "surface_3d": (103, "glmesh"),
+    "heatmap": (105, "heatmap"),
+    "contour": (226, "contour"),
+    "image": (220, "image"),
+}
+
 
 @_mcp_tool()
 def origin_plot_line(
@@ -727,7 +763,7 @@ def origin_plot_area(
 ) -> dict[str, Any]:
     """Create an area plot from table data."""
 
-    return _pti(path, 204, "area", selected_cols, graph_name, title, export_path)
+    return _pti(path, "area", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -740,7 +776,7 @@ def origin_plot_stack_area(
 ) -> dict[str, Any]:
     """Create a stacked area plot from table data."""
 
-    return _pti(path, 214, "stackarea", selected_cols, graph_name, title, export_path)
+    return _pti(path, "stack_area", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -753,7 +789,7 @@ def origin_plot_fill_area(
 ) -> dict[str, Any]:
     """Create a fill area plot from table data."""
 
-    return _pti(path, 249, "fillarea", selected_cols, graph_name, title, export_path)
+    return _pti(path, "fill_area", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -766,7 +802,7 @@ def origin_plot_bar(
 ) -> dict[str, Any]:
     """Create a horizontal bar plot from table data."""
 
-    return _pti(path, 215, "bar", selected_cols, graph_name, title, export_path)
+    return _pti(path, "bar", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -779,7 +815,7 @@ def origin_plot_stack_bar(
 ) -> dict[str, Any]:
     """Create a stacked bar plot from table data."""
 
-    return _pti(path, 216, "bar", selected_cols, graph_name, title, export_path)
+    return _pti(path, "stack_bar", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -792,7 +828,7 @@ def origin_plot_floating_bar(
 ) -> dict[str, Any]:
     """Create a floating bar plot from table data."""
 
-    return _pti(path, 207, "floatbar", selected_cols, graph_name, title, export_path)
+    return _pti(path, "floating_bar", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -805,7 +841,7 @@ def origin_plot_column_stack(
 ) -> dict[str, Any]:
     """Create a column stack plot from table data."""
 
-    return _pti(path, 213, "column", selected_cols, graph_name, title, export_path)
+    return _pti(path, "column_stack", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -818,7 +854,7 @@ def origin_plot_pie(
 ) -> dict[str, Any]:
     """Create a pie chart from table data."""
 
-    return _pti(path, 225, "pie", selected_cols, graph_name, title, export_path)
+    return _pti(path, "pie", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -831,7 +867,7 @@ def origin_plot_ternary(
 ) -> dict[str, Any]:
     """Create a ternary plot from XYZ table data."""
 
-    return _pti(path, 245, "ternary", selected_cols, graph_name, title, export_path)
+    return _pti(path, "ternary", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -844,7 +880,7 @@ def origin_plot_ternary_contour(
 ) -> dict[str, Any]:
     """Create a ternary contour plot from table data."""
 
-    return _pti(path, 185, "TernaryContour", selected_cols, graph_name, title, export_path)
+    return _pti(path, "ternary_contour", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -857,7 +893,7 @@ def origin_plot_bubble(
 ) -> dict[str, Any]:
     """Create a bubble plot from table data."""
 
-    return _pti(path, 193, "scatter", selected_cols, graph_name, title, export_path)
+    return _pti(path, "bubble", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -870,7 +906,7 @@ def origin_plot_bubble_color_mapped(
 ) -> dict[str, Any]:
     """Create a bubble and color-mapped plot from table data."""
 
-    return _pti(path, 248, "scatter", selected_cols, graph_name, title, export_path)
+    return _pti(path, "bubble_color_mapped", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -883,7 +919,7 @@ def origin_plot_color_mapped(
 ) -> dict[str, Any]:
     """Create a color-mapped scatter plot from table data."""
 
-    return _pti(path, 247, "scatter", selected_cols, graph_name, title, export_path)
+    return _pti(path, "color_mapped", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -896,7 +932,7 @@ def origin_plot_vector_xyam(
 ) -> dict[str, Any]:
     """Create an XYAM vector plot from table data."""
 
-    return _pti(path, 208, "vector", selected_cols, graph_name, title, export_path)
+    return _pti(path, "vector_xyam", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -909,7 +945,7 @@ def origin_plot_vector_xyxy(
 ) -> dict[str, Any]:
     """Create an XYXY vector plot from table data."""
 
-    return _pti(path, 218, "vectxyxy", selected_cols, graph_name, title, export_path)
+    return _pti(path, "vector_xyxy", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -922,7 +958,7 @@ def origin_plot_3d_vector(
 ) -> dict[str, Any]:
     """Create a 3D vector plot from table data."""
 
-    return _pti(path, 183, "gl3DVector", selected_cols, graph_name, title, export_path)
+    return _pti(path, "vector_3d", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -935,7 +971,7 @@ def origin_plot_high_low_close(
 ) -> dict[str, Any]:
     """Create a high-low-close plot from table data."""
 
-    return _pti(path, 205, "hclose", selected_cols, graph_name, title, export_path)
+    return _pti(path, "high_low_close", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -948,7 +984,7 @@ def origin_plot_candlestick(
 ) -> dict[str, Any]:
     """Create an OHLC/candlestick chart from table data."""
 
-    return _pti(path, 221, "Candlestick", selected_cols, graph_name, title, export_path)
+    return _pti(path, "candlestick", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -961,7 +997,7 @@ def origin_plot_waterfall(
 ) -> dict[str, Any]:
     """Create a 3D waterfall/walls plot from table data."""
 
-    return _pti(path, 210, "walls", selected_cols, graph_name, title, export_path)
+    return _pti(path, "waterfall", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -974,7 +1010,7 @@ def origin_plot_3d_ribbon(
 ) -> dict[str, Any]:
     """Create a 3D ribbon plot from table data."""
 
-    return _pti(path, 211, "ribbon", selected_cols, graph_name, title, export_path)
+    return _pti(path, "ribbon_3d", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -987,7 +1023,7 @@ def origin_plot_3d_bars(
 ) -> dict[str, Any]:
     """Create a 3D bar plot from table data."""
 
-    return _pti(path, 212, "bar3d", selected_cols, graph_name, title, export_path)
+    return _pti(path, "bars_3d", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1000,7 +1036,7 @@ def origin_plot_3d_errorbar(
 ) -> dict[str, Any]:
     """Create a 3D scatter plot with error bars from table data."""
 
-    return _pti(path, 184, "gl3DError", selected_cols, graph_name, title, export_path)
+    return _pti(path, "errorbar_3d", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1013,7 +1049,7 @@ def origin_plot_polar_xr_ytheta(
 ) -> dict[str, Any]:
     """Create a polar X(R) Y(Theta) plot from table data."""
 
-    return _pti(path, 186, "PolarXrYTheta", selected_cols, graph_name, title, export_path)
+    return _pti(path, "polar_xr_ytheta", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1026,7 +1062,7 @@ def origin_plot_smith(
 ) -> dict[str, Any]:
     """Create a Smith chart from table data."""
 
-    return _pti(path, 191, "SmithCht", selected_cols, graph_name, title, export_path)
+    return _pti(path, "smith", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1039,7 +1075,7 @@ def origin_plot_dendrogram(
 ) -> dict[str, Any]:
     """Create a dendrogram plot from table data."""
 
-    return _pti(path, 108, "Cluster", selected_cols, graph_name, title, export_path)
+    return _pti(path, "dendrogram", selected_cols, graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1051,7 +1087,7 @@ def origin_plot_matrix_3d_scatter(
 ) -> dict[str, Any]:
     """Create a 3D scatter plot from an existing Origin matrix range."""
 
-    return origin_plot_matrix_id(data_range, 101, "gl3DScatterMat", graph_name, title, export_path)
+    return _plot_matrix_route(data_range, "scatter_3d", graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1063,7 +1099,7 @@ def origin_plot_matrix_3d_surface(
 ) -> dict[str, Any]:
     """Create a 3D surface plot from an existing Origin matrix range."""
 
-    return origin_plot_matrix_id(data_range, 103, "glmesh", graph_name, title, export_path)
+    return _plot_matrix_route(data_range, "surface_3d", graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1075,7 +1111,7 @@ def origin_plot_matrix_heatmap(
 ) -> dict[str, Any]:
     """Create a heatmap from an existing Origin matrix range."""
 
-    return origin_plot_matrix_id(data_range, 105, "heatmap", graph_name, title, export_path)
+    return _plot_matrix_route(data_range, "heatmap", graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1087,7 +1123,7 @@ def origin_plot_matrix_contour(
 ) -> dict[str, Any]:
     """Create a contour plot from an existing Origin matrix range."""
 
-    return origin_plot_matrix_id(data_range, 226, "contour", graph_name, title, export_path)
+    return _plot_matrix_route(data_range, "contour", graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1099,7 +1135,7 @@ def origin_plot_image(
 ) -> dict[str, Any]:
     """Create an image plot from an existing Origin matrix range."""
 
-    return origin_plot_matrix_id(data_range, 220, "image", graph_name, title, export_path)
+    return _plot_matrix_route(data_range, "image", graph_name, title, export_path)
 
 
 @_mcp_tool()
@@ -1492,14 +1528,14 @@ def _plot_table_id(
 
 def _pti(
     path: str,
-    plot_type_id: int,
-    template: str,
+    route: str,
     selected_cols: list[str | int] | None,
     graph_name: str | None,
     title: str | None,
     export_path: str | None,
     style_mode: str = "origin_default",
 ) -> dict[str, Any]:
+    plot_type_id, template = PLOT_TYPE_ID_ROUTES[route]
     return _plot_table_id(
         path=path,
         plot_type_id=plot_type_id,
@@ -1510,3 +1546,14 @@ def _pti(
         style_mode=style_mode,
         export_path=export_path,
     )
+
+
+def _plot_matrix_route(
+    data_range: str,
+    route: str,
+    graph_name: str | None,
+    title: str | None,
+    export_path: str | None,
+) -> dict[str, Any]:
+    plot_type_id, template = MATRIX_PLOT_TYPE_ID_ROUTES[route]
+    return origin_plot_matrix_id(data_range, plot_type_id, template, graph_name, title, export_path)
