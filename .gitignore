@@ -8,6 +8,11 @@ uv.lock
 .pytest-tmp/
 pytest-tmp-*/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 build/
 dist/
 output/

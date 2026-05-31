@@ -266,10 +266,7 @@ def _install_missing_runtime_packages() -> None:
     if not missing:
         return
 
-    _emit(
-        "installing runtime dependencies into Origin Python: "
-        + ", ".join(missing)
-    )
+    _emit("installing runtime dependencies into Origin Python: " + ", ".join(missing))
     status = _pip(["install", "--progress-bar", "off", *_user_install_flag(), *missing])
     if status:
         raise RuntimeError(
@@ -290,7 +287,7 @@ def _missing_dependency_message(missing: list[str]) -> str:
         + ".\nAutomatic installation is disabled by ORIGIN_MCP_INSTALL_MISSING=0. "
         "Install them into Origin's embedded Python yourself, or re-run this addon "
         "after enabling the built-in installer in Origin's Python Console:\n"
-        'import os\n'
+        "import os\n"
         'os.environ["ORIGIN_MCP_INSTALL_MISSING"] = "1"\n'
         "import runpy\n"
         f'runpy.run_path(r"{addon_path}", run_name="__main__")'
@@ -343,6 +340,15 @@ def _finalize_bridge_stopped(server: Any) -> None:
     """Close the server socket, clear module globals, and record the stop."""
 
     server.server_close()
+    handshake_path = globals().get("_origin_mcp_handshake_path")
+    if handshake_path is not None:
+        try:
+            from origin_mcp.bridge_handshake import clear_handshake
+
+            clear_handshake(path=handshake_path)
+        except Exception:
+            pass
+    globals()["_origin_mcp_handshake_path"] = None
     globals()["_origin_mcp_bridge_server"] = None
     globals()["_origin_mcp_bridge_thread"] = None
     _emit("stopped", fields={"running": False})
@@ -397,9 +403,7 @@ def start_origin_mcp_bridge(
 
     existing = globals().get("_origin_mcp_bridge_server")
     thread = globals().get("_origin_mcp_bridge_thread")
-    if existing is not None and (
-        thread is None or getattr(thread, "is_alive", lambda: False)()
-    ):
+    if existing is not None and (thread is None or getattr(thread, "is_alive", lambda: False)()):
         actual_host, actual_port = existing.server_address
         _notify(
             "Bridge is already running inside Origin.",
@@ -420,6 +424,13 @@ def start_origin_mcp_bridge(
     )
     try:
         package_source = _ensure_origin_mcp_importable(src_dir)
+        from origin_mcp.bridge_handshake import generate_token
+
+        if token is None and not _env_bool("ORIGIN_MCP_BRIDGE_NO_AUTH", False):
+            # Generate a per-session token so the bridge is not reachable by any
+            # local process by default. The MCP server reads it back from the
+            # handshake file (see origin_mcp.bridge_handshake) with no config.
+            token = generate_token()
         if install_missing:
             _install_missing_runtime_packages()
         else:
@@ -446,6 +457,19 @@ def start_origin_mcp_bridge(
     globals()["_origin_mcp_bridge_server"] = server
 
     actual_host, actual_port = server.server_address
+    auth_enabled = bool(token)
+    handshake_path: Any = None
+    if auth_enabled:
+        try:
+            from origin_mcp.bridge_handshake import write_handshake
+
+            handshake_path = write_handshake(actual_host, actual_port, token)
+        except Exception as exc:  # pragma: no cover - defensive
+            _emit(
+                "failed to write bridge handshake file",
+                fields={"handshake_error": str(exc)},
+            )
+    globals()["_origin_mcp_handshake_path"] = handshake_path
     result = {
         "running": True,
         "host": actual_host,
@@ -453,6 +477,7 @@ def start_origin_mcp_bridge(
         "package_source": package_source,
         "max_tasks": max_tasks,
         "background": background,
+        "auth_enabled": auth_enabled,
     }
     _notify(
         "Bridge is running inside Origin.",
@@ -463,9 +488,18 @@ def start_origin_mcp_bridge(
             "max_tasks": max_tasks,
             "background": background,
             "running": True,
+            "auth_enabled": auth_enabled,
+            "handshake_path": str(handshake_path) if handshake_path else None,
             "last_error": None,
         },
     )
+    if not auth_enabled:
+        _notify(
+            "WARNING: the Origin bridge is running WITHOUT authentication "
+            "(ORIGIN_MCP_BRIDGE_NO_AUTH is set). Any local process can drive "
+            "Origin, including running arbitrary LabTalk. Unset the variable to "
+            "restore the auto-generated token.",
+        )
     if background:
         thread = threading.Thread(
             target=server.serve_forever,

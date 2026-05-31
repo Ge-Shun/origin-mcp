@@ -204,9 +204,7 @@ def resolve_plot_style_capability(
         raise ValueError("property_name is empty.")
     result = plot_style_capabilities(chart_type=chart_type, plot_type_id=plot_type_id)
     matches = [
-        item
-        for item in result["capabilities"]
-        if _capability_name_matches(item, property_key)
+        item for item in result["capabilities"] if _capability_name_matches(item, property_key)
     ]
     if not matches:
         raise ValueError(f"Unsupported plot style property: {property_name}.")
@@ -270,9 +268,7 @@ def _resources_for_query(
 
 
 def _all_resources() -> tuple[str, ...]:
-    extension_resources = {
-        item for items in EXTENSIONS_BY_CHART_TYPE.values() for item in items
-    }
+    extension_resources = {item for items in EXTENSIONS_BY_CHART_TYPE.values() for item in items}
     return _dedupe((CORE_RESOURCE, *sorted(extension_resources)))
 
 
@@ -289,7 +285,7 @@ def _dedupe(resources_to_load: tuple[str, ...]) -> tuple[str, ...]:
 
 @cache
 def _load_capabilities(resources_to_load: tuple[str, ...]) -> tuple[PlotStyleCapability, ...]:
-    capabilities = []
+    capabilities: list[PlotStyleCapability] = []
     for resource_name in resources_to_load:
         capabilities.extend(_load_resource(resource_name))
     return tuple(capabilities)
@@ -331,9 +327,7 @@ def _capability_name_matches(capability: dict[str, Any], property_key: str) -> b
         *(str(alias) for alias in capability.get("aliases", [])),
     ]
     normalized = {
-        item.strip().lower().replace("-", "_").replace(" ", "_")
-        for item in names
-        if item.strip()
+        item.strip().lower().replace("-", "_").replace(" ", "_") for item in names if item.strip()
     }
     return property_key in normalized
 

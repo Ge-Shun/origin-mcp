@@ -5,7 +5,7 @@ import json
 import socketserver
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import __version__
 from ._bridge_dispatch import TASKABLE_METHODS, call_client_method, call_origin_method
@@ -20,7 +20,17 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 47631
 
 
-class _OriginBridgeServerState:
+if TYPE_CHECKING:
+    # This state class is only ever mixed into a socketserver base (see the two
+    # concrete servers below), so at type-check time give it that base to expose
+    # ``timeout``/``handle_request`` and avoid mixin-isolation false positives.
+    # At runtime it stays a plain object to keep the real MRO intact.
+    _StateBase = socketserver.BaseServer
+else:
+    _StateBase = object
+
+
+class _OriginBridgeServerState(_StateBase):
     def _init_bridge_state(
         self,
         token: str | None = None,
@@ -220,4 +230,3 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             "error_code": error_code(exc),
             "error_type": type(exc).__name__,
         }
-

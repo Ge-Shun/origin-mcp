@@ -1,0 +1,19 @@
+# Local dev hooks mirroring CI (.github/workflows/ci.yml).
+# Install once with:  pre-commit install
+# Run on all files:    pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: python -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false

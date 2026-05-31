@@ -96,6 +96,29 @@ serving console returns to its prompt and Origin stays open.
 If a package is missing or the bridge will not start, see
 [docs/origin-bridge.md](docs/origin-bridge.md).
 
+## Security
+
+The bridge listens only on `127.0.0.1`, but any local process that can reach
+that port can drive Origin — including running arbitrary LabTalk through
+`origin_run_labtalk`. To prevent that, the bridge now **authenticates by
+default**:
+
+- On startup the bridge generates a random per-session token and records it,
+  with the host/port it bound, in a handshake file under your temp directory
+  (`%TEMP%/origin-mcp/bridge.json`). The MCP server and `stop_bridge` read it
+  back automatically, so authentication is on with **no configuration**.
+- Setting `ORIGIN_MCP_BRIDGE_TOKEN` explicitly (in both processes) overrides the
+  auto-generated token and takes precedence over the handshake file.
+- `ORIGIN_MCP_BRIDGE_HANDSHAKE` overrides the handshake file location (useful
+  when the two processes do not share the same temp directory).
+- `ORIGIN_MCP_BRIDGE_NO_AUTH=1` disables authentication entirely. This is **not
+  recommended**; the bridge prints a warning when it starts in this mode.
+
+To restrict which files tools may read or write (data import, exports, project
+and template paths), set `ORIGIN_MCP_ALLOWED_ROOTS` to one or more directories
+(separated by the OS path separator). When set, any path outside those roots is
+rejected with `path_not_allowed`. It is unset (no restriction) by default.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

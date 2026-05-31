@@ -274,7 +274,8 @@ def _add_remaining_plots(
             continue
         data = _data_by_id(spec, _plot_data_ref(spec, plot))
         mapping = _plot_mapping(data, plot)
-        for y_col in _y_columns(mapping) or [None]:
+        y_options: list[Any] = list(_y_columns(mapping) or []) or [None]
+        for y_col in y_options:
             result = client.add_plot_to_graph(
                 worksheet=_worksheet_ref_expr(worksheet_refs[data.id]),
                 x_col=mapping.get("x"),

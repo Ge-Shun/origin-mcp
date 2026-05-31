@@ -59,23 +59,23 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     assert "origin_set_axis" in names
 
 
-def test_full_mcp_tool_profile_registers_all_tools() -> None:
+def test_full_mcp_tool_profile_registers_more_than_compact() -> None:
+    # The exact full-profile surface is pinned to the source in
+    # tests/test_tool_registration.py; here we only assert that `full`
+    # genuinely expands beyond the compact allow-list.
     env = {**os.environ, "ORIGIN_MCP_TOOL_PROFILE": "full"}
     output = subprocess.check_output(
         [
             sys.executable,
             "-c",
-            (
-                "import asyncio, origin_mcp.server as s; "
-                "print(len(asyncio.run(s.mcp.list_tools())))"
-            ),
+            ("import asyncio, origin_mcp.server as s; print(len(asyncio.run(s.mcp.list_tools())))"),
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
         text=True,
     )
 
-    assert int(output.strip()) == 154
+    assert int(output.strip()) > len(server.COMPACT_TOOL_NAMES)
 
 
 def test_palette_catalog_tool_filters_by_color_count() -> None:

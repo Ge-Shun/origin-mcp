@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .bridge_handshake import read_handshake
 from .errors import OriginBridgeError
 from .refs import GraphRef, WorksheetRef
 
@@ -32,15 +33,51 @@ class OriginBridgeConfig:
         token: str | None = None,
         timeout: float | None = None,
     ) -> OriginBridgeConfig:
+        """Build a config from explicit args, env vars, then the handshake file.
+
+        For each field the precedence is: explicit argument, then the matching
+        ``ORIGIN_MCP_BRIDGE_*`` environment variable, then the value the running
+        bridge published in its handshake file (see ``bridge_handshake``), then
+        the built-in default. The handshake fallback is what makes the bridge's
+        auto-generated token reach this client with no configuration.
+        """
+
+        env = os.environ
+        handshake = read_handshake() or {}
+
+        resolved_host = host or env.get("ORIGIN_MCP_BRIDGE_HOST")
+        if not resolved_host:
+            resolved_host = str(handshake.get("host") or DEFAULT_BRIDGE_HOST)
+
+        resolved_port = port
+        if resolved_port is None:
+            env_port = env.get("ORIGIN_MCP_BRIDGE_PORT")
+            if env_port:
+                resolved_port = int(env_port)
+            elif handshake.get("port"):
+                resolved_port = int(handshake["port"])
+            else:
+                resolved_port = DEFAULT_BRIDGE_PORT
+
+        if token is not None:
+            resolved_token: str | None = token
+        elif "ORIGIN_MCP_BRIDGE_TOKEN" in env:
+            resolved_token = env["ORIGIN_MCP_BRIDGE_TOKEN"] or None
+        else:
+            handshake_token = handshake.get("token")
+            resolved_token = handshake_token if isinstance(handshake_token, str) else None
+
+        resolved_timeout = (
+            timeout
+            if timeout is not None
+            else float(env.get("ORIGIN_MCP_BRIDGE_TIMEOUT", DEFAULT_BRIDGE_TIMEOUT))
+        )
+
         return cls(
-            host=host or os.environ.get("ORIGIN_MCP_BRIDGE_HOST", DEFAULT_BRIDGE_HOST),
-            port=port or int(os.environ.get("ORIGIN_MCP_BRIDGE_PORT", DEFAULT_BRIDGE_PORT)),
-            token=token if token is not None else os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN"),
-            timeout=(
-                timeout
-                if timeout is not None
-                else float(os.environ.get("ORIGIN_MCP_BRIDGE_TIMEOUT", DEFAULT_BRIDGE_TIMEOUT))
-            ),
+            host=resolved_host,
+            port=resolved_port,
+            token=resolved_token,
+            timeout=resolved_timeout,
         )
 
 

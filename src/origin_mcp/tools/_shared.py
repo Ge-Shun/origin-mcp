@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import os
 from pathlib import Path
@@ -13,6 +14,8 @@ from origin_mcp.errors import (
     OriginMcpError,
 )
 from origin_mcp.models import ToolResult
+
+_logger = logging.getLogger("origin_mcp.tools")
 
 mcp = FastMCP(
     "origin-mcp",
@@ -155,8 +158,13 @@ def _wrap(func: Any) -> dict[str, Any]:
     try:
         return func()
     except (OriginMcpError, ValidationError, ValueError) as exc:
+        # Expected, classified failures: surface them without noisy logging.
         return _error(exc)
     except Exception as exc:
+        # Unexpected failures lose their traceback once converted to a result
+        # dict, which makes production issues hard to diagnose. Log it (the
+        # message stays out of the tool response unless logging is configured).
+        _logger.exception("Unexpected error in MCP tool call: %s", exc)
         return _error(exc)
 
 

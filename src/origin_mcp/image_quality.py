@@ -199,14 +199,15 @@ def png_quality(path: Path) -> dict[str, Any] | None:
                 )
             elif chunk_type == b"PLTE":
                 palette = [
-                    tuple(data[index : index + 3]) for index in range(0, len(data) - 2, 3)
+                    (data[index], data[index + 1], data[index + 2])
+                    for index in range(0, len(data) - 2, 3)
                 ]
             elif chunk_type == b"IDAT":
                 idat.extend(data)
             elif chunk_type == b"IEND":
                 break
 
-    if width is None or height is None or bit_depth != 8 or interlace != 0:
+    if width is None or height is None or color_type is None or bit_depth != 8 or interlace != 0:
         return None
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
     if channels is None:

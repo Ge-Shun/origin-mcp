@@ -63,7 +63,10 @@ def serve(
     max_tasks: int = DEFAULT_MAX_TASKS,
 ) -> None:
     with OriginBridgeServer((host, port), token=token, max_tasks=max_tasks) as server:
-        actual_host, actual_port = server.server_address
+        # typeshed types ``server_address`` as a sockaddr that may have >2
+        # fields; index instead of unpacking to stay type-clean for AF_INET.
+        bound = server.server_address
+        actual_host, actual_port = str(bound[0]), bound[1]
         print(
             f"origin-mcp-bridge listening on {actual_host}:{actual_port}",
             file=sys.stderr,

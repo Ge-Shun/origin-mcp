@@ -1,12 +1,27 @@
 from __future__ import annotations
 
 import inspect
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any
 
 from ._bridge_protocol import public_result, restore_bridge_value
 from .errors import OriginOperationError
 from .origin_client import OriginClient
+
+
+def _origin_call_guard(client: OriginClient) -> AbstractContextManager[Any]:
+    """Return the client's call lock, or a no-op when one is not present.
+
+    originpro is single-threaded; the bridge serves synchronous requests and
+    background tasks on separate threads, so every Origin call is funneled
+    through the client's reentrant lock. Test doubles without the lock fall
+    back to a no-op context.
+    """
+
+    lock = getattr(client, "_origin_call_lock", None)
+    return lock if lock is not None else nullcontext()
+
 
 ALLOWED_CLIENT_METHODS = {
     "connect",
@@ -102,7 +117,8 @@ def call_client_method(
     restored_args = [restore_bridge_value(arg) for arg in args]
     restored_kwargs = {key: restore_bridge_value(value) for key, value in kwargs.items()}
     coerced_args, coerced_kwargs = coerce_path_args(func, restored_args, restored_kwargs)
-    return func(*coerced_args, **coerced_kwargs)
+    with _origin_call_guard(client):
+        return func(*coerced_args, **coerced_kwargs)
 
 
 def coerce_path_args(
@@ -131,35 +147,40 @@ def call_origin_method(
     method: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    # ``origin_ping``/``origin_capabilities`` are taskable aliases for client
-    # methods that carry a different name, so they cannot be routed generically.
-    if method == "origin_ping":
-        return client.connect(show=bool(params.get("show", True)))
-    if method == "origin_capabilities":
-        return client.capabilities(
-            show=bool(params.get("show", False)),
-            refresh=bool(params.get("refresh", False)),
-        )
-    if method not in ALLOWED_CLIENT_METHODS:
-        raise OriginOperationError(f"Unsupported bridge method: {method}")
+    # Hold the per-client lock for the whole call so the inner client calls and
+    # the inspect_export follow-ups below run as one atomic Origin interaction
+    # (the lock is reentrant, so the nested call_client_method calls are fine).
+    with _origin_call_guard(client):
+        # ``origin_ping``/``origin_capabilities`` are taskable aliases for client
+        # methods that carry a different name, so they cannot be routed generically.
+        if method == "origin_ping":
+            return client.connect(show=bool(params.get("show", True)))
+        if method == "origin_capabilities":
+            return client.capabilities(
+                show=bool(params.get("show", False)),
+                refresh=bool(params.get("refresh", False)),
+            )
+        if method not in ALLOWED_CLIENT_METHODS:
+            raise OriginOperationError(f"Unsupported bridge method: {method}")
 
-    # ``plot_table`` returns a (worksheet, graph) pair and ``export_graph``
-    # returns a path dict; both enrich the response with an export inspection.
-    # Every other client method maps cleanly onto the generic call path, which
-    # already coerces path arguments and wraps WorksheetRef/GraphRef results.
-    if method == "plot_table":
-        worksheet, graph = call_client_method(client, "plot_table", [], params)
-        graph_data = graph.as_dict()
-        response = {"worksheet": worksheet.as_dict(), "graph": graph_data}
-        if graph_data.get("export_path"):
-            response["export_inspection"] = client.inspect_export(Path(graph_data["export_path"]))
-        return response
-    if method == "export_graph":
-        exported = call_client_method(client, "export_graph", [], params)
-        return {
-            **exported,
-            "inspection": client.inspect_export(Path(str(exported["path"]))),
-        }
+        # ``plot_table`` returns a (worksheet, graph) pair and ``export_graph``
+        # returns a path dict; both enrich the response with an export inspection.
+        # Every other client method maps cleanly onto the generic call path, which
+        # already coerces path arguments and wraps WorksheetRef/GraphRef results.
+        if method == "plot_table":
+            worksheet, graph = call_client_method(client, "plot_table", [], params)
+            graph_data = graph.as_dict()
+            response = {"worksheet": worksheet.as_dict(), "graph": graph_data}
+            if graph_data.get("export_path"):
+                response["export_inspection"] = client.inspect_export(
+                    Path(graph_data["export_path"])
+                )
+            return response
+        if method == "export_graph":
+            exported = call_client_method(client, "export_graph", [], params)
+            return {
+                **exported,
+                "inspection": client.inspect_export(Path(str(exported["path"]))),
+            }
 
-    return public_result(call_client_method(client, method, [], params))
-
+        return public_result(call_client_method(client, method, [], params))

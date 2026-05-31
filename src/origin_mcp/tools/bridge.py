@@ -107,11 +107,12 @@ def _bridge_call(
     """
 
     def run() -> dict[str, Any]:
-        kwargs = {"host": host, "port": port, "token": token, "timeout": timeout}
         if params is None:
-            response = request_bridge(method, **kwargs)
+            response = request_bridge(method, host=host, port=port, token=token, timeout=timeout)
         else:
-            response = request_bridge(method, params, **kwargs)
+            response = request_bridge(
+                method, params, host=host, port=port, token=token, timeout=timeout
+            )
         return _ok(success, **response)
 
     return _wrap(run)

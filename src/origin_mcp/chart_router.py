@@ -563,9 +563,9 @@ def _detect_ternary_columns(df: pd.DataFrame, numeric_columns: list[str]) -> lis
         if all(cols) and _row_sums_look_compositional(df, [str(col) for col in cols]):
             return [str(col) for col in cols]
     for index in range(0, len(numeric_columns) - 2):
-        cols = numeric_columns[index : index + 3]
-        if _row_sums_look_compositional(df, cols):
-            return cols
+        window = numeric_columns[index : index + 3]
+        if _row_sums_look_compositional(df, window):
+            return window
     return []
 
 

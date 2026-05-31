@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,12 @@ class _OriginClientBase:
         self._capabilities: dict[str, Any] | None = None
         self._graph_annotations: dict[tuple[str, int], list[dict[str, Any]]] = {}
         self._graph_aliases: dict[str, str] = {}
+        # originpro drives Origin's single UI thread and is not thread-safe.
+        # The bridge serves synchronous requests and async tasks on different
+        # threads, so the bridge dispatch layer serializes every Origin call
+        # through this reentrant lock (reentrant because high-level methods such
+        # as plot_table fan out into further client calls under the same lock).
+        self._origin_call_lock = threading.RLock()
 
     @property
     def op(self) -> Any:
@@ -267,4 +274,3 @@ class _OriginClientBase:
                         ) from exc
                     raise
         raise OriginOperationError(f"None of these functions is available: {names}")
-
