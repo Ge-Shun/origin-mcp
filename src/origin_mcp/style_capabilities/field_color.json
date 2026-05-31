@@ -1,0 +1,27 @@
+[
+  {
+    "name": "colormap",
+    "controls": "color map for heatmap, contour, image, and matrix color plots",
+    "aliases": ["色带", "色标", "热图配色", "颜色映射", "color map", "colour map"],
+    "chart_types": ["heatmap", "contour", "image", "matrix_heatmap", "surface3d"],
+    "status": "planned",
+    "origin_route": "Origin colormap/palette properties; not yet exposed as a stable semantic tool",
+    "notes": "Use origin_palette_catalog or LabTalk for now when exact colormap control is required."
+  },
+  {
+    "name": "contour_levels",
+    "controls": "contour level count and boundaries",
+    "aliases": ["等值线级别", "等高线级别", "levels", "contour levels"],
+    "chart_types": ["contour", "heatmap", "surface3d"],
+    "status": "planned",
+    "origin_route": "Origin contour level settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "color_scale_limits",
+    "controls": "color scale minimum, maximum, and missing-value handling",
+    "aliases": ["色标范围", "色阶范围", "color scale", "color limits", "clim"],
+    "chart_types": ["heatmap", "contour", "image", "matrix_heatmap", "surface3d"],
+    "status": "planned",
+    "origin_route": "Origin color scale settings; not yet exposed as a stable semantic tool"
+  }
+]

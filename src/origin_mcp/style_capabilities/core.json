@@ -1,0 +1,82 @@
+[
+  {
+    "name": "color",
+    "controls": "plot color for lines, markers, fills, and outlines where Origin supports it",
+    "aliases": ["颜色", "线颜色", "填充色", "fill color", "line color", "marker color"],
+    "chart_types": ["common"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(color=...)",
+    "origin_route": "originpro Plot.color",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].color"
+  },
+  {
+    "name": "line_width",
+    "controls": "line, outline, or stroke width",
+    "aliases": ["线宽", "线条粗细", "折线粗细", "边框线宽", "line thickness", "stroke width"],
+    "chart_types": ["line", "scatter", "line_symbol", "column", "bar", "area", "box", "bubble", "polar", "ternary", "vector", "errorbar", "contour"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(line_width=...)",
+    "origin_route": "LabTalk set -w / set -wp plus originpro line_width when available",
+    "value_semantics": "points; origin-mcp also converts to Origin integer width units",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].line_width"
+  },
+  {
+    "name": "line_style",
+    "controls": "line dash/style pattern",
+    "aliases": ["线型", "虚线", "dash", "line pattern"],
+    "chart_types": ["line", "scatter", "line_symbol", "area", "polar", "ternary", "contour"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(line_style=...)",
+    "origin_route": "LabTalk set -d",
+    "value_semantics": "Origin integer line style code",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].line_style"
+  },
+  {
+    "name": "symbol_kind",
+    "controls": "marker/symbol shape",
+    "aliases": ["符号", "点形状", "散点形状", "marker shape", "symbol shape"],
+    "chart_types": ["scatter", "line_symbol", "bubble", "polar", "ternary", "scatter3d"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(symbol_kind=...)",
+    "origin_route": "originpro Plot.symbol_kind",
+    "value_semantics": "Origin integer symbol code",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].symbol_kind"
+  },
+  {
+    "name": "symbol_size",
+    "controls": "marker/symbol size",
+    "aliases": ["点大小", "符号大小", "散点大小", "marker size", "symbol size"],
+    "chart_types": ["scatter", "line_symbol", "bubble", "polar", "ternary", "scatter3d"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(symbol_size=...)",
+    "origin_route": "originpro Plot.symbol_size",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].symbol_size"
+  },
+  {
+    "name": "transparency",
+    "controls": "plot transparency",
+    "aliases": ["透明度", "alpha", "opacity"],
+    "chart_types": ["common"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(transparency=...)",
+    "origin_route": "originpro Plot.transparency",
+    "value_semantics": "percent, 0 to 100",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].transparency"
+  },
+  {
+    "name": "palette_name",
+    "controls": "semantic palette selection during Nature-style formatting",
+    "aliases": ["配色", "调色板", "颜色方案", "palette", "nature palette"],
+    "chart_types": ["common"],
+    "status": "implemented",
+    "setter": "origin_apply_nature_style(palette_name=...)",
+    "origin_route": "origin-mcp palette registry",
+    "notes": "Use origin_palette_catalog to list available palettes."
+  }
+]

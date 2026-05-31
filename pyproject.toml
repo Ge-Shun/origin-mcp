@@ -48,6 +48,9 @@ origin-mcp = "origin_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/origin_mcp"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/origin_mcp/style_capabilities" = "origin_mcp/style_capabilities"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

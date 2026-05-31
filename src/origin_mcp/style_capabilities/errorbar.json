@@ -1,0 +1,19 @@
+[
+  {
+    "name": "errorbar_cap",
+    "controls": "error bar cap width and cap style",
+    "aliases": ["误差棒帽宽", "误差线帽", "error cap", "cap width"],
+    "chart_types": ["errorbar", "line_symbol", "scatter"],
+    "status": "planned",
+    "origin_route": "Origin error-bar plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "errorbar_width",
+    "controls": "error bar line width",
+    "aliases": ["误差棒线宽", "误差线宽", "errorbar width", "error line width"],
+    "chart_types": ["errorbar", "line_symbol", "scatter"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(line_width=...)",
+    "origin_route": "LabTalk set -w / set -wp"
+  }
+]

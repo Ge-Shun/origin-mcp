@@ -17,7 +17,7 @@ from .official_docs import (
 from .official_docs import (
     OfficialDocRecord as OfficialDocPage,
 )
-from .plot_style_registry import PLOT_STYLE_CAPABILITIES
+from .plot_style_registry import all_plot_style_capabilities, plot_style_capability_count
 
 
 @dataclass(frozen=True)
@@ -1639,10 +1639,10 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
                 "bar width",
                 "colormap",
             ),
-            metadata={"capability_count": len(PLOT_STYLE_CAPABILITIES)},
+            metadata={"capability_count": plot_style_capability_count()},
         )
     ]
-    for item in PLOT_STYLE_CAPABILITIES:
+    for item in all_plot_style_capabilities():
         entries.append(
             KnowledgeEntry(
                 collection="reference",

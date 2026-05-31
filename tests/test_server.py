@@ -62,6 +62,7 @@ def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
 
     assert result["ok"] is True
     assert result["data"]["chart_type"] == "column"
+    assert result["data"]["loaded_sources"] == ["core.json", "column_bar.json"]
     assert result["data"]["capabilities"][0]["name"] == "bar_gap"
     assert result["data"]["capabilities"][0]["origin_route"] == "LabTalk set -vg"
 
@@ -70,8 +71,17 @@ def test_plot_style_capabilities_tool_reports_planned_image_controls() -> None:
     result = server.origin_plot_style_capabilities(chart_type="热图", query="色带")
 
     assert result["ok"] is True
+    assert result["data"]["loaded_sources"] == ["core.json", "field_color.json", "image.json"]
     assert result["data"]["capabilities"][0]["name"] == "colormap"
     assert result["data"]["capabilities"][0]["status"] == "planned"
+
+
+def test_plot_style_capabilities_keeps_core_small_without_query() -> None:
+    result = server.origin_plot_style_capabilities()
+
+    assert result["ok"] is True
+    assert result["data"]["loaded_sources"] == ["core.json"]
+    assert {item["source"] for item in result["data"]["capabilities"]} == {"core.json"}
 
 
 def test_error_response_includes_stable_error_code() -> None:

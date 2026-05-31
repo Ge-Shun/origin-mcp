@@ -1,0 +1,27 @@
+[
+  {
+    "name": "surface_mesh_density",
+    "controls": "3D surface mesh density and mesh line visibility",
+    "aliases": ["网格密度", "曲面网格", "mesh density", "mesh lines"],
+    "chart_types": ["surface3d", "waterfall", "ribbon3d"],
+    "status": "planned",
+    "origin_route": "Origin 3D mesh plot details; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "three_d_lighting",
+    "controls": "3D lighting, material, and shading",
+    "aliases": ["光照", "材质", "阴影", "lighting", "material", "shading"],
+    "chart_types": ["surface3d", "scatter3d", "waterfall", "ribbon3d"],
+    "status": "planned",
+    "origin_route": "Origin 3D graph lighting/material settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "three_d_symbol_size",
+    "controls": "3D scatter symbol size",
+    "aliases": ["三维点大小", "3D marker size", "3D symbol size"],
+    "chart_types": ["scatter3d"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(symbol_size=...)",
+    "origin_route": "originpro Plot.symbol_size"
+  }
+]

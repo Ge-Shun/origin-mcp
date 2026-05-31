@@ -1,0 +1,26 @@
+[
+  {
+    "name": "box_width",
+    "controls": "box width in box/box-and-whisker plots",
+    "aliases": ["箱体宽度", "箱线图宽度", "box width", "box gap"],
+    "chart_types": ["box"],
+    "status": "planned",
+    "origin_route": "Origin box plot spacing settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "histogram_bin_width",
+    "controls": "histogram bin width or bin count",
+    "aliases": ["直方图组距", "组距", "bin width", "bin count", "bins"],
+    "chart_types": ["histogram"],
+    "status": "planned",
+    "origin_route": "Origin histogram binning settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "distribution_whisker_style",
+    "controls": "box plot whisker and outlier display",
+    "aliases": ["须线", "异常值", "whisker", "outlier"],
+    "chart_types": ["box"],
+    "status": "planned",
+    "origin_route": "Origin box plot detail settings; not yet exposed as a stable semantic tool"
+  }
+]

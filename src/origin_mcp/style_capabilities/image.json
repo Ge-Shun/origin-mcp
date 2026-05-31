@@ -1,0 +1,20 @@
+[
+  {
+    "name": "image_panel_annotations",
+    "controls": "image panel labels, scale bar labels, channel labels, and dark panel styling",
+    "aliases": ["比例尺", "图像标注", "scale bar", "channel label", "panel label"],
+    "chart_types": ["image", "heatmap", "matrix_heatmap"],
+    "status": "implemented",
+    "setter": "origin_apply_image_panel_style(...)",
+    "origin_route": "origin-mcp graph labels and panel styling",
+    "notes": "This controls image-panel annotations, not raw pixel contrast."
+  },
+  {
+    "name": "image_contrast",
+    "controls": "image brightness, contrast, and display range",
+    "aliases": ["亮度", "对比度", "显示范围", "brightness", "contrast"],
+    "chart_types": ["image", "matrix_heatmap"],
+    "status": "planned",
+    "origin_route": "Origin image display settings; not yet exposed as a stable semantic tool"
+  }
+]

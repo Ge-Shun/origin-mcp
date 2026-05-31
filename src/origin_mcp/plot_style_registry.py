@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from typing import Any
 
 COMMON_CHART_TYPES = (
@@ -34,6 +37,7 @@ CHART_TYPE_ALIASES = {
     "column_stack": "column",
     "stack_column": "column",
     "stacked_column": "column",
+    "grouped_bar": "bar",
     "柱状图": "column",
     "柱形图": "column",
     "柱图": "column",
@@ -43,13 +47,37 @@ CHART_TYPE_ALIASES = {
     "气泡图": "bubble",
     "箱线图": "box",
     "盒须图": "box",
+    "直方图": "histogram",
     "热图": "heatmap",
     "等值线": "contour",
+    "等高线": "contour",
     "图片": "image",
     "图像": "image",
     "三维散点": "scatter3d",
     "三维曲面": "surface3d",
 }
+
+
+EXTENSIONS_BY_CHART_TYPE = {
+    "column": ("column_bar.json",),
+    "bar": ("column_bar.json",),
+    "histogram": ("distribution.json",),
+    "box": ("distribution.json",),
+    "line_symbol": ("errorbar.json",),
+    "scatter": ("errorbar.json",),
+    "heatmap": ("field_color.json", "image.json"),
+    "contour": ("field_color.json",),
+    "image": ("field_color.json", "image.json"),
+    "matrix_heatmap": ("field_color.json", "image.json"),
+    "scatter3d": ("three_d.json",),
+    "surface3d": ("field_color.json", "three_d.json"),
+    "waterfall": ("three_d.json",),
+    "ribbon3d": ("three_d.json",),
+}
+
+
+STYLE_CAPABILITY_PACKAGE = "origin_mcp.style_capabilities"
+CORE_RESOURCE = "core.json"
 
 
 @dataclass(frozen=True)
@@ -65,6 +93,24 @@ class PlotStyleCapability:
     readable: bool = False
     readable_field: str | None = None
     notes: str | None = None
+    source: str = CORE_RESOURCE
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], source: str) -> PlotStyleCapability:
+        return cls(
+            name=str(data["name"]),
+            controls=str(data["controls"]),
+            aliases=tuple(str(item) for item in data.get("aliases", [])),
+            chart_types=tuple(str(item) for item in data.get("chart_types", [])),
+            status=str(data["status"]),
+            setter=data.get("setter"),
+            origin_route=data.get("origin_route"),
+            value_semantics=data.get("value_semantics"),
+            readable=bool(data.get("readable", False)),
+            readable_field=data.get("readable_field"),
+            notes=data.get("notes"),
+            source=source,
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -79,179 +125,8 @@ class PlotStyleCapability:
             "readable": self.readable,
             "readable_field": self.readable_field,
             "notes": self.notes,
+            "source": self.source,
         }
-
-
-PLOT_STYLE_CAPABILITIES: tuple[PlotStyleCapability, ...] = (
-    PlotStyleCapability(
-        name="color",
-        controls="plot color for lines, markers, fills, and outlines where Origin supports it",
-        aliases=("颜色", "线颜色", "填充色", "fill color", "line color", "marker color"),
-        chart_types=COMMON_CHART_TYPES,
-        status="implemented",
-        setter="origin_set_plot_style(color=...)",
-        origin_route="originpro Plot.color",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].color",
-    ),
-    PlotStyleCapability(
-        name="line_width",
-        controls="line, outline, or stroke width",
-        aliases=("线宽", "线条粗细", "折线粗细", "边框线宽", "line thickness", "stroke width"),
-        chart_types=(
-            "line",
-            "scatter",
-            "line_symbol",
-            "column",
-            "bar",
-            "area",
-            "box",
-            "bubble",
-            "polar",
-            "ternary",
-            "vector",
-            "errorbar",
-            "contour",
-        ),
-        status="implemented",
-        setter="origin_set_plot_style(line_width=...)",
-        origin_route="LabTalk set -w / set -wp plus originpro line_width when available",
-        value_semantics="points; origin-mcp also converts to Origin integer width units",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].line_width",
-    ),
-    PlotStyleCapability(
-        name="line_style",
-        controls="line dash/style pattern",
-        aliases=("线型", "虚线", "dash", "line pattern"),
-        chart_types=("line", "scatter", "line_symbol", "area", "polar", "ternary", "contour"),
-        status="implemented",
-        setter="origin_set_plot_style(line_style=...)",
-        origin_route="LabTalk set -d",
-        value_semantics="Origin integer line style code",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].line_style",
-    ),
-    PlotStyleCapability(
-        name="symbol_kind",
-        controls="marker/symbol shape",
-        aliases=("符号", "点形状", "散点形状", "marker shape", "symbol shape"),
-        chart_types=("scatter", "line_symbol", "bubble", "polar", "ternary", "scatter3d"),
-        status="implemented",
-        setter="origin_set_plot_style(symbol_kind=...)",
-        origin_route="originpro Plot.symbol_kind",
-        value_semantics="Origin integer symbol code",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].symbol_kind",
-    ),
-    PlotStyleCapability(
-        name="symbol_size",
-        controls="marker/symbol size",
-        aliases=("点大小", "符号大小", "散点大小", "marker size", "symbol size"),
-        chart_types=("scatter", "line_symbol", "bubble", "polar", "ternary", "scatter3d"),
-        status="implemented",
-        setter="origin_set_plot_style(symbol_size=...)",
-        origin_route="originpro Plot.symbol_size",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].symbol_size",
-    ),
-    PlotStyleCapability(
-        name="transparency",
-        controls="plot transparency",
-        aliases=("透明度", "alpha", "opacity"),
-        chart_types=COMMON_CHART_TYPES,
-        status="implemented",
-        setter="origin_set_plot_style(transparency=...)",
-        origin_route="originpro Plot.transparency",
-        value_semantics="percent, 0 to 100",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].transparency",
-    ),
-    PlotStyleCapability(
-        name="bar_gap",
-        controls="2D column/bar visual width through inter-bar gap",
-        aliases=(
-            "柱宽",
-            "柱子宽度",
-            "柱子太宽",
-            "柱间距",
-            "条宽",
-            "bar width",
-            "column width",
-            "bar gap",
-            "gap",
-        ),
-        chart_types=("column", "bar", "grouped_column", "grouped_bar"),
-        status="implemented",
-        setter="origin_set_plot_style(bar_gap=...)",
-        origin_route="LabTalk set -vg",
-        value_semantics="gap percent; larger values make bars/columns narrower",
-        readable=True,
-        readable_field="get_graph_info.layers[].plots[].bar_gap",
-    ),
-    PlotStyleCapability(
-        name="palette_name",
-        controls="semantic palette selection during Nature-style formatting",
-        aliases=("配色", "调色板", "颜色方案", "palette", "nature palette"),
-        chart_types=COMMON_CHART_TYPES,
-        status="implemented",
-        setter="origin_apply_nature_style(palette_name=...)",
-        origin_route="origin-mcp palette registry",
-        notes="Use origin_palette_catalog to list available palettes.",
-    ),
-    PlotStyleCapability(
-        name="colormap",
-        controls="color map for heatmap, contour, image, and matrix color plots",
-        aliases=("色带", "色标", "热图配色", "颜色映射", "color map", "colour map"),
-        chart_types=("heatmap", "contour", "image", "matrix_heatmap"),
-        status="planned",
-        setter=None,
-        origin_route=(
-            "Origin colormap/palette properties; not yet exposed as a stable semantic tool"
-        ),
-        notes=(
-            "Use origin_palette_catalog or LabTalk for now when exact colormap control is "
-            "required."
-        ),
-    ),
-    PlotStyleCapability(
-        name="contour_levels",
-        controls="contour level count and boundaries",
-        aliases=("等值线级别", "等高线级别", "levels", "contour levels"),
-        chart_types=("contour", "heatmap"),
-        status="planned",
-        setter=None,
-        origin_route="Origin contour level settings; not yet exposed as a stable semantic tool",
-    ),
-    PlotStyleCapability(
-        name="box_width",
-        controls="box width in box/box-and-whisker plots",
-        aliases=("箱体宽度", "箱线图宽度", "box width", "box gap"),
-        chart_types=("box",),
-        status="planned",
-        setter=None,
-        origin_route="Origin box plot spacing settings; not yet exposed as a stable semantic tool",
-    ),
-    PlotStyleCapability(
-        name="errorbar_cap",
-        controls="error bar cap width and cap style",
-        aliases=("误差棒帽宽", "误差线帽", "error cap", "cap width"),
-        chart_types=("errorbar", "line_symbol", "scatter"),
-        status="planned",
-        setter=None,
-        origin_route="Origin error-bar plot details; not yet exposed as a stable semantic tool",
-    ),
-    PlotStyleCapability(
-        name="image_panel_annotations",
-        controls="image panel labels, scale bar labels, channel labels, and dark panel styling",
-        aliases=("比例尺", "图像标注", "scale bar", "channel label", "panel label"),
-        chart_types=("image", "heatmap", "matrix_heatmap"),
-        status="implemented",
-        setter="origin_apply_image_panel_style(...)",
-        origin_route="origin-mcp graph labels and panel styling",
-        notes="This controls image-panel annotations, not raw pixel contrast.",
-    ),
-)
 
 
 def normalize_chart_type(chart_type: str | None) -> str | None:
@@ -267,17 +142,72 @@ def plot_style_capabilities(
 ) -> dict[str, Any]:
     normalized_chart = normalize_chart_type(chart_type)
     query_terms = _query_terms(query)
+    resources_to_load = _resources_for_query(normalized_chart, query_terms)
+    capabilities = _load_capabilities(resources_to_load)
     matches = [
         item
-        for item in PLOT_STYLE_CAPABILITIES
+        for item in capabilities
         if _matches_chart(item, normalized_chart) and _matches_query(item, query_terms)
     ]
     return {
         "chart_type": normalized_chart,
         "query": query,
+        "loaded_sources": list(resources_to_load),
         "count": len(matches),
         "capabilities": [item.as_dict() for item in matches],
     }
+
+
+def all_plot_style_capabilities() -> tuple[PlotStyleCapability, ...]:
+    return _load_capabilities(_all_resources())
+
+
+def plot_style_capability_count() -> int:
+    return len(all_plot_style_capabilities())
+
+
+def _resources_for_query(
+    chart_type: str | None,
+    query_terms: tuple[str, ...],
+) -> tuple[str, ...]:
+    if chart_type:
+        return _dedupe((CORE_RESOURCE, *EXTENSIONS_BY_CHART_TYPE.get(chart_type, ())))
+    if query_terms:
+        return _all_resources()
+    return (CORE_RESOURCE,)
+
+
+def _all_resources() -> tuple[str, ...]:
+    extension_resources = {
+        item for items in EXTENSIONS_BY_CHART_TYPE.values() for item in items
+    }
+    return _dedupe((CORE_RESOURCE, *sorted(extension_resources)))
+
+
+def _dedupe(resources_to_load: tuple[str, ...]) -> tuple[str, ...]:
+    seen = set()
+    result = []
+    for name in resources_to_load:
+        if name in seen:
+            continue
+        seen.add(name)
+        result.append(name)
+    return tuple(result)
+
+
+@cache
+def _load_capabilities(resources_to_load: tuple[str, ...]) -> tuple[PlotStyleCapability, ...]:
+    capabilities = []
+    for resource_name in resources_to_load:
+        capabilities.extend(_load_resource(resource_name))
+    return tuple(capabilities)
+
+
+@cache
+def _load_resource(resource_name: str) -> tuple[PlotStyleCapability, ...]:
+    resource = resources.files(STYLE_CAPABILITY_PACKAGE).joinpath(resource_name)
+    data = json.loads(resource.read_text(encoding="utf-8"))
+    return tuple(PlotStyleCapability.from_dict(item, source=resource_name) for item in data)
 
 
 def _matches_chart(item: PlotStyleCapability, chart_type: str | None) -> bool:

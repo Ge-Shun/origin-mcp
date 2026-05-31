@@ -1,0 +1,31 @@
+[
+  {
+    "name": "bar_gap",
+    "controls": "2D column/bar visual width through inter-bar gap",
+    "aliases": ["柱宽", "柱子宽度", "柱子太宽", "柱间距", "条宽", "bar width", "column width", "bar gap", "gap"],
+    "chart_types": ["column", "bar"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(bar_gap=...)",
+    "origin_route": "LabTalk set -vg",
+    "value_semantics": "gap percent; larger values make bars/columns narrower",
+    "readable": true,
+    "readable_field": "get_graph_info.layers[].plots[].bar_gap"
+  },
+  {
+    "name": "fill_pattern",
+    "controls": "bar/column fill pattern",
+    "aliases": ["填充图案", "柱填充", "pattern", "fill pattern"],
+    "chart_types": ["column", "bar"],
+    "status": "planned",
+    "origin_route": "Origin plot fill pattern settings; not yet exposed as a stable semantic tool"
+  },
+  {
+    "name": "bar_border_width",
+    "controls": "bar/column outline width",
+    "aliases": ["柱边框", "柱边框线宽", "bar border", "outline width"],
+    "chart_types": ["column", "bar"],
+    "status": "implemented",
+    "setter": "origin_set_plot_style(line_width=...)",
+    "origin_route": "LabTalk set -w / set -wp"
+  }
+]
