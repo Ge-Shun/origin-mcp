@@ -301,16 +301,16 @@ def nature_chart_style(
     symbol_size: float,
 ) -> dict[str, Any]:
     normalized = normalize_chart_type(chart_type)
-    line_default = line_width == 1.2
+    line_default = line_width == 1.8
     symbol_default = symbol_size == 4.5
     rules: dict[str, dict[str, float | None]] = {
-        "line": {"line_width": 1.2, "symbol_size": 4.5},
-        "scatter": {"line_width": 0.8, "symbol_size": 5.0},
-        "bar": {"line_width": 0.8, "symbol_size": None},
-        "box": {"line_width": 0.9, "symbol_size": None},
+        "line": {"line_width": 1.8, "symbol_size": 4.5},
+        "scatter": {"line_width": 1.2, "symbol_size": 5.0},
+        "bar": {"line_width": 1.2, "symbol_size": None},
+        "box": {"line_width": 1.2, "symbol_size": None},
         "heatmap": {"line_width": None, "symbol_size": None},
-        "surface": {"line_width": 0.8, "symbol_size": None},
-        "polar": {"line_width": 1.0, "symbol_size": 4.5},
+        "surface": {"line_width": 1.2, "symbol_size": None},
+        "polar": {"line_width": 1.5, "symbol_size": 4.5},
         "generic": {"line_width": line_width, "symbol_size": symbol_size},
     }
     selected = rules.get(normalized, rules["generic"])

@@ -87,10 +87,10 @@ class _GraphStyleMixin(_OriginClientBase):
         page_width: float | None = None,
         page_height: float | None = None,
         font_family: str = "Arial",
-        axis_title_size: int = 8,
-        tick_label_size: int = 7,
-        legend_font_size: int = 6,
-        line_width: float = 1.2,
+        axis_title_size: int = 10,
+        tick_label_size: int = 9,
+        legend_font_size: int = 10,
+        line_width: float = 1.8,
         symbol_size: float = 4.5,
         tick_length: int = 3,
         show_legend: bool = True,
@@ -120,7 +120,7 @@ class _GraphStyleMixin(_OriginClientBase):
             roles = self._palette_roles(palette_role, len(plots), palette_name_actual)
             for plot_index, plot in enumerate(plots):
                 if actual_line_width is not None:
-                    self._set_plot_command(plot, f"-w {actual_line_width}")
+                    self._set_nature_plot_line_width(plot, actual_line_width)
                 if actual_symbol_size is not None:
                     self._set_origin_property(plot, "symbol_size", actual_symbol_size)
                 role = roles[plot_index]
@@ -138,17 +138,26 @@ class _GraphStyleMixin(_OriginClientBase):
             [f'win -a "{self._escape_labtalk(graph_name_actual)}";'] if graph_name_actual else []
         )
         for index in indexes:
+            layer = self._graph_layer(graph, index)
+            x_title = self._nature_axis_title_text(layer, "x", safe_font)
+            y_title = self._nature_axis_title_text(layer, "y", safe_font)
             script_parts.extend(
                 [
                     f"layer -s {index + 1};",
-                    f'layer.x.label.font$="{safe_font}";',
-                    f'layer.y.label.font$="{safe_font}";',
-                    f'layer.x.ticklabel.font$="{safe_font}";',
-                    f'layer.y.ticklabel.font$="{safe_font}";',
+                    f"layer.x.label.font=font({safe_font});",
+                    f"layer.y.label.font=font({safe_font});",
+                    f"layer.x.ticklabel.font=font({safe_font});",
+                    f"layer.y.ticklabel.font=font({safe_font});",
                     f"layer.x.label.pt={axis_title_size};",
                     f"layer.y.label.pt={axis_title_size};",
                     f"layer.x.ticklabel.pt={tick_label_size};",
                     f"layer.y.ticklabel.pt={tick_label_size};",
+                    f"xb.font=font({safe_font});",
+                    f"yl.font=font({safe_font});",
+                    f'xb.text$="{x_title}";',
+                    f'yl.text$="{y_title}";',
+                    f"xb.fsize={axis_title_size};",
+                    f"yl.fsize={axis_title_size};",
                     f"layer.x.ticks.len={tick_length};",
                     f"layer.y.ticks.len={tick_length};",
                 ]
@@ -156,6 +165,7 @@ class _GraphStyleMixin(_OriginClientBase):
             if show_legend:
                 script_parts.extend(
                     [
+                        f"legend.font=font({safe_font});",
                         f"legend.fsize={legend_font_size};",
                         "legend.showframe=0;",
                     ]
@@ -194,6 +204,20 @@ class _GraphStyleMixin(_OriginClientBase):
                 palette_name=palette_name_actual,
             )
         return response
+
+    def _nature_axis_title_text(self, layer: Any, axis_name: str, safe_font: str) -> str:
+        axis = layer.axis(axis_name)
+        title = self._safe_origin_attr(axis, "title")
+        text = self._labtalk_text(str(title or "")).replace('"', '\\"').replace(")", r"\)")
+        return f"\\f:{safe_font}({text})"
+
+    def _set_nature_plot_line_width(self, plot: Any, line_width: float) -> None:
+        self._set_plot_command(plot, f"-w {line_width}")
+        for property_name in ("line_width", "width"):
+            try:
+                self._set_origin_property(plot, property_name, line_width)
+            except OriginOperationError:
+                pass
 
     def diagnose_graph(
         self,

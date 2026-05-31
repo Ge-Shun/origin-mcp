@@ -472,6 +472,8 @@ class FakePlot:
         self.commands = []
         self.removed = False
         self.symbol_size = 0
+        self.line_width = None
+        self.width = None
 
     def set_cmd(self, command: str) -> None:
         self.commands.append(command)
@@ -1130,11 +1132,20 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result["style"] == "nature"
     assert result["styled_plots"] == 1
-    assert "-w 1.2" in plot.commands
+    assert "-w 1.8" in plot.commands
+    assert plot.line_width == 1.8
+    assert plot.width == 1.8
     assert plot.symbol_size == 4.5
     assert plot.color == (15, 77, 146)
     assert plot.transparency == 0
-    assert 'layer.x.label.font$="Arial";' in scripts[-1]
+    assert "layer.x.label.font=font(Arial);" in scripts[-1]
+    assert "layer.x.ticklabel.font=font(Arial);" in scripts[-1]
+    assert "xb.font=font(Arial);" in scripts[-1]
+    assert "yl.font=font(Arial);" in scripts[-1]
+    assert 'xb.text$="\\f:Arial(Axis)";' in scripts[-1]
+    assert 'yl.text$="\\f:Arial(Axis)";' in scripts[-1]
+    assert "legend.font=font(Arial);" in scripts[-1]
+    assert "legend.fsize=10;" in scripts[-1]
     assert "legend.showframe=0;" in scripts[-1]
     assert result["diagnostics"]["summary"]["plots"] == 1
 
@@ -1152,7 +1163,7 @@ def test_apply_nature_style_uses_chart_specific_scatter_rules(
     result = client.apply_nature_style("Graph1", chart_type="scatter")
 
     assert result["chart_type"] == "scatter"
-    assert "-w 0.8" in plot.commands
+    assert "-w 1.2" in plot.commands
     assert plot.symbol_size == 5.0
 
 
