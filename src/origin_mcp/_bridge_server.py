@@ -202,10 +202,10 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             "release_origin": release_origin,
         }
         if release_origin:
-            detach = getattr(self.server.client, "detach", None)
-            if callable(detach):
+            release = getattr(self.server.client, "force_quit", None)
+            if callable(release):
                 try:
-                    result["origin_release"] = detach()
+                    result["origin_release"] = release()
                 except Exception as exc:
                     result["origin_release_error"] = {
                         "message": str(exc),
@@ -214,7 +214,7 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                     }
             else:
                 result["origin_release_error"] = {
-                    "message": "Origin client does not provide detach().",
+                    "message": "Origin client does not provide force_quit().",
                     "error_code": "origin_release_unavailable",
                     "error_type": "AttributeError",
                 }

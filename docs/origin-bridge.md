@@ -69,8 +69,8 @@ shut the Origin bridge down. That calls the `origin_bridge_shutdown` tool with:
 ```
 
 The request stops the Origin-side serve loop and, by default, asks the Origin
-automation layer to detach without closing Origin. No extra terminal or console
-input is needed.
+automation layer to close/release the embedded Origin automation session. No
+extra terminal or console input is needed.
 
 If you are not driving Origin through an assistant, double-click
 `scripts\stop-bridge.cmd` (or run `python scripts\stop_bridge.py`) to send the

@@ -1,11 +1,11 @@
 """Stop the Origin-embedded origin-mcp bridge from outside Origin.
 
 Sends a ``shutdown`` request to the running bridge so the Origin Python console
-returns to its prompt without closing Origin. The standard
-``ORIGIN_MCP_BRIDGE_HOST`` / ``PORT`` / ``TOKEN`` / ``TIMEOUT`` environment
-variables are honored automatically; when they are unset, the host/port/token
-are read from the bridge handshake file, so the auto-generated token is picked
-up with no configuration.
+returns to its prompt and the embedded Origin automation session is released.
+The standard ``ORIGIN_MCP_BRIDGE_HOST`` / ``PORT`` / ``TOKEN`` / ``TIMEOUT``
+environment variables are honored automatically; when they are unset, the
+host/port/token are read from the bridge handshake file, so the auto-generated
+token is picked up with no configuration.
 
 Run it directly with ``python scripts/stop_bridge.py``, or double-click
 ``scripts/stop-bridge.cmd``.

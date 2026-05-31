@@ -23,6 +23,7 @@ from origin_mcp.origin_client import GraphRef, WorksheetRef
 class FakeOriginClient:
     def __init__(self) -> None:
         self.detached = False
+        self.force_closed = False
 
     def connect(self, show: bool = True) -> dict[str, Any]:
         return {"connected": True, "visible": show, "origin_version": 10.3}
@@ -79,6 +80,10 @@ class FakeOriginClient:
     def detach(self) -> dict[str, Any]:
         self.detached = True
         return {"detached": True, "closed": False}
+
+    def force_quit(self) -> dict[str, Any]:
+        self.force_closed = True
+        return {"closed": True, "forced": True}
 
     def import_csv(self, *_args: Any, **_kwargs: Any) -> WorksheetRef:
         return WorksheetRef("Book1", "Sheet1", ["x", "y"], 2)
@@ -387,8 +392,29 @@ def test_bridge_shutdown_stops_server_and_releases_origin() -> None:
         server.server_close()
 
     assert result["shutdown_requested"] is True
-    assert result["origin_release"] == {"detached": True, "closed": False}
-    assert fake_client.detached is True
+    assert result["origin_release"] == {"closed": True, "forced": True}
+    assert fake_client.force_closed is True
+    assert fake_client.detached is False
+    assert not thread.is_alive()
+
+
+def test_bridge_shutdown_can_keep_origin_alive() -> None:
+    fake_client = FakeOriginClient()
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown", {"release_origin": False})
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result == {"shutdown_requested": True, "release_origin": False}
+    assert fake_client.force_closed is False
+    assert fake_client.detached is False
     assert not thread.is_alive()
 
 
