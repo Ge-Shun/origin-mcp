@@ -78,6 +78,7 @@ from .tools.graph import (
     origin_inspect_export,
     origin_list_graph_templates,
     origin_list_project,
+    origin_palette_catalog,
     origin_remove_plot_from_graph,
     origin_rename_object,
     origin_set_axis,

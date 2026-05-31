@@ -34,6 +34,7 @@ class _TablePlotMixin(_OriginClientBase):
         excel_sheet: str | int | None = 0,
         graph_name: str | None = None,
         style_mode: str = "origin_default",
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         return self.plot_table(
@@ -46,6 +47,7 @@ class _TablePlotMixin(_OriginClientBase):
             excel_sheet=excel_sheet,
             graph_name=graph_name,
             style_mode=style_mode,
+            palette_name=palette_name,
             export_path=export_path,
         )
 
@@ -74,6 +76,7 @@ class _TablePlotMixin(_OriginClientBase):
         x_error_col: str | int | None = None,
         show_legend: bool = True,
         style_mode: str = "origin_default",
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = self._normalize_user_path(path)
@@ -141,7 +144,13 @@ class _TablePlotMixin(_OriginClientBase):
         if style_mode_actual == "publication":
             self.apply_publication_style(graph_name=actual_graph_name)
         elif style_mode_actual == "nature":
-            self.apply_nature_style(graph_name=actual_graph_name, chart_type=kind)
+            style_kwargs: dict[str, Any] = {
+                "graph_name": actual_graph_name,
+                "chart_type": kind,
+            }
+            if palette_name is not None:
+                style_kwargs["palette_name"] = palette_name
+            self.apply_nature_style(**style_kwargs)
         exported: str | None = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, actual_graph_name)["path"]
@@ -176,6 +185,7 @@ class _TablePlotMixin(_OriginClientBase):
         x_label: str | None = None,
         y_label: str | None = None,
         style_mode: str = "origin_default",
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = self._normalize_user_path(path)
@@ -244,10 +254,13 @@ class _TablePlotMixin(_OriginClientBase):
         if style_mode_actual == "publication":
             self.apply_publication_style(graph_name=graph_name_actual)
         elif style_mode_actual == "nature":
-            self.apply_nature_style(
-                graph_name=graph_name_actual,
-                chart_type=self._nature_chart_type_for_plot_id(plot_type_id, template),
-            )
+            style_kwargs = {
+                "graph_name": graph_name_actual,
+                "chart_type": self._nature_chart_type_for_plot_id(plot_type_id, template),
+            }
+            if palette_name is not None:
+                style_kwargs["palette_name"] = palette_name
+            self.apply_nature_style(**style_kwargs)
         exported = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]

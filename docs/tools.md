@@ -82,7 +82,7 @@ Minimal JSON shape:
       "map": {"x": "time", "y": "response"}
     }
   ],
-  "style": {"theme": "nature"},
+  "style": {"theme": "nature", "palette_name": "nature"},
   "export": {
     "dir_figures": "output/figures",
     "dir_opju": "output/opju",
@@ -92,6 +92,16 @@ Minimal JSON shape:
   }
 }
 ```
+
+For Nature-style graph formatting, `origin_palette_catalog()` lists the built-in
+palette registry, including semantic roles, source links, and license notes.
+`origin_apply_nature_style`, `origin_diagnose_graph`, `origin_plot_auto`,
+`origin_plot_chart_atlas`, and FigureSpec `style.palette_name` can select a
+palette such as `nature`, `nmi_pastel`, `nature_imaging`,
+`nature_material`, `nature_clinical`, or `nature_genomics`. The default remains
+`nature`, now backed by the Nature Skills semantic palette. Set
+`ORIGIN_MCP_NATURE_PALETTE` or `ORIGIN_MCP_PALETTE` to change the process-wide
+default.
 
 ## Knowledge Base Tools
 

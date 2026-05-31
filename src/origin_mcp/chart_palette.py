@@ -10,44 +10,223 @@ historical ``self._nature_palette()`` access pattern keeps working.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .errors import OriginOperationError
 
-
-def nature_palette() -> list[tuple[int, int, int]]:
-    return [
-        (0, 114, 178),
-        (213, 94, 0),
-        (0, 158, 115),
-        (204, 121, 167),
-        (230, 159, 0),
-        (86, 180, 233),
-        (240, 228, 66),
-        (0, 0, 0),
-    ]
+Rgb = tuple[int, int, int]
 
 
-def nature_semantic_palette() -> dict[str, tuple[int, int, int]]:
-    return {
-        "hero": (0, 114, 178),
-        "baseline": (0, 0, 0),
-        "positive": (0, 158, 115),
-        "negative": (213, 94, 0),
-        "neutral": (117, 117, 117),
-        "accent": (204, 121, 167),
-        "secondary": (86, 180, 233),
-        "warning": (230, 159, 0),
-    }
+def _rgb(hex_color: str) -> Rgb:
+    value = hex_color.strip().lstrip("#")
+    if len(value) != 6:
+        raise OriginOperationError(f"Invalid palette color: {hex_color!r}.")
+    try:
+        return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+    except ValueError as exc:
+        raise OriginOperationError(f"Invalid palette color: {hex_color!r}.") from exc
 
 
-def nature_acceptable_palette() -> set[tuple[int, int, int]]:
-    return set(nature_palette()) | set(nature_semantic_palette().values())
+_PALETTES: dict[str, dict[str, Any]] = {
+    "nature": {
+        "display_name": "Nature Skills Semantic",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": (
+            "Nature-style method comparisons with hero, baseline, positive, "
+            "and neutral roles."
+        ),
+        "palette": [
+            "#0F4D92",
+            "#8BCF8B",
+            "#B64342",
+            "#42949E",
+            "#9A4D8E",
+            "#CFCECE",
+        ],
+        "semantic": {
+            "hero": "#0F4D92",
+            "baseline": "#B64342",
+            "positive": "#8BCF8B",
+            "negative": "#B64342",
+            "neutral": "#767676",
+            "accent": "#42949E",
+            "secondary": "#3775BA",
+            "warning": "#FFD700",
+            "background": "#CFCECE",
+        },
+    },
+    "nmi_pastel": {
+        "display_name": "Nature Machine Intelligence Pastel",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": "Dense method-family pages where related methods should stay visually unified.",
+        "palette": [
+            "#484878",
+            "#7884B4",
+            "#B4C0E4",
+            "#E4E4F0",
+            "#E4CCD8",
+            "#F0C0CC",
+        ],
+        "semantic": {
+            "hero": "#E4CCD8",
+            "baseline": "#484878",
+            "positive": "#2E9E44",
+            "negative": "#E53935",
+            "neutral": "#A8A8A8",
+            "accent": "#7884B4",
+            "secondary": "#F0C0CC",
+            "warning": "#E53935",
+            "background": "#E0E0F0",
+        },
+    },
+    "nature_imaging": {
+        "display_name": "Nature Skills Imaging",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": "Dark microscopy/image plates with grayscale context and fluorescent channels.",
+        "palette": ["#22D7E6", "#FF2AD4", "#FFFFFF", "#B8B8B8", "#000000"],
+        "semantic": {
+            "hero": "#22D7E6",
+            "baseline": "#B8B8B8",
+            "positive": "#22D7E6",
+            "negative": "#FF2AD4",
+            "neutral": "#B8B8B8",
+            "accent": "#FF2AD4",
+            "secondary": "#FFFFFF",
+            "warning": "#FF2AD4",
+            "background": "#000000",
+        },
+    },
+    "nature_material": {
+        "display_name": "Nature Skills Material",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": "Materials and schematic-led scientific figure pages.",
+        "palette": ["#77D7D1", "#33B5A5", "#B9A7E8", "#7C6CCF", "#E53935", "#D9D9D9"],
+        "semantic": {
+            "hero": "#33B5A5",
+            "baseline": "#D9D9D9",
+            "positive": "#77D7D1",
+            "negative": "#E53935",
+            "neutral": "#D9D9D9",
+            "accent": "#7C6CCF",
+            "secondary": "#B9A7E8",
+            "warning": "#E53935",
+        },
+    },
+    "nature_clinical": {
+        "display_name": "Nature Skills Clinical",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": "Clinical composites and longitudinal follow-up plots.",
+        "palette": ["#272727", "#E28E2C", "#D24B40", "#5B8FD6", "#7BAA5B", "#C45AD6"],
+        "semantic": {
+            "hero": "#5B8FD6",
+            "baseline": "#272727",
+            "positive": "#7BAA5B",
+            "negative": "#D24B40",
+            "neutral": "#F2E6D9",
+            "accent": "#C45AD6",
+            "secondary": "#E28E2C",
+            "warning": "#D24B40",
+        },
+    },
+    "nature_genomics": {
+        "display_name": "Nature Skills Genomics",
+        "source_url": "https://github.com/Yuan1z0825/nature-skills",
+        "license": "MIT",
+        "best_for": "Genomics, single-cell, and systems biology figures.",
+        "palette": ["#D8D8D8", "#8F8F8F", "#D9544D", "#5B7FCA", "#B89BD9", "#4D4D4D"],
+        "semantic": {
+            "hero": "#5B7FCA",
+            "baseline": "#8F8F8F",
+            "positive": "#D9544D",
+            "negative": "#5B7FCA",
+            "neutral": "#D8D8D8",
+            "accent": "#B89BD9",
+            "secondary": "#4D4D4D",
+            "warning": "#D9544D",
+        },
+    },
+}
+
+_PALETTE_ALIASES = {
+    "default": "nature",
+    "origin_mcp": "nature",
+    "nmi": "nmi_pastel",
+    "nmi-pastel": "nmi_pastel",
+    "imaging": "nature_imaging",
+    "material": "nature_material",
+    "clinical": "nature_clinical",
+    "genomics": "nature_genomics",
+}
+
+
+def normalize_palette_name(palette_name: str | None = None) -> str:
+    value = (
+        palette_name
+        or os.environ.get("ORIGIN_MCP_NATURE_PALETTE")
+        or os.environ.get("ORIGIN_MCP_PALETTE")
+        or "nature"
+    )
+    normalized = str(value).strip().lower().replace(" ", "_")
+    normalized = _PALETTE_ALIASES.get(normalized, normalized)
+    if normalized not in _PALETTES:
+        supported = ", ".join(sorted(_PALETTES))
+        raise OriginOperationError(
+            f"Unsupported palette_name: {palette_name!r}. Supported: {supported}."
+        )
+    return normalized
+
+
+def palette_catalog() -> dict[str, dict[str, Any]]:
+    catalog = {}
+    for name, palette in _PALETTES.items():
+        catalog[name] = {
+            "name": name,
+            "display_name": palette["display_name"],
+            "source_url": palette.get("source_url"),
+            "license": palette.get("license"),
+            "best_for": palette.get("best_for"),
+            "colors": list(palette["palette"]),
+            "semantic_roles": dict(palette["semantic"]),
+        }
+    return catalog
+
+
+def named_palette(palette_name: str | None = None) -> list[Rgb]:
+    palette = _PALETTES[normalize_palette_name(palette_name)]
+    return [_rgb(color) for color in palette["palette"]]
+
+
+def named_semantic_palette(palette_name: str | None = None) -> dict[str, Rgb]:
+    palette = _PALETTES[normalize_palette_name(palette_name)]
+    return {role: _rgb(color) for role, color in palette["semantic"].items()}
+
+
+def named_acceptable_palette(palette_name: str | None = None) -> set[Rgb]:
+    return set(named_palette(palette_name)) | set(named_semantic_palette(palette_name).values())
+
+
+def nature_palette() -> list[Rgb]:
+    return named_palette("nature")
+
+
+def nature_semantic_palette() -> dict[str, Rgb]:
+    return named_semantic_palette("nature")
+
+
+def nature_acceptable_palette() -> set[Rgb]:
+    return named_acceptable_palette("nature")
 
 
 def palette_roles(
     palette_role: str | list[str] | None,
     plot_count: int,
+    palette_name: str | None = None,
 ) -> list[str]:
     if plot_count <= 0:
         return []
@@ -57,7 +236,7 @@ def palette_roles(
         raw_roles = [role.strip().lower() for role in palette_role.split(",")]
     else:
         raw_roles = [str(role).strip().lower() for role in palette_role]
-    available = nature_semantic_palette()
+    available = named_semantic_palette(palette_name)
     roles = [role for role in raw_roles if role in available]
     if not roles:
         return [""] * plot_count

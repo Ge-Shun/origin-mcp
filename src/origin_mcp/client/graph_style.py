@@ -95,18 +95,20 @@ class _GraphStyleMixin(_OriginClientBase):
         tick_length: int = 3,
         show_legend: bool = True,
         palette_role: str | list[str] | None = None,
+        palette_name: str | None = None,
         run_diagnostics: bool = True,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
         graph_name_actual = self._object_name(graph, default=graph_name or "")
+        palette_name_actual = self._normalize_palette_name(palette_name)
         if page_width is not None:
             self._set_origin_property(graph, "width", page_width)
         if page_height is not None:
             self._set_origin_property(graph, "height", page_height)
 
         indexes = self._selected_layer_indexes(graph, layer_index)
-        palette = self._nature_palette()
-        semantic_palette = self._nature_semantic_palette()
+        palette = self._named_palette(palette_name_actual)
+        semantic_palette = self._named_semantic_palette(palette_name_actual)
         chart_style = self._nature_chart_style(chart_type, line_width, symbol_size)
         actual_line_width = chart_style["line_width"]
         actual_symbol_size = chart_style["symbol_size"]
@@ -115,7 +117,7 @@ class _GraphStyleMixin(_OriginClientBase):
         for index in indexes:
             layer = self._graph_layer(graph, index)
             plots = self._layer_plots(layer)
-            roles = self._palette_roles(palette_role, len(plots))
+            roles = self._palette_roles(palette_role, len(plots), palette_name_actual)
             for plot_index, plot in enumerate(plots):
                 if actual_line_width is not None:
                     self._set_plot_command(plot, f"-w {actual_line_width}")
@@ -172,6 +174,7 @@ class _GraphStyleMixin(_OriginClientBase):
         response = {
             "graph_name": graph_name_actual,
             "style": "nature",
+            "palette_name": palette_name_actual,
             "chart_type": chart_style["chart_type"],
             "font_family": font_family,
             "palette": palette,
@@ -188,6 +191,7 @@ class _GraphStyleMixin(_OriginClientBase):
                 graph_name=graph_name_actual,
                 style="nature",
                 palette_role=palette_role,
+                palette_name=palette_name_actual,
             )
         return response
 
@@ -196,6 +200,7 @@ class _GraphStyleMixin(_OriginClientBase):
         graph_name: str | None = None,
         style: str | None = None,
         palette_role: str | list[str] | None = None,
+        palette_name: str | None = None,
         require_axis_titles: bool = True,
         require_plots: bool = True,
         require_legend: bool = False,
@@ -210,6 +215,7 @@ class _GraphStyleMixin(_OriginClientBase):
         info = self.get_graph_info(graph_name)
         issues: list[dict[str, Any]] = []
         style_actual = self._normalize_style_mode(style) if style else None
+        palette_name_actual = self._normalize_palette_name(palette_name)
         layers = info.get("layers", [])
         if not layers:
             issues.append(
@@ -220,7 +226,7 @@ class _GraphStyleMixin(_OriginClientBase):
                 )
             )
 
-        palette = self._nature_acceptable_palette()
+        palette = self._named_acceptable_palette(palette_name_actual)
         for layer in layers:
             layer_index = layer.get("index")
             if require_plots and layer.get("plots_count", 0) == 0:
@@ -305,7 +311,11 @@ class _GraphStyleMixin(_OriginClientBase):
                         layer_index=layer_index,
                     )
                 )
-            expected_roles = self._palette_roles(palette_role, len(layer.get("plots", [])))
+            expected_roles = self._palette_roles(
+                palette_role,
+                len(layer.get("plots", [])),
+                palette_name_actual,
+            )
             for plot in layer.get("plots", []):
                 if style_actual == "nature":
                     color = self._rgb_tuple(plot.get("color"))
@@ -323,7 +333,9 @@ class _GraphStyleMixin(_OriginClientBase):
                     expected_role = (
                         expected_roles[plot_index] if plot_index < len(expected_roles) else ""
                     )
-                    expected_color = self._nature_semantic_palette().get(expected_role)
+                    expected_color = self._named_semantic_palette(palette_name_actual).get(
+                        expected_role
+                    )
                     if color is not None and expected_color is not None and color != expected_color:
                         issues.append(
                             self._diagnostic_issue(
@@ -396,6 +408,7 @@ class _GraphStyleMixin(_OriginClientBase):
         response = {
             "graph_name": info.get("graph_name", graph_name or ""),
             "style": style_actual,
+            "palette_name": palette_name_actual,
             "passed": passed,
             "score": score,
             "issues": issues,

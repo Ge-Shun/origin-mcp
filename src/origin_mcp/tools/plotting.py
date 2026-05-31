@@ -460,6 +460,7 @@ def origin_plot_heatmap(
     y_label: str | None = None,
     show_legend: bool = True,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a heatmap graph."""
@@ -483,6 +484,7 @@ def origin_plot_heatmap(
         x_label=x_label,
         y_label=y_label,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -655,6 +657,7 @@ def origin_plot_table_id(
     x_label: str | None = None,
     y_label: str | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Create a graph from table data using an Origin Plot Type ID and template."""
@@ -1222,6 +1225,7 @@ def origin_plot_auto(
     x_label: str | None = None,
     y_label: str | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Choose a chart route from table data and create the plot."""
@@ -1251,6 +1255,7 @@ def origin_plot_auto(
                 x_label=x_label,
                 y_label=y_label,
                 style_mode=style_mode,
+                palette_name=palette_name,
                 export_path=Path(export_path) if export_path else None,
             ),
         )
@@ -1297,6 +1302,7 @@ def origin_plot_chart_atlas(
     y_label: str | None = None,
     style_mode: str = "origin_default",
     palette_role: str | None = None,
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Create a plot using chart-atlas intent routing."""
@@ -1327,6 +1333,7 @@ def origin_plot_chart_atlas(
                 y_label=y_label,
                 style_mode=style_mode,
                 palette_role=palette_role,
+                palette_name=palette_name,
                 export_path=Path(export_path) if export_path else None,
             ),
         )
@@ -1463,6 +1470,7 @@ def _plot_table_id(
             x_label=x_label,
             y_label=y_label,
             style_mode=style_mode_actual,
+            palette_name=palette_name,
             export_path=Path(export_path) if export_path else None,
         )
         return _ok(

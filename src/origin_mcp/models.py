@@ -294,6 +294,7 @@ class FigureStyleSpec(BaseModel):
     template: str | None = None
     font_family: str | None = None
     palette_role: str | None = None
+    palette_name: str | None = None
 
 
 class FigureExportFormatSpec(BaseModel):

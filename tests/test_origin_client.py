@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from origin_mcp.chart_palette import normalize_palette_name, palette_catalog
 from origin_mcp.compat import PLOT_TYPE_CATALOG
 from origin_mcp.errors import OriginOperationError
 from origin_mcp.origin_client import GraphRef, OriginClient, WorksheetRef
@@ -1131,7 +1132,7 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert result["styled_plots"] == 1
     assert "-w 1.2" in plot.commands
     assert plot.symbol_size == 4.5
-    assert plot.color == (0, 114, 178)
+    assert plot.color == (15, 77, 146)
     assert plot.transparency == 0
     assert 'layer.x.label.font$="Arial";' in scripts[-1]
     assert "legend.showframe=0;" in scripts[-1]
@@ -1188,10 +1189,43 @@ def test_apply_nature_style_uses_semantic_palette_roles(
 
     result = client.apply_nature_style("Graph1", palette_role="hero,baseline")
 
-    assert hero.color == (0, 114, 178)
-    assert baseline.color == (0, 0, 0)
+    assert hero.color == (15, 77, 146)
+    assert baseline.color == (182, 67, 66)
     assert result["applied_palette_roles"] == ["hero", "baseline"]
     assert result["diagnostics"]["checklist"][3]["name"] == "palette"
+    assert result["diagnostics"]["checklist"][3]["passed"] is True
+
+
+def test_palette_catalog_exposes_nature_skill_source() -> None:
+    catalog = palette_catalog()
+
+    assert catalog["nature"]["semantic_roles"]["hero"] == "#0F4D92"
+    assert catalog["nature"]["source_url"] == "https://github.com/Yuan1z0825/nature-skills"
+    with pytest.raises(OriginOperationError):
+        normalize_palette_name("nature_skill")
+
+
+def test_apply_nature_style_uses_named_palette(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    hero = FakePlot()
+    baseline = FakePlot()
+    graph = FakeGraph(FakeLayer([hero, baseline]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style(
+        "Graph1",
+        palette_role="hero,baseline",
+        palette_name="nature",
+    )
+
+    assert hero.color == (15, 77, 146)
+    assert baseline.color == (182, 67, 66)
+    assert result["palette_name"] == "nature"
+    assert result["diagnostics"]["palette_name"] == "nature"
     assert result["diagnostics"]["checklist"][3]["passed"] is True
 
 
@@ -1217,7 +1251,7 @@ def test_diagnose_graph_reports_semantic_palette_mismatch(
 ) -> None:
     client = OriginClient()
     plot = FakePlot()
-    plot.color = (213, 94, 0)
+    plot.color = (182, 67, 66)
     plot.transparency = 0
     layer = FakeLayer([plot])
     layer.axis("x").title = "Time"

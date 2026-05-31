@@ -20,8 +20,12 @@ from ..chart_palette import (
     nature_chart_type_for_plot_id,
     nature_palette,
     nature_semantic_palette,
+    named_acceptable_palette,
+    named_palette,
+    named_semantic_palette,
     normalize_chart_intent,
     normalize_chart_type,
+    normalize_palette_name,
     palette_roles,
 )
 from ..errors import OriginDependencyError, OriginOperationError
@@ -88,6 +92,10 @@ class _OriginClientBase:
     _nature_palette = staticmethod(nature_palette)
     _nature_semantic_palette = staticmethod(nature_semantic_palette)
     _nature_acceptable_palette = staticmethod(nature_acceptable_palette)
+    _normalize_palette_name = staticmethod(normalize_palette_name)
+    _named_palette = staticmethod(named_palette)
+    _named_semantic_palette = staticmethod(named_semantic_palette)
+    _named_acceptable_palette = staticmethod(named_acceptable_palette)
     _palette_roles = staticmethod(palette_roles)
     _normalize_chart_type = staticmethod(normalize_chart_type)
     _nature_chart_style = staticmethod(nature_chart_style)

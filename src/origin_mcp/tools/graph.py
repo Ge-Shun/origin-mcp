@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from origin_mcp.chart_palette import palette_catalog
 from origin_mcp.models import (
     AxisSettingsRequest,
     GraphFormatRequest,
@@ -16,6 +17,13 @@ from ._shared import (
     _wrap,
     client,
 )
+
+
+@_mcp_tool()
+def origin_palette_catalog() -> dict[str, Any]:
+    """List built-in palette names, semantic roles, and source links."""
+
+    return _wrap(lambda: _ok("Listed Origin MCP palettes.", palettes=palette_catalog()))
 
 
 @_mcp_tool()
@@ -277,6 +285,7 @@ def origin_apply_nature_style(
     tick_length: int = 3,
     show_legend: bool = True,
     palette_role: str | None = None,
+    palette_name: str | None = None,
     run_diagnostics: bool = True,
 ) -> dict[str, Any]:
     """Apply a compact Nature-style scientific figure preset."""
@@ -299,6 +308,7 @@ def origin_apply_nature_style(
                 tick_length=tick_length,
                 show_legend=show_legend,
                 palette_role=palette_role,
+                palette_name=palette_name,
                 run_diagnostics=run_diagnostics,
             ),
         )
@@ -310,6 +320,7 @@ def origin_diagnose_graph(
     graph_name: str | None = None,
     style: str | None = None,
     palette_role: str | None = None,
+    palette_name: str | None = None,
     require_axis_titles: bool = True,
     require_plots: bool = True,
     require_legend: bool = False,
@@ -330,6 +341,7 @@ def origin_diagnose_graph(
                 graph_name=graph_name,
                 style=style,
                 palette_role=palette_role,
+                palette_name=palette_name,
                 require_axis_titles=require_axis_titles,
                 require_plots=require_plots,
                 require_legend=require_legend,

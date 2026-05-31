@@ -52,6 +52,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_set_axis",
         "origin_get_graph_info",
         "origin_get_layer_info",
+        "origin_palette_catalog",
         "origin_format_graph",
         "origin_export_graph",
         "origin_run_analysis",

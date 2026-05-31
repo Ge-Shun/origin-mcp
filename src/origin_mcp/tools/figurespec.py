@@ -224,6 +224,7 @@ def _create_base_graph(
             x_label=layer.x.title,
             y_label=layer.y.title,
             style_mode=_style_mode(spec),
+            palette_name=spec.style.palette_name,
             export_path=first_export,
         )
         return worksheet, graph, command
@@ -252,6 +253,7 @@ def _create_base_graph(
         y_label=layer.y.title,
         show_legend=_show_legend(spec),
         style_mode=_style_mode(spec),
+        palette_name=spec.style.palette_name,
         export_path=first_export,
     )
     return worksheet, graph, None
@@ -599,6 +601,7 @@ def _diagnose_if_requested(spec: FigureSpec, graph_name: str | None) -> dict[str
         graph_name=graph_name,
         style=spec.style.theme,
         palette_role=spec.style.palette_role,
+        palette_name=spec.style.palette_name,
         require_axis_titles=bool(spec.export.qa.get("require_axis_titles", True)),
         require_plots=bool(spec.export.qa.get("require_plots", True)),
         require_legend=bool(spec.export.qa.get("require_legend", False)),

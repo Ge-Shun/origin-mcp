@@ -33,6 +33,7 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     assert len(names) == len(server.COMPACT_TOOL_NAMES)
     assert names == server.COMPACT_TOOL_NAMES
     assert "origin_plot_line" in names
+    assert "origin_palette_catalog" in names
     assert "origin_set_axis" in names
 
 
@@ -52,7 +53,7 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 151
+    assert int(output.strip()) == 152
 
 
 def test_error_response_includes_stable_error_code() -> None:

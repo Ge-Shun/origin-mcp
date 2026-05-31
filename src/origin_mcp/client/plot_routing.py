@@ -86,6 +86,7 @@ class _PlotRoutingMixin(_OriginClientBase):
         x_label: str | None = None,
         y_label: str | None = None,
         style_mode: str = "origin_default",
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> dict[str, Any]:
         recommendation = self.recommend_chart(
@@ -126,6 +127,7 @@ class _PlotRoutingMixin(_OriginClientBase):
                 x_label=x_label,
                 y_label=y_label,
                 style_mode=style_mode_actual,
+                palette_name=palette_name,
                 export_path=export_path,
             )
         else:
@@ -152,6 +154,7 @@ class _PlotRoutingMixin(_OriginClientBase):
                 y_error_col=y_error_col if y_error_col is not None else selected.get("y_error_col"),
                 x_error_col=x_error_col if x_error_col is not None else selected.get("x_error_col"),
                 style_mode=style_mode_actual,
+                palette_name=palette_name,
                 export_path=export_path,
             )
             command = None
@@ -159,6 +162,7 @@ class _PlotRoutingMixin(_OriginClientBase):
             graph_name=graph.graph_name,
             style=style_mode_actual if style_mode_actual == "nature" else None,
             palette_role=selected.get("palette_role"),
+            palette_name=palette_name,
             export_path=export_path,
         )
         return {
@@ -209,6 +213,7 @@ class _PlotRoutingMixin(_OriginClientBase):
         y_label: str | None = None,
         style_mode: str = "origin_default",
         palette_role: str | list[str] | None = None,
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> dict[str, Any]:
         route = self.chart_atlas_route(intent)
@@ -250,6 +255,7 @@ class _PlotRoutingMixin(_OriginClientBase):
                 x_label=x_label,
                 y_label=y_label,
                 style_mode=initial_style,
+                palette_name=palette_name,
                 export_path=export_path,
             )
         else:
@@ -275,6 +281,7 @@ class _PlotRoutingMixin(_OriginClientBase):
                 y_error_col=y_error_col,
                 x_error_col=x_error_col,
                 style_mode=initial_style,
+                palette_name=palette_name,
                 export_path=export_path,
             )
 
@@ -284,6 +291,7 @@ class _PlotRoutingMixin(_OriginClientBase):
                 graph_name=graph.graph_name,
                 chart_type=str(route["chart_type"]),
                 palette_role=route_palette,
+                palette_name=palette_name,
             )
             if export_path is not None:
                 self._export_plot_command_graph(export_path, graph.graph_name)
@@ -307,6 +315,7 @@ class _PlotRoutingMixin(_OriginClientBase):
             graph_name=graph.graph_name,
             style=style_mode_actual if style_mode_actual == "nature" else None,
             palette_role=route_palette,
+            palette_name=palette_name,
             export_path=export_path,
         )
         return {
