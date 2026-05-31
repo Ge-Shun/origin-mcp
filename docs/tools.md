@@ -114,8 +114,8 @@ palette such as `nature`, `nmi_pastel`, `nature_imaging`,
 default.
 
 Nature-style typography uses the legend size as the visual anchor. Defaults are
-legend 18 pt, axis titles 16 pt, tick labels 14 pt, and general graph/image
-annotations 14 pt. FigureSpec annotations use the same 14 pt default unless
+legend 20 pt, axis titles 20 pt, tick labels 18 pt, and general graph/image
+annotations 18 pt. FigureSpec annotations use the same 18 pt default unless
 `style.annotation_font_size` or an individual annotation `style.font_size`
 overrides it.
 

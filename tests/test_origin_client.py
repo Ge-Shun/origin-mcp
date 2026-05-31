@@ -1259,14 +1259,14 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert "yl.font=font(Arial);" in scripts[-1]
     assert 'xb.text$="\\f:Arial(Axis)";' in scripts[-1]
     assert 'yl.text$="\\f:Arial(Axis)";' in scripts[-1]
-    assert "layer.x.label.pt=16;" in scripts[-1]
-    assert "layer.y.label.pt=16;" in scripts[-1]
-    assert "layer.x.ticklabel.pt=14;" in scripts[-1]
-    assert "layer.y.ticklabel.pt=14;" in scripts[-1]
-    assert "xb.fsize=16;" in scripts[-1]
-    assert "yl.fsize=16;" in scripts[-1]
+    assert "layer.x.label.pt=20;" in scripts[-1]
+    assert "layer.y.label.pt=20;" in scripts[-1]
+    assert "layer.x.ticklabel.pt=18;" in scripts[-1]
+    assert "layer.y.ticklabel.pt=18;" in scripts[-1]
+    assert "xb.fsize=20;" in scripts[-1]
+    assert "yl.fsize=20;" in scripts[-1]
     assert "legend.font=font(Arial);" in scripts[-1]
-    assert "legend.fsize=18;" in scripts[-1]
+    assert "legend.fsize=20;" in scripts[-1]
     assert "range __omcpNaturePlot1 = !1;" in scripts[-1]
     assert "set __omcpNaturePlot1 -w 1500;" in scripts[-1]
     assert "set __omcpNaturePlot1 -wp 3.0;" in scripts[-1]
@@ -1595,10 +1595,10 @@ def test_apply_image_panel_style_adds_panel_metadata(
     label_texts = {label.text for label in graph.layer.labels.values()}
     assert {"A", "Channel 1", "10 um", "min-max matched"} <= label_texts
     labels_by_text = {label.text: label for label in graph.layer.labels.values()}
-    assert labels_by_text["A"].properties["fsize"] == 16
-    assert labels_by_text["Channel 1"].properties["fsize"] == 14
-    assert labels_by_text["10 um"].properties["fsize"] == 14
-    assert labels_by_text["min-max matched"].properties["fsize"] == 14
+    assert labels_by_text["A"].properties["fsize"] == 20
+    assert labels_by_text["Channel 1"].properties["fsize"] == 18
+    assert labels_by_text["10 um"].properties["fsize"] == 18
+    assert labels_by_text["min-max matched"].properties["fsize"] == 18
     scale_bar = next(
         item for item in result["diagnostics"]["checklist"] if item["name"] == "scale_bar"
     )

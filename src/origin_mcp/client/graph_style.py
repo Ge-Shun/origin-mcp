@@ -6,10 +6,10 @@ from typing import Any
 from ..errors import OriginOperationError
 from .base import _OriginClientBase
 
-NATURE_LEGEND_FONT_SIZE = 18
-NATURE_AXIS_TITLE_SIZE = 16
-NATURE_TICK_LABEL_SIZE = 14
-NATURE_ANNOTATION_FONT_SIZE = 14
+NATURE_LEGEND_FONT_SIZE = 20
+NATURE_AXIS_TITLE_SIZE = 20
+NATURE_TICK_LABEL_SIZE = 18
+NATURE_ANNOTATION_FONT_SIZE = 18
 
 
 class _GraphStyleMixin(_OriginClientBase):
