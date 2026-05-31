@@ -295,6 +295,7 @@ class FigureStyleSpec(BaseModel):
     theme: Literal["origin_default", "template", "theme", "none", "nature"] = "origin_default"
     template: str | None = None
     font_family: str | None = None
+    annotation_font_size: int | None = None
     palette_role: str | None = None
     palette_name: str | None = None
 

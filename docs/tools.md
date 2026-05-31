@@ -113,6 +113,12 @@ palette such as `nature`, `nmi_pastel`, `nature_imaging`,
 `ORIGIN_MCP_NATURE_PALETTE` or `ORIGIN_MCP_PALETTE` to change the process-wide
 default.
 
+Nature-style typography uses the legend size as the visual anchor. Defaults are
+legend 18 pt, axis titles 16 pt, tick labels 14 pt, and general graph/image
+annotations 14 pt. FigureSpec annotations use the same 14 pt default unless
+`style.annotation_font_size` or an individual annotation `style.font_size`
+overrides it.
+
 For existing plots, `origin_set_plot_style` controls color, line width/style,
 symbols, transparency, and column/bar width on a zero-based `layer_index`.
 Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make

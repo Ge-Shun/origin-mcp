@@ -184,6 +184,12 @@ def test_origin_execute_figure_spec_runs_single_layer_mvp(
     assert "export_graph" in called
     assert "diagnose_graph" in called
     assert "save_project" in called
+    panel_tag_call = next(
+        kwargs
+        for name, kwargs in fake.calls
+        if name == "add_graph_label" and kwargs["name"] == "panel_a_panel_tag"
+    )
+    assert panel_tag_call["font_size"] == 14
 
 
 def test_origin_execute_figure_spec_rejects_missing_columns(tmp_path: Path) -> None:

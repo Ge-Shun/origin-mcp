@@ -6,6 +6,11 @@ from typing import Any
 from ..errors import OriginOperationError
 from .base import _OriginClientBase
 
+NATURE_LEGEND_FONT_SIZE = 18
+NATURE_AXIS_TITLE_SIZE = 16
+NATURE_TICK_LABEL_SIZE = 14
+NATURE_ANNOTATION_FONT_SIZE = 14
+
 
 class _GraphStyleMixin(_OriginClientBase):
     """Style presets and graph quality diagnostics.
@@ -25,9 +30,9 @@ class _GraphStyleMixin(_OriginClientBase):
         page_width: float | None = None,
         page_height: float | None = None,
         font_family: str = "Arial",
-        axis_title_size: int = 10,
-        tick_label_size: int = 9,
-        legend_font_size: int = 18,
+        axis_title_size: int = NATURE_AXIS_TITLE_SIZE,
+        tick_label_size: int = NATURE_TICK_LABEL_SIZE,
+        legend_font_size: int = NATURE_LEGEND_FONT_SIZE,
         line_width: float = 3.0,
         symbol_size: float = 4.5,
         tick_length: int = 3,
@@ -416,7 +421,7 @@ class _GraphStyleMixin(_OriginClientBase):
         scale_bar_label: str | None = None,
         dynamic_range_label: str | None = None,
         dark_panel: bool = False,
-        font_size: int = 8,
+        font_size: int = NATURE_ANNOTATION_FONT_SIZE,
         run_diagnostics: bool = True,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)

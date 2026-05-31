@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from origin_mcp.client.graph_style import NATURE_ANNOTATION_FONT_SIZE
 from origin_mcp.file_io import read_table
 from origin_mcp.models import FigureExportFormatSpec, FigureSpec
 
@@ -570,6 +571,7 @@ def _apply_annotations(
     layer_indexes: dict[str, int],
 ) -> list[dict[str, Any]]:
     results = []
+    annotation_font_size = spec.style.annotation_font_size or NATURE_ANNOTATION_FONT_SIZE
     for layer in spec.layers:
         if layer.panel_tag:
             results.append(
@@ -578,7 +580,7 @@ def _apply_annotations(
                     graph_name=graph_name,
                     layer_index=layer_indexes[layer.id],
                     name=f"{layer.id}_panel_tag",
-                    font_size=8,
+                    font_size=annotation_font_size,
                 )
             )
     for annotation in spec.annotations:
@@ -599,7 +601,7 @@ def _apply_annotations(
                     graph_name=graph_name,
                     layer_index=layer_index,
                     name=annotation.id,
-                    font_size=8,
+                    font_size=int(annotation.style.get("font_size") or annotation_font_size),
                 )
             )
         elif kind == "reference_line" and annotation.value is not None:
