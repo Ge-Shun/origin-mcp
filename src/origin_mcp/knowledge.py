@@ -208,11 +208,11 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         body=(
             "style_mode='origin_default' lets Origin resolve the graph template and keeps Origin "
             "styling. The aliases 'template', 'theme', and 'none' also preserve Origin defaults. "
-            "style_mode='publication' applies compact publication styling. style_mode='nature' "
-            "applies a Nature-style scientific preset with colorblind-safe colors, compact "
-            "typography, thin lines, short ticks, and QA diagnostics."
+            "style_mode='nature' applies a Nature-style scientific preset with colorblind-safe "
+            "colors, Arial-compatible typography, Nature line weights, short ticks, and QA "
+            "diagnostics."
         ),
-        keywords=("style_mode", "origin_default", "publication", "nature", "template"),
+        keywords=("style_mode", "origin_default", "nature", "template"),
     ),
     KnowledgeEntry(
         collection="reference",
@@ -1545,7 +1545,6 @@ def _tool_group_for_name(name: str) -> str:
         "origin_format_graph",
         "origin_set_axis",
         "origin_set_plot_style",
-        "origin_apply_publication_style",
         "origin_apply_nature_style",
         "origin_diagnose_graph",
         "origin_apply_image_panel_style",

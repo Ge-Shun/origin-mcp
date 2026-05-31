@@ -234,42 +234,6 @@ def origin_set_plot_style(
 
 
 @_mcp_tool()
-def origin_apply_publication_style(
-    graph_name: str | None = None,
-    layer_index: int | None = None,
-    page_width: float | None = 6.0,
-    page_height: float | None = 4.0,
-    axis_title_size: int = 18,
-    tick_label_size: int = 14,
-    legend_font_size: int = 12,
-    line_width: float = 2.0,
-    symbol_size: float = 8.0,
-    tick_length: int = 6,
-    show_legend: bool = True,
-) -> dict[str, Any]:
-    """Apply a compact publication-style graph format."""
-
-    return _wrap(
-        lambda: _ok(
-            "Applied Origin publication style.",
-            **client.apply_publication_style(
-                graph_name=graph_name,
-                layer_index=layer_index,
-                page_width=page_width,
-                page_height=page_height,
-                axis_title_size=axis_title_size,
-                tick_label_size=tick_label_size,
-                legend_font_size=legend_font_size,
-                line_width=line_width,
-                symbol_size=symbol_size,
-                tick_length=tick_length,
-                show_legend=show_legend,
-            ),
-        )
-    )
-
-
-@_mcp_tool()
 def origin_apply_nature_style(
     graph_name: str | None = None,
     layer_index: int | None = None,

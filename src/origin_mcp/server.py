@@ -62,7 +62,6 @@ from .tools.graph import (
     origin_add_reference_line,
     origin_apply_image_panel_style,
     origin_apply_nature_style,
-    origin_apply_publication_style,
     origin_arrange_layers,
     origin_change_plot_data,
     origin_change_plot_type,

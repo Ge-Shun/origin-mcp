@@ -59,7 +59,6 @@ ALLOWED_CLIENT_METHODS = {
     "delete_object",
     "set_axis",
     "set_plot_style",
-    "apply_publication_style",
     "apply_nature_style",
     "diagnose_graph",
     "recommend_chart",

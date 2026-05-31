@@ -73,7 +73,6 @@ class _OriginClientBase:
             "template": "origin_default",
             "theme": "origin_default",
             "none": "origin_default",
-            "publication": "publication",
             "nature": "nature",
             "nature_style": "nature",
             "nature-style": "nature",

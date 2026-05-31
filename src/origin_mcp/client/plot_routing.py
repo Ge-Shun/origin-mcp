@@ -443,29 +443,15 @@ class _PlotRoutingMixin(_OriginClientBase):
                 "none": (
                     "Alias for origin_default; origin-mcp does not apply extra style overrides."
                 ),
-                "publication": (
-                    "Apply origin-mcp publication styling after Origin creates the graph."
-                ),
                 "nature": ("Apply a compact Nature-style scientific figure preset after plotting."),
             },
             "mcp_overrides": {
                 "origin_default": ["title", "axis titles", "legend refresh", "axis rescale"],
-                "publication": [
-                    "title",
-                    "axis titles",
-                    "legend refresh",
-                    "axis rescale",
-                    "axis/title font sizes",
-                    "tick lengths",
-                    "line width",
-                    "symbol size",
-                    "legend font size",
-                ],
                 "nature": [
                     "Arial-compatible font settings",
-                    "small axis/title/tick/legend font sizes",
+                    "Nature axis/title/tick/legend font sizes",
                     "short ticks",
-                    "thin lines",
+                    "Nature line weights",
                     "compact symbols",
                     "colorblind-safe palette",
                     "legend frame off",

@@ -906,25 +906,18 @@ def test_plot_table_reports_origin_default_style(
     client = OriginClient()
     wks = FakeWorksheet()
     graph = FakeGraph(FakeLayer())
-    publication_calls = []
     monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
     monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
     monkeypatch.setattr(client, "_rescale", lambda _layer: None)
-    monkeypatch.setattr(
-        client,
-        "apply_publication_style",
-        lambda **kwargs: publication_calls.append(kwargs) or {"styled": True},
-    )
 
     worksheet, graph_ref = client.plot_table(path=path, kind="scatter", show_legend=False)
 
     assert worksheet.rows == 1
     assert graph_ref.template == "scatter"
     assert graph_ref.style_mode == "origin_default"
-    assert publication_calls == []
 
 
-def test_plot_table_publication_style_applies_override(
+def test_plot_table_rejects_publication_style(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -933,25 +926,17 @@ def test_plot_table_publication_style_applies_override(
     client = OriginClient()
     wks = FakeWorksheet()
     graph = FakeGraph(FakeLayer())
-    publication_calls = []
     monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
     monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
     monkeypatch.setattr(client, "_rescale", lambda _layer: None)
-    monkeypatch.setattr(
-        client,
-        "apply_publication_style",
-        lambda **kwargs: publication_calls.append(kwargs) or {"styled": True},
-    )
 
-    _, graph_ref = client.plot_table(
-        path=path,
-        kind="line",
-        show_legend=False,
-        style_mode="publication",
-    )
-
-    assert graph_ref.style_mode == "publication"
-    assert publication_calls == [{"graph_name": "Graph1"}]
+    with pytest.raises(OriginOperationError, match="Unsupported style_mode"):
+        client.plot_table(
+            path=path,
+            kind="line",
+            show_legend=False,
+            style_mode="publication",
+        )
 
 
 def test_plot_table_nature_style_applies_override(
@@ -1092,27 +1077,6 @@ def test_default_plot_config_discovers_user_templates(tmp_path: Path) -> None:
     assert config["default_templates"]["scatter"] == "scatter"
     assert config["template_search_paths"]["user_files"] == str(tmp_path)
     assert config["templates"]["discovered"][0]["name"] == "CustomLine"
-
-
-def test_apply_publication_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OriginClient()
-    plot = FakePlot()
-    graph = FakeGraph(FakeLayer([plot]))
-    scripts = []
-    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
-    monkeypatch.setattr(
-        client,
-        "run_labtalk",
-        lambda script: scripts.append(script) or {"result": True},
-    )
-    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
-
-    result = client.apply_publication_style("Graph1", page_width=None, page_height=None)
-
-    assert result["styled_plots"] == 1
-    assert "-w 2.0" in plot.commands
-    assert plot.symbol_size == 8.0
-    assert "layer.x.label.pt=18;" in scripts[-1]
 
 
 def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> None:

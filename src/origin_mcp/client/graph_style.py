@@ -3,81 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..errors import OriginOperationError
 from .base import _OriginClientBase
 
 
 class _GraphStyleMixin(_OriginClientBase):
     """Style presets and graph quality diagnostics.
 
-    Methods here apply opinionated styling (publication, Nature-style, image
-    panel) or evaluate the current graph against a QA checklist. They lean
+    Methods here apply opinionated styling (Nature-style, image panel) or
+    evaluate the current graph against a QA checklist. They lean
     on graph editing helpers (``_find_or_active_graph``, ``_layer_plots``,
     ``_set_origin_property`` etc.) from :class:`_GraphFormattingMixin` via
     ``self.<helper>`` MRO dispatch.
     """
-
-    def apply_publication_style(
-        self,
-        graph_name: str | None = None,
-        layer_index: int | None = None,
-        page_width: float | None = 6.0,
-        page_height: float | None = 4.0,
-        axis_title_size: int = 18,
-        tick_label_size: int = 14,
-        legend_font_size: int = 12,
-        line_width: float = 2.0,
-        symbol_size: float = 8.0,
-        tick_length: int = 6,
-        show_legend: bool = True,
-    ) -> dict[str, Any]:
-        graph = self._find_or_active_graph(graph_name)
-        graph_name_actual = self._object_name(graph, default=graph_name or "")
-        if page_width is not None or page_height is not None:
-            if page_width is not None:
-                self._set_origin_property(graph, "width", page_width)
-            if page_height is not None:
-                self._set_origin_property(graph, "height", page_height)
-        indexes = self._selected_layer_indexes(graph, layer_index)
-        styled_plots = 0
-        for index in indexes:
-            layer = self._graph_layer(graph, index)
-            plots = self._layer_plots(layer)
-            for plot in plots:
-                if line_width is not None:
-                    self._set_plot_command(plot, f"-w {line_width}")
-                if symbol_size is not None:
-                    self._set_origin_property(plot, "symbol_size", symbol_size)
-            styled_plots += len(plots)
-        script_parts = [f"win -a {graph_name_actual};"] if graph_name_actual else []
-        for index in indexes:
-            script_parts.extend(
-                [
-                    f"layer -s {index + 1};",
-                    f"layer.x.label.pt={axis_title_size};",
-                    f"layer.y.label.pt={axis_title_size};",
-                    f"layer.x.ticklabel.pt={tick_label_size};",
-                    f"layer.y.ticklabel.pt={tick_label_size};",
-                    f"layer.x.ticks.len={tick_length};",
-                    f"layer.y.ticks.len={tick_length};",
-                ]
-            )
-            if show_legend:
-                script_parts.append(f"legend.fsize={legend_font_size};")
-        script = " ".join(script_parts)
-        result = self.run_labtalk(script) if script_parts else {"result": None}
-        if show_legend:
-            try:
-                self.format_legend(graph_name_actual, font_size=legend_font_size)
-            except OriginOperationError:
-                pass
-        return {
-            "graph_name": graph_name_actual,
-            "styled_layers": indexes,
-            "styled_plots": styled_plots,
-            "script": script,
-            **result,
-        }
 
     def apply_nature_style(
         self,

@@ -141,9 +141,7 @@ class _TablePlotMixin(_OriginClientBase):
         )
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
         self._remember_graph_alias(graph_name, actual_graph_name)
-        if style_mode_actual == "publication":
-            self.apply_publication_style(graph_name=actual_graph_name)
-        elif style_mode_actual == "nature":
+        if style_mode_actual == "nature":
             style_kwargs: dict[str, Any] = {
                 "graph_name": actual_graph_name,
                 "chart_type": kind,
@@ -251,9 +249,7 @@ class _TablePlotMixin(_OriginClientBase):
                 pass
         self._suppress_graph_title_text(graph_name=graph_name_actual, title=title)
         style_mode_actual = self._normalize_style_mode(style_mode)
-        if style_mode_actual == "publication":
-            self.apply_publication_style(graph_name=graph_name_actual)
-        elif style_mode_actual == "nature":
+        if style_mode_actual == "nature":
             style_kwargs = {
                 "graph_name": graph_name_actual,
                 "chart_type": self._nature_chart_type_for_plot_id(plot_type_id, template),

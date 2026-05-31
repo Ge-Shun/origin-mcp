@@ -26,7 +26,6 @@ class PlotStyleMode(str, Enum):
     template = "template"
     theme = "theme"
     none = "none"
-    publication = "publication"
     nature = "nature"
 
 
@@ -106,7 +105,7 @@ class PlotTableRequest(TableImportRequest):
         default=PlotStyleMode.origin_default,
         description=(
             "Graph styling policy. origin_default/template/theme/none preserve Origin template "
-            "defaults; publication/nature apply origin-mcp styling after plotting."
+            "defaults; nature applies origin-mcp styling after plotting."
         ),
     )
     export_path: Path | None = Field(default=None, description="Optional graph export path.")
@@ -288,9 +287,7 @@ class FigureAnnotationSpec(BaseModel):
 
 
 class FigureStyleSpec(BaseModel):
-    theme: Literal["origin_default", "template", "theme", "none", "publication", "nature"] = (
-        "origin_default"
-    )
+    theme: Literal["origin_default", "template", "theme", "none", "nature"] = "origin_default"
     template: str | None = None
     font_family: str | None = None
     palette_role: str | None = None

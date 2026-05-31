@@ -53,7 +53,7 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 152
+    assert int(output.strip()) == 151
 
 
 def test_error_response_includes_stable_error_code() -> None:
