@@ -1481,6 +1481,23 @@ def test_add_plot_to_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     assert layer.added[0][1]["coly"] == "force"
 
 
+def test_set_plot_style_converts_line_width_points_to_origin_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.set_plot_style("Graph1", line_width=2.5)
+
+    assert result["styled_plots"] == 1
+    assert "-w 1250" in plot.commands
+    assert "-wp 2.5" in plot.commands
+    assert plot.line_width == 2.5
+    assert plot.width == 2.5
+
+
 def test_new_graph_uses_extended_templates(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     created = {}

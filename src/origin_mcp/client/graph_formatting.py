@@ -128,7 +128,7 @@ class _GraphFormattingMixin(_OriginClientBase):
             if color is not None:
                 plot.color = color
             if line_width is not None:
-                plot.set_cmd(f"-w {line_width}")
+                self._set_plot_line_width(plot, line_width)
             if line_style is not None:
                 plot.set_cmd(f"-d {line_style}")
             if symbol_kind is not None:
@@ -1160,6 +1160,20 @@ class _GraphFormattingMixin(_OriginClientBase):
         if not callable(set_cmd):
             raise OriginOperationError("Plot object does not support set_cmd().")
         set_cmd(command)
+
+    def _set_plot_line_width(self, plot: Any, line_width: float) -> None:
+        native_width = self._origin_line_width_units(line_width)
+        self._set_plot_command(plot, f"-w {native_width}")
+        self._set_plot_command(plot, f"-wp {line_width}")
+        for property_name in ("line_width", "width"):
+            try:
+                self._set_origin_property(plot, property_name, line_width)
+            except OriginOperationError:
+                pass
+
+    @staticmethod
+    def _origin_line_width_units(line_width: float) -> int:
+        return int(round(line_width * 500))
 
     @staticmethod
     def _set_origin_property(obj: Any, name: str, value: Any) -> None:

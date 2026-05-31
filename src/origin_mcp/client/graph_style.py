@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..errors import OriginOperationError
 from .base import _OriginClientBase
 
 
@@ -154,18 +155,10 @@ class _GraphStyleMixin(_OriginClientBase):
         return f"\\f:{safe_font}({text})"
 
     def _set_nature_plot_line_width(self, plot: Any, line_width: float) -> None:
-        native_width = int(round(line_width * 500))
-        self._set_plot_command(plot, f"-w {native_width}")
-        self._set_plot_command(plot, f"-wp {line_width}")
-        for property_name in ("line_width", "width"):
-            try:
-                self._set_origin_property(plot, property_name, line_width)
-            except OriginOperationError:
-                pass
+        self._set_plot_line_width(plot, line_width)
 
-    @staticmethod
-    def _nature_plot_line_width_script(plot_count: int, line_width: float) -> list[str]:
-        native_width = int(round(line_width * 500))
+    def _nature_plot_line_width_script(self, plot_count: int, line_width: float) -> list[str]:
+        native_width = self._origin_line_width_units(line_width)
         return [
             command
             for plot_index in range(1, plot_count + 1)

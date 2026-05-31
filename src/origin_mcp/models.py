@@ -151,7 +151,7 @@ class PlotStyleRequest(BaseModel):
         description="Zero-based plot index. Applies to all plots if omitted.",
     )
     color: str | tuple[int, int, int] | None = Field(default=None, description="Plot color.")
-    line_width: float | None = Field(default=None, description="Line width.")
+    line_width: float | None = Field(default=None, description="Line width in points.")
     line_style: int | None = Field(default=None, description="Origin line style integer.")
     symbol_kind: int | None = Field(default=None, description="Origin symbol kind integer.")
     symbol_size: float | None = Field(default=None, description="Symbol size.")
