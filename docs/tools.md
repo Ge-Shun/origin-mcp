@@ -33,6 +33,66 @@ In compact mode, use `origin_query_knowledge` or `origin_browse_knowledge` to
 discover the right high-level workflow instead of choosing from every
 specialized wrapper.
 
+## FigureSpec Tools
+
+`origin-mcp` includes a first-pass declarative FigureSpec workflow for
+agent-friendly plotting plans. A FigureSpec describes the desired figure in
+terms of data, page, layer, plot, annotation, style, export, and QA sections.
+The MCP server then validates the structure and translates the supported subset
+into existing Origin plotting and formatting calls.
+
+Use `origin_plan_figure_spec(spec)` to validate a JSON FigureSpec and return
+the planned Origin operations without touching Origin. Planning reads the data
+file headers and verifies that mapped columns and column indexes exist before
+any Origin calls are made. Use `origin_execute_figure_spec(spec, dry_run=false)`
+to execute the current supported subset: worksheet-backed single-panel or grid
+multi-panel figures, common plot types, axis settings, panel/legend/reference
+annotations, exports, OPJU save, and graph diagnostics. Unsupported features are
+reported in the plan instead of being guessed.
+
+Minimal JSON shape:
+
+```json
+{
+  "figure": {"id": "line_demo", "title": "Line Demo"},
+  "data": [
+    {
+      "id": "ds_line",
+      "source": "data/processed/line.csv",
+      "object": "worksheet",
+      "roles": {"x": "time", "y": "response"}
+    }
+  ],
+  "page": {"layout": "grid"},
+  "layers": [
+    {
+      "id": "panel_a",
+      "data_ref": "ds_line",
+      "grid_cell": [0, 0],
+      "x": {"title": "Time (s)", "limits": "auto"},
+      "y": {"title": "Response", "limits": "auto"},
+      "panel_tag": "(a)"
+    }
+  ],
+  "plots": [
+    {
+      "id": "plot_a",
+      "layer": "panel_a",
+      "type": "line",
+      "map": {"x": "time", "y": "response"}
+    }
+  ],
+  "style": {"theme": "nature"},
+  "export": {
+    "dir_figures": "output/figures",
+    "dir_opju": "output/opju",
+    "png": {"enabled": true},
+    "pdf": {"enabled": true},
+    "qa": {"require_opju": true, "require_axis_titles": true}
+  }
+}
+```
+
 ## Knowledge Base Tools
 
 `origin-mcp` includes a local, structured knowledge base modeled as searchable

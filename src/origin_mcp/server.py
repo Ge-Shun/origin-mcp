@@ -52,6 +52,10 @@ from .tools.bridge import (
     origin_doctor,
     origin_ping,
 )
+from .tools.figurespec import (
+    origin_execute_figure_spec,
+    origin_plan_figure_spec,
+)
 from .tools.graph import (
     origin_add_graph_label,
     origin_add_plot_to_graph,

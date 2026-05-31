@@ -31,6 +31,8 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_capabilities",
         "origin_browse_knowledge",
         "origin_query_knowledge",
+        "origin_plan_figure_spec",
+        "origin_execute_figure_spec",
         "origin_import_table",
         "origin_read_worksheet",
         "origin_write_worksheet",

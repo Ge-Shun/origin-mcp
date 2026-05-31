@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PlotKind(str, Enum):
@@ -133,6 +133,7 @@ class GraphFormatRequest(BaseModel):
 
 class AxisSettingsRequest(BaseModel):
     graph_name: str | None = Field(default=None, description="Optional graph page name.")
+    layer_index: int = Field(default=0, description="Zero-based graph layer index.")
     axis: str = Field(default="x", description="Axis name: x, y, x2, y2, z, or z2.")
     scale: str | int | None = Field(
         default=None,
@@ -187,6 +188,186 @@ class AnalysisRequest(BaseModel):
         default=100,
         description="Maximum rows to read from an output worksheet.",
     )
+
+
+class FigureMeta(BaseModel):
+    id: str = Field(description="Stable figure identifier.")
+    title: str | None = Field(default=None, description="Optional figure title/long name.")
+
+
+class FigureRuntimeSpec(BaseModel):
+    show_origin: bool = Field(default=True, description="Whether Origin should be visible.")
+    new_project: bool = Field(default=False, description="Start a fresh Origin project first.")
+    save_project: bool = Field(default=False, description="Save the Origin project after export.")
+    project_path: Path | None = Field(default=None, description="Optional OPJU/OPJ save path.")
+
+
+class FigureDataSpec(BaseModel):
+    id: str = Field(description="Dataset id referenced by layers and plots.")
+    source: Path = Field(description="Source data file path.")
+    format: str | None = Field(default=None, description="csv/tsv/txt/dat/xlsx/xls/xlsm.")
+    object: Literal["worksheet", "matrix", "xyz"] = Field(default="worksheet")
+    roles: dict[str, str | int | list[str | int]] = Field(
+        default_factory=dict,
+        description="Semantic column roles such as x, y, z, group, error, err_low, err_high.",
+    )
+    excel_sheet: str | int | None = 0
+    delimiter: str | None = None
+    encoding: str | None = None
+    header: int | None = 0
+    skiprows: int | list[int] | None = None
+    nrows: int | None = None
+    na_values: str | list[str] | None = None
+
+    @field_validator("source")
+    @classmethod
+    def source_must_exist(cls, value: Path) -> Path:
+        if not value.exists():
+            raise ValueError(f"Data file does not exist: {value}")
+        if not value.is_file():
+            raise ValueError(f"Data path is not a file: {value}")
+        supported = {".csv", ".tsv", ".txt", ".dat", ".xls", ".xlsx", ".xlsm"}
+        if value.suffix.lower() not in supported:
+            raise ValueError(f"Unsupported data file extension: {value.suffix}")
+        return value
+
+
+class FigureAxisSpec(BaseModel):
+    title: str | None = None
+    scale: str | int | None = None
+    limits: Literal["auto"] | list[float | None] | None = "auto"
+    step: float | None = None
+
+
+class FigurePageSpec(BaseModel):
+    id: str = Field(default="page_main")
+    layout: Literal["single", "grid", "custom"] = Field(default="single")
+    size_mm: list[float] | None = None
+    margins_mm: list[float] | None = None
+    panel_spacing_mm: list[float] | None = None
+
+
+class FigureLayerSpec(BaseModel):
+    id: str = Field(description="Layer/panel id.")
+    page: str | None = None
+    position_mode: Literal["grid", "absolute"] = Field(default="grid")
+    grid_cell: list[int] | None = None
+    grid_span: list[int] | None = None
+    title: str | None = None
+    panel_tag: str | None = None
+    data_ref: str | None = None
+    x: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
+    y: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
+    frame: dict[str, bool] = Field(default_factory=dict)
+
+
+class FigurePlotSpec(BaseModel):
+    id: str = Field(description="Plot primitive id.")
+    layer: str
+    type: str = Field(description="line/scatter/line_symbol/column/histogram/box/contour/heatmap.")
+    data_ref: str | None = None
+    map: dict[str, str | int | list[str | int]] = Field(
+        default_factory=dict,
+        description="Visual channel mapping such as x, y, z, group, error.",
+    )
+    style: dict[str, Any] = Field(default_factory=dict)
+    group_style: dict[str, Any] = Field(default_factory=dict)
+    uncertainty: dict[str, Any] = Field(default_factory=dict)
+
+
+class FigureAnnotationSpec(BaseModel):
+    id: str | None = None
+    type: str
+    layer: str | None = None
+    text: str | None = None
+    location: str | None = None
+    frame: bool | None = None
+    value: float | None = None
+    orientation: str | None = None
+    style: dict[str, Any] = Field(default_factory=dict)
+
+
+class FigureStyleSpec(BaseModel):
+    theme: Literal["origin_default", "template", "theme", "none", "publication", "nature"] = (
+        "origin_default"
+    )
+    template: str | None = None
+    font_family: str | None = None
+    palette_role: str | None = None
+
+
+class FigureExportFormatSpec(BaseModel):
+    enabled: bool = False
+    path: Path | None = None
+    width_px: int | None = None
+
+
+class FigureExportSpec(BaseModel):
+    dir_figures: Path | None = None
+    dir_opju: Path | None = None
+    png: FigureExportFormatSpec | bool | None = None
+    pdf: FigureExportFormatSpec | bool | None = None
+    svg: FigureExportFormatSpec | bool | None = None
+    tiff: FigureExportFormatSpec | bool | None = None
+    save_clean_data: bool = False
+    qa: dict[str, Any] = Field(default_factory=dict)
+
+
+class FigureSpec(BaseModel):
+    figure: FigureMeta
+    runtime: FigureRuntimeSpec = Field(default_factory=FigureRuntimeSpec)
+    data: list[FigureDataSpec] = Field(default_factory=list)
+    page: FigurePageSpec = Field(default_factory=FigurePageSpec)
+    layers: list[FigureLayerSpec] = Field(default_factory=list)
+    plots: list[FigurePlotSpec] = Field(default_factory=list)
+    annotations: list[FigureAnnotationSpec] = Field(default_factory=list)
+    style: FigureStyleSpec = Field(default_factory=FigureStyleSpec)
+    export: FigureExportSpec = Field(default_factory=FigureExportSpec)
+
+    @model_validator(mode="after")
+    def validate_refs(self) -> "FigureSpec":
+        if not self.data:
+            raise ValueError("FigureSpec requires at least one data item.")
+        if not self.layers:
+            raise ValueError("FigureSpec requires at least one layer.")
+        if not self.plots:
+            raise ValueError("FigureSpec requires at least one plot.")
+
+        data_ids = _require_unique("data", [item.id for item in self.data])
+        layer_ids = _require_unique("layers", [item.id for item in self.layers])
+        _require_unique("plots", [item.id for item in self.plots])
+
+        for layer in self.layers:
+            if layer.data_ref is not None and layer.data_ref not in data_ids:
+                raise ValueError(
+                    f"Layer {layer.id!r} references unknown data_ref {layer.data_ref!r}."
+                )
+        for plot in self.plots:
+            if plot.layer not in layer_ids:
+                raise ValueError(f"Plot {plot.id!r} references unknown layer {plot.layer!r}.")
+            if plot.data_ref is not None and plot.data_ref not in data_ids:
+                raise ValueError(
+                    f"Plot {plot.id!r} references unknown data_ref {plot.data_ref!r}."
+                )
+        for annotation in self.annotations:
+            if annotation.layer is not None and annotation.layer not in layer_ids:
+                raise ValueError(
+                    f"Annotation {annotation.id or annotation.type!r} references unknown layer "
+                    f"{annotation.layer!r}."
+                )
+        return self
+
+
+def _require_unique(label: str, values: list[str]) -> set[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    if duplicates:
+        raise ValueError(f"Duplicate {label} ids: {sorted(duplicates)}")
+    return seen
 
 
 class ToolResult(BaseModel):
