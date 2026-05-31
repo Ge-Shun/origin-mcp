@@ -88,11 +88,35 @@ class _LifecycleMixin(_OriginClientBase):
         path.parent.mkdir(parents=True, exist_ok=True)
         op = self.op
 
+        method = "originpro.save"
+        fallback_error: str | None = None
         if hasattr(op, "save"):
-            op.save(str(path))
+            try:
+                op.save(str(path))
+            except Exception as exc:
+                fallback_error = f"{type(exc).__name__}: {exc}"
+                method = "labtalk.pe_save"
+                result = self.run_labtalk(
+                    f'pe_save fname:="{self._escape_labtalk(str(path))}";'
+                )
+                if result.get("result") is False:
+                    raise OriginOperationError(
+                        f"Origin project save failed via originpro.save and pe_save: "
+                        f"{fallback_error}",
+                        error_code="project_save_failed",
+                    ) from exc
         else:
-            self.run_labtalk(f'save -i "{path}";')
-        return {"path": str(path)}
+            method = "labtalk.pe_save"
+            result = self.run_labtalk(f'pe_save fname:="{self._escape_labtalk(str(path))}";')
+            if result.get("result") is False:
+                raise OriginOperationError(
+                    f"Origin project save failed: {path}",
+                    error_code="project_save_failed",
+                )
+        response: dict[str, Any] = {"path": str(path), "saved": True, "method": method}
+        if fallback_error is not None:
+            response["fallback_error"] = fallback_error
+        return response
 
     def quit(self) -> dict[str, Any]:
         op = self.op
@@ -157,7 +181,7 @@ class _LifecycleMixin(_OriginClientBase):
             )
 
         if not capture_log:
-            return {"result": func(script)}
+            return self._labtalk_result(func(script), script=script)
 
         log_path = Path(tempfile.gettempdir()) / f"origin-mcp-labtalk-{uuid.uuid4().hex}.log"
         safe_log_path = self._escape_labtalk(str(log_path))
@@ -175,7 +199,17 @@ class _LifecycleMixin(_OriginClientBase):
         message_log = self._read_labtalk_capture(log_path)
         message_log["start_result"] = start_result
         message_log["end_result"] = end_result
-        return {"result": result, "message_log": message_log}
+        response = self._labtalk_result(result, script=script)
+        response["message_log"] = message_log
+        return response
+
+    @staticmethod
+    def _labtalk_result(result: Any, script: str) -> dict[str, Any]:
+        response: dict[str, Any] = {"result": result}
+        if result is False:
+            response["warning"] = "Origin returned false for this LabTalk script."
+            response["script_preview"] = script[:500]
+        return response
 
     @staticmethod
     def _read_labtalk_capture(path: Path) -> dict[str, Any]:

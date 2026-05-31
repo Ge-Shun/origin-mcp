@@ -33,6 +33,16 @@ In compact mode, use `origin_query_knowledge` or `origin_browse_knowledge` to
 discover the right high-level workflow instead of choosing from every
 specialized wrapper.
 
+Named plotting calls are idempotent by default where Origin exposes an output
+graph layer target. When a table plotting tool is called with `graph_name`,
+origin-mcp first looks for that graph page, clears its existing plots, and draws
+the new result into the same page instead of creating `Graph2`, `Graph3`, and so
+on. If no `book_name` is supplied, the imported data is stored in a stable
+workbook named from `graph_name` plus `_Data`; repeated calls overwrite that
+worksheet. Calls without explicit names still create fresh Origin objects. A few
+worksheet-command Plot Type ID routes that do not expose an output graph target
+still use Origin's native creation route and do not clear an existing graph.
+
 ## FigureSpec Tools
 
 `origin-mcp` includes a first-pass declarative FigureSpec workflow for
@@ -102,6 +112,21 @@ palette such as `nature`, `nmi_pastel`, `nature_imaging`,
 `nature`, now backed by the Nature Skills semantic palette. Set
 `ORIGIN_MCP_NATURE_PALETTE` or `ORIGIN_MCP_PALETTE` to change the process-wide
 default.
+
+For existing plots, `origin_set_plot_style` controls color, line width/style,
+symbols, transparency, and column/bar width on a zero-based `layer_index`.
+Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make
+columns or bars narrower. FigureSpec plot `style` entries can use the same
+fields for supported plot primitives.
+
+Use `origin_plot_style_capabilities(chart_type, query)` before changing an
+unfamiliar chart type. It is backed by the same registry as the knowledge base
+and maps user-facing terms such as `柱宽`, `折线粗细`, `点大小`, `色带`, and
+`误差棒帽宽` to MCP setter parameters, Origin/LabTalk routes, readable fields,
+and implementation status. Properties marked `implemented` have stable MCP
+entry points; properties marked `planned` are intentionally documented so the
+assistant can report that a semantic setter is not yet available instead of
+guessing a LabTalk flag.
 
 ## Knowledge Base Tools
 

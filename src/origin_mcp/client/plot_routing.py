@@ -346,7 +346,15 @@ class _PlotRoutingMixin(_OriginClientBase):
         add_plot = getattr(layer, "add_plot", None)
         if not callable(add_plot):
             raise OriginOperationError("Graph layer does not support add_plot().")
+        before_count = len(self._layer_plots(layer))
         add_plot(data_range, type=plot_type)
+        after_count = len(self._layer_plots(layer))
+        if after_count <= before_count:
+            raise OriginOperationError(
+                "Origin created a graph page but no plot was added. "
+                "Check data_range, plot_type, and template.",
+                error_code="empty_graph_created",
+            )
         self.format_graph(
             graph=graph,
             title=title,

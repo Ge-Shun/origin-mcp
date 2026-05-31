@@ -200,6 +200,7 @@ def origin_plot_column(
     x_label: str | None = None,
     y_label: str | None = None,
     y_error_col: str | int | None = None,
+    bar_gap: float | None = None,
     show_legend: bool = True,
     style_mode: str = "origin_default",
     export_path: str | None = None,
@@ -226,6 +227,7 @@ def origin_plot_column(
         x_label=x_label,
         y_label=y_label,
         y_error_col=y_error_col,
+        bar_gap=bar_gap,
         show_legend=show_legend,
         style_mode=style_mode,
         export_path=export_path,
@@ -1365,6 +1367,7 @@ def _plot_csv(
     z_col: str | int | None = None,
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
+    bar_gap: float | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:
         req = PlotTableRequest(
@@ -1418,6 +1421,8 @@ def _plot_csv(
             style_mode=req.style_mode.value,
             export_path=req.export_path,
         )
+        if bar_gap is not None:
+            client.set_plot_style(graph_name=graph.graph_name, bar_gap=bar_gap)
         return _ok(
             f"Created {kind.value} plot from table data.",
             worksheet=worksheet.as_dict(),
@@ -1447,6 +1452,7 @@ def _plot_table_id(
     x_label: str | None = None,
     y_label: str | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:

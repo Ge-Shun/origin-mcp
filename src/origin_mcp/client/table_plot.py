@@ -111,7 +111,10 @@ class _TablePlotMixin(_OriginClientBase):
             else None
         )
 
-        wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+        actual_book_name = book_name or (
+            self._safe_filename(f"{graph_name}_Data") if graph_name else None
+        )
+        wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
         wks.from_df(df)
 
         style_mode_actual = self._normalize_style_mode(style_mode)
@@ -131,6 +134,10 @@ class _TablePlotMixin(_OriginClientBase):
                 x_error_name=xerr_name,
             )
 
+        actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
+        if kind in {"column", "c"} and len(y_names) > 1:
+            self._group_layer_plots(layer, graph_name=actual_graph_name, layer_index=0)
+
         self.format_graph(
             graph=graph,
             title=title,
@@ -139,7 +146,6 @@ class _TablePlotMixin(_OriginClientBase):
             show_legend=show_legend,
             rescale=True,
         )
-        actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
         self._remember_graph_alias(graph_name, actual_graph_name)
         if style_mode_actual == "nature":
             style_kwargs: dict[str, Any] = {
@@ -203,7 +209,10 @@ class _TablePlotMixin(_OriginClientBase):
 
         columns = [str(col) for col in df.columns]
         selected = self._resolve_selected_columns(columns, selected_cols)
-        wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+        actual_book_name = book_name or (
+            self._safe_filename(f"{graph_name}_Data") if graph_name else None
+        )
+        wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
         wks.from_df(df)
         command, range_option = self._table_plot_command_options(plot_type_id)
         if command in {"plotxyz", "worksheet"}:
@@ -211,6 +220,10 @@ class _TablePlotMixin(_OriginClientBase):
         data_range = self._worksheet_range_expr(wks, columns, selected)
         graph_name_actual = graph_name or self._safe_filename(f"{template}_{plot_type_id}")
         existing_graphs = self._graph_page_names()
+        existing_graph = self._find_graph_optional(graph_name_actual)
+        reuse_existing_graph = existing_graph is not None and command != "worksheet"
+        if reuse_existing_graph:
+            self._clear_graph_plots(existing_graph, graph_name_actual)
         if command == "worksheet":
             script = self._worksheet_plot_command(columns, selected, plot_type_id, template)
             result = self._execute_on_worksheet(wks, script)
@@ -222,6 +235,7 @@ class _TablePlotMixin(_OriginClientBase):
                 plot_type_id=plot_type_id,
                 template=template,
                 graph_name=graph_name_actual,
+                reuse_existing=reuse_existing_graph,
             )
             result = self.run_labtalk(script)
         self._assert_plot_type_command(
@@ -431,6 +445,13 @@ class _TablePlotMixin(_OriginClientBase):
 
 
     def _new_graph(self, kind: str, graph_name: str | None, template: str | None = None) -> Any:
+        if graph_name:
+            graph = self._find_graph_optional(graph_name)
+            if graph is not None:
+                self._clear_graph_plots(graph, graph_name)
+                self._set_page_long_name(graph, graph_name)
+                return graph
+
         op = self.op
         new_graph = getattr(op, "new_graph", None)
         if not callable(new_graph):
@@ -476,11 +497,17 @@ class _TablePlotMixin(_OriginClientBase):
         plot_type_id: int,
         template: str,
         graph_name: str,
+        reuse_existing: bool = False,
     ) -> str:
         safe_template = _OriginClientBase._escape_labtalk(template)
         safe_graph = _OriginClientBase._escape_labtalk(graph_name)
+        output_graph = (
+            f"ogl:=[{safe_graph}]1"
+            if reuse_existing
+            else f"ogl:=<new template:={safe_template} name:={safe_graph}>"
+        )
         return (
             f"{command} {range_option}:={data_range} plot:={plot_type_id} "
-            f"ogl:=<new template:={safe_template} name:={safe_graph}>;"
+            f"{output_graph};"
         )
 

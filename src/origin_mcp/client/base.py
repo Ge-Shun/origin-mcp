@@ -15,14 +15,14 @@ from ..analysis_outputs import (
 )
 from ..chart_palette import (
     chart_atlas_routes,
+    named_acceptable_palette,
+    named_palette,
+    named_semantic_palette,
     nature_acceptable_palette,
     nature_chart_style,
     nature_chart_type_for_plot_id,
     nature_palette,
     nature_semantic_palette,
-    named_acceptable_palette,
-    named_palette,
-    named_semantic_palette,
     normalize_chart_intent,
     normalize_chart_type,
     normalize_palette_name,

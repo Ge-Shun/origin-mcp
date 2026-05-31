@@ -8,7 +8,6 @@ from origin_mcp.models import FigureExportFormatSpec, FigureSpec
 
 from ._shared import _mcp_tool, _ok, _wrap, client
 
-
 SUPPORTED_PLOT_TYPES = {
     "line",
     "scatter",
@@ -171,6 +170,7 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
     axis_updates = []
     for layer in spec.layers:
         axis_updates.extend(_apply_axis_specs(graph_name, layer, layer_indexes[layer.id]))
+    style_updates = _apply_plot_styles(spec, graph_name, layer_indexes, base_plot)
     annotation_results = _apply_annotations(spec, graph_name, layer_indexes)
     export_inspections = _export_outputs(spec, graph_data, graph_name)
     saved_project = _save_project_if_requested(spec)
@@ -186,6 +186,7 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
         "layer_setup": layer_setup,
         "added_plots": added_plots,
         "axis_updates": axis_updates,
+        "style_updates": style_updates,
         "annotations": annotation_results,
         "export_inspections": export_inspections,
         "saved_project": saved_project,
@@ -515,6 +516,52 @@ def _apply_axis_specs(
             }
         )
     return updates
+
+
+def _apply_plot_styles(
+    spec: FigureSpec,
+    graph_name: str | None,
+    layer_indexes: dict[str, int],
+    base_plot: Any,
+) -> list[dict[str, Any]]:
+    updates = []
+    next_plot_index = {layer.id: 0 for layer in spec.layers}
+    execution_order = [base_plot, *(plot for plot in spec.plots if plot.id != base_plot.id)]
+    for plot in execution_order:
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        mapping = _plot_mapping(data, plot)
+        y_count = len(_y_columns(mapping) or [None])
+        style = _plot_style_kwargs(plot.style)
+        layer_index = layer_indexes[plot.layer]
+        start_index = next_plot_index[plot.layer]
+        if style:
+            for offset in range(y_count):
+                updates.append(
+                    {
+                        "plot_id": plot.id,
+                        **client.set_plot_style(
+                            graph_name=graph_name,
+                            layer_index=layer_index,
+                            plot_index=start_index + offset,
+                            **style,
+                        ),
+                    }
+                )
+        next_plot_index[plot.layer] = start_index + y_count
+    return updates
+
+
+def _plot_style_kwargs(style: dict[str, Any]) -> dict[str, Any]:
+    supported = {
+        "color",
+        "line_width",
+        "bar_gap",
+        "line_style",
+        "symbol_kind",
+        "symbol_size",
+        "transparency",
+    }
+    return {key: value for key, value in style.items() if key in supported and value is not None}
 
 
 def _apply_annotations(

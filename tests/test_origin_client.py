@@ -132,6 +132,31 @@ def test_new_project_wraps_automation_failure() -> None:
         client.new_project()
 
 
+def test_save_project_falls_back_to_pe_save_on_originpro_save_failure(
+    tmp_path: Path,
+) -> None:
+    client = OriginClient()
+    scripts = []
+
+    class FakeOrigin:
+        def save(self, _path: str) -> None:
+            raise SystemError("bad automation state")
+
+        def lt_exec(self, script: str) -> bool:
+            scripts.append(script)
+            return True
+
+    client._op = FakeOrigin()
+
+    result = client.save_project(tmp_path / "saved.opju")
+
+    assert result["saved"] is True
+    assert result["method"] == "labtalk.pe_save"
+    assert result["fallback_error"].startswith("SystemError:")
+    expected_path = OriginClient._escape_labtalk(str(tmp_path / "saved.opju"))
+    assert scripts == [f'pe_save fname:="{expected_path}";']
+
+
 def test_analysis_script_linear_fit() -> None:
     client = OriginClient()
     client._capabilities = {"origin_version": 10.3, "features": {}}
@@ -473,6 +498,7 @@ class FakePlot:
         self.removed = False
         self.symbol_size = 0
         self.line_width = None
+        self.bar_gap = None
         self.width = None
 
     def set_cmd(self, command: str) -> None:
@@ -512,6 +538,7 @@ class FakeLayer:
         self.added = []
         self.labels = {}
         self.axes = {"x": FakeAxis(), "y": FakeAxis(), "z": FakeAxis()}
+        self.group_calls = 0
 
     def plot_list(self) -> list[FakePlot]:
         return self.plots
@@ -531,6 +558,9 @@ class FakeLayer:
 
     def label(self, name: str) -> FakeLabel | None:
         return self.labels.get(name)
+
+    def group(self) -> None:
+        self.group_calls += 1
 
 
 def test_set_graph_page_updates_fake_graph(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -583,13 +613,16 @@ def test_list_graph_templates_scans_directory(tmp_path: Path) -> None:
 
 def test_get_graph_info_reports_layers_and_plots(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
-    graph = FakeGraph(FakeLayer([FakePlot()]))
+    plot = FakePlot()
+    plot.bar_gap = 80.0
+    graph = FakeGraph(FakeLayer([plot]))
     monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
 
     result = client.get_graph_info("Graph1")
 
     assert result["layers_count"] == 1
     assert result["layers"][0]["plots_count"] == 1
+    assert result["layers"][0]["plots"][0]["bar_gap"] == 80.0
     assert result["layers"][0]["axes"]["x"]["scale"] == "linear"
     assert result["layers"][0]["axes"]["x"]["scale_name"] == "linear"
 
@@ -646,6 +679,22 @@ def test_run_labtalk_can_capture_message_log() -> None:
     assert result["message_log"]["captured"] is True
     assert result["message_log"]["lines"] == ["message line"]
     assert fake_op.scripts[1] == "type ok;"
+
+
+def test_run_labtalk_false_result_includes_diagnostics() -> None:
+    client = OriginClient()
+
+    class FakeOrigin:
+        def lt_exec(self, _script: str) -> bool:
+            return False
+
+    client._op = FakeOrigin()
+
+    result = client.run_labtalk("bad command;")
+
+    assert result["result"] is False
+    assert result["warning"] == "Origin returned false for this LabTalk script."
+    assert result["script_preview"] == "bad command;"
 
 
 def test_get_graph_info_tolerates_origin_plot_property_errors(
@@ -915,6 +964,107 @@ def test_plot_table_reports_origin_default_style(
     assert worksheet.rows == 1
     assert graph_ref.template == "scatter"
     assert graph_ref.style_mode == "origin_default"
+
+
+def test_new_sheet_reuses_named_worksheet(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet()
+
+    class FakeOrigin:
+        def find_sheet(self, _kind: str, ref: str) -> FakeWorksheet | None:
+            return wks if ref == "NamedData" else None
+
+        def new_sheet(self, *_args: object) -> None:
+            raise AssertionError("new_sheet should not be called")
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    assert client._new_sheet(book_name="NamedData", sheet_name=None) is wks
+
+
+def test_new_graph_reuses_named_graph_and_clears_plots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    old_plot = FakePlot()
+    graph = FakeGraph(FakeLayer([old_plot]))
+
+    class FakeOrigin:
+        def find_graph(self, name: str) -> FakeGraph | None:
+            return graph if name == "NamedGraph" else None
+
+        def new_graph(self, **_kwargs: object) -> None:
+            raise AssertionError("new_graph should not be called")
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+
+    assert client._new_graph(kind="line", graph_name="NamedGraph") is graph
+    assert old_plot.removed is True
+    assert graph.layer.plots == []
+    assert graph.lname == "NamedGraph"
+
+
+def test_plot_table_reuses_named_graph_and_stable_data_sheet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"old": [9]}))
+    old_plot = FakePlot()
+    layer = FakeLayer([old_plot])
+    graph = FakeGraph(layer)
+
+    class FakeOrigin:
+        def find_sheet(self, _kind: str, ref: str) -> FakeWorksheet | None:
+            return wks if ref == "NamedLine_Data" else None
+
+        def find_graph(self, name: str) -> FakeGraph | None:
+            return graph if name == "NamedLine" else None
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+
+    worksheet, graph_ref = client.plot_table(
+        path=path,
+        kind="line",
+        graph_name="NamedLine",
+        show_legend=False,
+    )
+
+    assert worksheet.book_name == "Book1"
+    assert wks.df.to_dict("list") == {"x": [0], "y": [1]}
+    assert old_plot.removed is True
+    assert len(layer.plots) == 1
+    assert graph_ref.graph_name == "Graph1"
+    assert graph_ref.requested_graph_name == "NamedLine"
+
+
+def test_plot_table_groups_multi_y_column_plots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("month,y2020,y2021\n1,10,12\n2,20,24\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    layer = FakeLayer()
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+
+    client.plot_table(
+        path=path,
+        kind="column",
+        x_col="month",
+        y_cols=["y2020", "y2021"],
+        show_legend=False,
+    )
+
+    assert len(layer.added) == 2
+    assert layer.group_calls == 1
 
 
 def test_plot_table_rejects_publication_style(
@@ -1498,6 +1648,64 @@ def test_set_plot_style_converts_line_width_points_to_origin_units(
     assert plot.width == 2.5
 
 
+def test_set_plot_style_sets_column_bar_gap(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.set_plot_style("Graph1", bar_gap=80)
+
+    assert result["styled_plots"] == 1
+    assert "-vg 80" in plot.commands
+    assert plot.bar_gap == 80.0
+
+
+def test_set_plot_style_uses_zero_based_layer_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    first_plot = FakePlot()
+    second_plot = FakePlot()
+
+    class MultiLayerGraph:
+        name = "Graph1"
+
+        def __getitem__(self, index: int) -> FakeLayer:
+            if index == 0:
+                return FakeLayer([first_plot])
+            if index == 1:
+                return FakeLayer([second_plot])
+            raise IndexError(index)
+
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: MultiLayerGraph())
+
+    result = client.set_plot_style("Graph1", layer_index=1, line_width=1.5)
+
+    assert result["layer_index"] == 1
+    assert first_plot.width is None
+    assert second_plot.width == 1.5
+
+
+def test_graph_layer_index_error_mentions_zero_based() -> None:
+    client = OriginClient()
+    graph = FakeGraph(FakeLayer())
+
+    with pytest.raises(OriginOperationError, match="zero-based"):
+        client._graph_layer(graph, 1)
+
+
+def test_plot_range_rejects_empty_created_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+
+    class EmptyAddLayer(FakeLayer):
+        def add_plot(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: FakeGraph(EmptyAddLayer()))
+
+    with pytest.raises(OriginOperationError, match="no plot was added"):
+        client.plot_range("[Book1]Sheet1!(1,2)")
+
+
 def test_new_graph_uses_extended_templates(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     created = {}
@@ -1570,6 +1778,51 @@ def test_plot_table_by_id_builds_labtalk_command(
     assert command["plot_type_id"] == 193
     assert any("plotxy iy:=[Book1]Sheet1!(1,2,3) plot:=193" in script for script in scripts)
     assert any('title.show=0; title.text$="";' in script for script in scripts)
+
+
+def test_plot_table_by_id_reuses_named_graph_when_present(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    old_plot = FakePlot()
+    graph = GPage(FakeLayer([old_plot]))
+    graph.name = "Bubble"
+    scripts = []
+
+    class FakeOrigin:
+        def find_sheet(self, _kind: str, ref: str) -> FakeWorksheet | None:
+            return wks if ref == "Bubble_Data" else None
+
+        def find_graph(self, name: str) -> GPage | None:
+            return graph if name == "Bubble" else None
+
+        def pages(self, kind: str | None = None) -> list[GPage]:
+            return [graph] if kind in {None, "g"} else []
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, graph_ref, _command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=200,
+        template="line",
+        selected_cols=["x", "y"],
+        graph_name="Bubble",
+    )
+
+    assert old_plot.removed is True
+    assert graph.layer.plots == []
+    assert graph_ref.graph_name == "Bubble"
+    assert any("ogl:=[Bubble]1" in script for script in scripts)
+    assert not any("<new template" in script for script in scripts)
 
 
 def test_plot_table_by_id_uses_plotxyz_for_xyz_plot_types(

@@ -34,6 +34,7 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     assert names == server.COMPACT_TOOL_NAMES
     assert "origin_plot_line" in names
     assert "origin_palette_catalog" in names
+    assert "origin_plot_style_capabilities" in names
     assert "origin_set_axis" in names
 
 
@@ -53,7 +54,24 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 151
+    assert int(output.strip()) == 152
+
+
+def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
+    result = server.origin_plot_style_capabilities(chart_type="柱状图", query="柱宽")
+
+    assert result["ok"] is True
+    assert result["data"]["chart_type"] == "column"
+    assert result["data"]["capabilities"][0]["name"] == "bar_gap"
+    assert result["data"]["capabilities"][0]["origin_route"] == "LabTalk set -vg"
+
+
+def test_plot_style_capabilities_tool_reports_planned_image_controls() -> None:
+    result = server.origin_plot_style_capabilities(chart_type="热图", query="色带")
+
+    assert result["ok"] is True
+    assert result["data"]["capabilities"][0]["name"] == "colormap"
+    assert result["data"]["capabilities"][0]["status"] == "planned"
 
 
 def test_error_response_includes_stable_error_code() -> None:

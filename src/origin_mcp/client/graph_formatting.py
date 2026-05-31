@@ -112,16 +112,18 @@ class _GraphFormattingMixin(_OriginClientBase):
     def set_plot_style(
         self,
         graph_name: str | None = None,
+        layer_index: int = 0,
         plot_index: int | None = None,
         color: str | tuple[int, int, int] | None = None,
         line_width: float | None = None,
+        bar_gap: float | None = None,
         line_style: int | None = None,
         symbol_kind: int | None = None,
         symbol_size: float | None = None,
         transparency: float | None = None,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
-        layer = graph[0] if hasattr(graph, "__getitem__") else graph
+        layer = self._graph_layer(graph, layer_index)
         plots = layer.plot_list()
         selected = plots if plot_index is None else [plots[plot_index]]
         for plot in selected:
@@ -129,6 +131,8 @@ class _GraphFormattingMixin(_OriginClientBase):
                 plot.color = color
             if line_width is not None:
                 self._set_plot_line_width(plot, line_width)
+            if bar_gap is not None:
+                self._set_plot_bar_gap(plot, bar_gap)
             if line_style is not None:
                 plot.set_cmd(f"-d {line_style}")
             if symbol_kind is not None:
@@ -139,6 +143,7 @@ class _GraphFormattingMixin(_OriginClientBase):
                 plot.transparency = transparency
         return {
             "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
             "styled_plots": len(selected),
         }
 
@@ -271,6 +276,29 @@ class _GraphFormattingMixin(_OriginClientBase):
             graph_name=graph_name,
             layer_index=layer_index,
         )
+
+    def _clear_graph_plots(
+        self,
+        graph: Any,
+        graph_name: str | None = None,
+    ) -> dict[str, Any]:
+        removed = 0
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        for layer_index, layer in enumerate(self._graph_layers(graph)):
+            plots = self._layer_plots(layer)
+            for plot_index in range(len(plots) - 1, -1, -1):
+                plot = plots[plot_index]
+                remover = getattr(plot, "remove", None) or getattr(plot, "destroy", None)
+                if callable(remover):
+                    remover()
+                    layer_plots = getattr(layer, "plots", None)
+                    if isinstance(layer_plots, list) and plot in layer_plots:
+                        layer_plots.remove(plot)
+                else:
+                    self._activate_graph(graph, graph_name_actual)
+                    self.run_labtalk(f"layer -s {layer_index + 1}; layer -d {plot_index + 1};")
+                removed += 1
+        return {"graph_name": graph_name_actual, "removed_plots": removed}
 
     def set_graph_page(
         self,
@@ -688,6 +716,37 @@ class _GraphFormattingMixin(_OriginClientBase):
 
         add_plot(wks, y_name, x_name)
 
+    def _group_layer_plots(
+        self,
+        layer: Any,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+    ) -> dict[str, Any]:
+        """Group plots in a layer so multi-Y column plots render side-by-side."""
+
+        for target in (layer, getattr(layer, "obj", None)):
+            group = getattr(target, "group", None)
+            if callable(group):
+                try:
+                    group()
+                    return {"grouped": True, "method": "originpro.group"}
+                except TypeError:
+                    try:
+                        group(True)
+                        return {"grouped": True, "method": "originpro.group"}
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+        parts = []
+        if graph_name:
+            parts.append(f'win -a "{self._escape_labtalk(graph_name)}";')
+        parts.append(f"layer -s {layer_index + 1};")
+        parts.append("layer -g;")
+        result = self.run_labtalk(" ".join(parts))
+        return {"grouped": bool(result.get("result")), "method": "labtalk.layer_g", **result}
+
     def _rescale(self, layer: Any) -> None:
         for name in ("rescale", "rescale_axis"):
             func = getattr(layer, name, None)
@@ -985,6 +1044,23 @@ class _GraphFormattingMixin(_OriginClientBase):
             raise OriginOperationError("Graph layer does not support plot_list().")
         return list(plot_list())
 
+    @staticmethod
+    def _graph_layers(graph: Any) -> list[Any]:
+        if hasattr(graph, "__len__") and hasattr(graph, "__getitem__"):
+            try:
+                length = len(graph)
+            except Exception:
+                length = 0
+            layers = []
+            for index in range(length):
+                try:
+                    layers.append(graph[index])
+                except Exception:
+                    continue
+            if layers:
+                return layers
+        return [graph]
+
     def _selected_layer_indexes(self, graph: Any, layer_index: int | None) -> list[int]:
         if layer_index is not None:
             self._graph_layer(graph, layer_index)
@@ -1026,6 +1102,7 @@ class _GraphFormattingMixin(_OriginClientBase):
             "name": self._object_name(plot, default=f"Plot{index + 1}"),
             "color": self._safe_origin_attr(plot, "color"),
             "line_width": self._safe_origin_attr(plot, "line_width"),
+            "bar_gap": self._plot_bar_gap(plot),
             "line_style": self._safe_origin_attr(plot, "line_style"),
             "symbol_kind": self._safe_origin_attr(plot, "symbol_kind"),
             "symbol_size": self._safe_origin_attr(plot, "symbol_size"),
@@ -1171,6 +1248,31 @@ class _GraphFormattingMixin(_OriginClientBase):
             except OriginOperationError:
                 pass
 
+    def _set_plot_bar_gap(self, plot: Any, bar_gap: float) -> None:
+        """Set bar/column gap percent. Larger values render narrower bars."""
+
+        self._set_plot_command(plot, f"-vg {bar_gap:g}")
+        try:
+            self._set_origin_property(plot, "bar_gap", float(bar_gap))
+        except OriginOperationError:
+            pass
+
+    @classmethod
+    def _plot_bar_gap(cls, plot: Any) -> Any:
+        value = cls._safe_origin_attr(plot, "bar_gap")
+        if value is not None:
+            return value
+        for getter_name in ("get_int", "get_float"):
+            getter = getattr(plot, getter_name, None)
+            if not callable(getter):
+                continue
+            for property_name in ("-vg", "vg", "bar_gap", "barGap", "gap"):
+                try:
+                    return getter(property_name)
+                except Exception:
+                    continue
+        return None
+
     @staticmethod
     def _origin_line_width_units(line_width: float) -> int:
         return int(round(line_width * 500))
@@ -1199,7 +1301,8 @@ class _GraphFormattingMixin(_OriginClientBase):
                 return graph[layer_index]
             except IndexError as exc:
                 raise OriginOperationError(
-                    f"Graph layer index out of range: {layer_index}"
+                    f"Graph layer index out of range: {layer_index}. "
+                    "Use a zero-based layer_index; the first layer is 0."
                 ) from exc
         if layer_index == 0:
             return graph

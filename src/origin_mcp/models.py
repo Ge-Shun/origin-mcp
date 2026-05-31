@@ -146,12 +146,17 @@ class AxisSettingsRequest(BaseModel):
 
 class PlotStyleRequest(BaseModel):
     graph_name: str | None = Field(default=None, description="Optional graph page name.")
+    layer_index: int = Field(default=0, description="Zero-based graph layer index.")
     plot_index: int | None = Field(
         default=None,
         description="Zero-based plot index. Applies to all plots if omitted.",
     )
     color: str | tuple[int, int, int] | None = Field(default=None, description="Plot color.")
     line_width: float | None = Field(default=None, description="Line width in points.")
+    bar_gap: float | None = Field(
+        default=None,
+        description="Bar/column gap percent (-vg). Larger values make bars narrower.",
+    )
     line_style: int | None = Field(default=None, description="Origin line style integer.")
     symbol_kind: int | None = Field(default=None, description="Origin symbol kind integer.")
     symbol_size: float | None = Field(default=None, description="Symbol size.")
@@ -323,7 +328,7 @@ class FigureSpec(BaseModel):
     export: FigureExportSpec = Field(default_factory=FigureExportSpec)
 
     @model_validator(mode="after")
-    def validate_refs(self) -> "FigureSpec":
+    def validate_refs(self) -> FigureSpec:
         if not self.data:
             raise ValueError("FigureSpec requires at least one data item.")
         if not self.layers:

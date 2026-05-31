@@ -425,6 +425,12 @@ class _WorksheetMixin(_OriginClientBase):
         return self._worksheet_ref(wks).as_dict()
 
     def _new_sheet(self, book_name: str | None, sheet_name: str | None) -> Any:
+        if book_name or sheet_name:
+            try:
+                return self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+            except OriginOperationError:
+                pass
+
         op = self.op
         new_sheet = getattr(op, "new_sheet", None)
         if not callable(new_sheet):

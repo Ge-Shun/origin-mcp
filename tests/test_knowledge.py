@@ -115,6 +115,28 @@ def test_query_reference_finds_heatmap_plot_type() -> None:
     assert result["count"] <= 5
 
 
+def test_query_reference_finds_plot_style_registry_by_chinese_terms() -> None:
+    result = query_knowledge("柱子太宽", collection="reference", limit=5)
+
+    paths = [item["path"] for item in result["results"]]
+    assert "plot-style-capabilities/bar_gap" in paths
+    entry = browse_knowledge("reference", "plot-style-capabilities/bar_gap")["entry"]
+    assert entry["metadata"]["origin_route"] == "LabTalk set -vg"
+    assert entry["metadata"]["value_semantics"] == (
+        "gap percent; larger values make bars/columns narrower"
+    )
+
+
+def test_query_reference_finds_style_registry_for_other_chart_types() -> None:
+    line = query_knowledge("折线粗细", collection="reference", limit=5)
+    symbol = query_knowledge("点大小", collection="reference", limit=5)
+    colormap = query_knowledge("热图 色带", collection="reference", limit=5)
+
+    assert "plot-style-capabilities/line_width" in [item["path"] for item in line["results"]]
+    assert "plot-style-capabilities/symbol_size" in [item["path"] for item in symbol["results"]]
+    assert "plot-style-capabilities/colormap" in [item["path"] for item in colormap["results"]]
+
+
 def test_browse_python_api_by_dot_path() -> None:
     result = browse_knowledge("python_api", "originpro.find_graph")
 

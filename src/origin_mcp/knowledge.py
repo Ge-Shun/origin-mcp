@@ -17,6 +17,7 @@ from .official_docs import (
 from .official_docs import (
     OfficialDocRecord as OfficialDocPage,
 )
+from .plot_style_registry import PLOT_STYLE_CAPABILITIES
 
 
 @dataclass(frozen=True)
@@ -106,9 +107,26 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "time_series. Use origin_plot_table_id for a specific Origin Plot Type ID. "
             "Core direct wrappers such as origin_plot_line and origin_plot_scatter are "
             "available in the compact profile; specialized matrix/3D wrappers remain in "
-            "the full/expert profile."
+            "the full/expert profile. Named table plotting calls are idempotent where Origin "
+            "exposes an output graph layer target: when graph_name points to an existing graph, "
+            "origin-mcp clears that page's plots and draws into the same graph instead of "
+            "creating another GraphN page. If book_name is omitted, graph_name also anchors a "
+            "stable data workbook named <graph_name>_Data. Unnamed calls still create fresh "
+            "Origin objects. Worksheet-command Plot Type ID routes that do not expose an output "
+            "graph target keep using Origin's native creation route and do not clear an "
+            "existing graph."
         ),
-        keywords=("plot", "workflow", "compact", "profile", "template", "plot type id"),
+        keywords=(
+            "plot",
+            "workflow",
+            "compact",
+            "profile",
+            "template",
+            "plot type id",
+            "reuse graph",
+            "idempotent",
+            "graph_name",
+        ),
     ),
     KnowledgeEntry(
         collection="reference",
@@ -243,13 +261,29 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="reference",
         path="graph/plot-style",
         title="Plot style editing",
-        summary="origin_set_plot_style changes color, line width/style, symbols, and transparency.",
+        summary=(
+            "origin_set_plot_style changes color, line width/style, bar/column gap, "
+            "symbols, and transparency."
+        ),
         body=(
             "Use plot_index for one plot or omit it to apply a style to all plots in a layer. "
-            "Colors can be RGB tuples or Origin-compatible strings. Symbol and line styles use "
-            "Origin integer codes because those are what the automation layer accepts."
+            "Use layer_index for non-first layers; layer indexes are zero-based. Colors can "
+            "be RGB tuples or Origin-compatible strings. Use bar_gap to control bar/column "
+            "width through Origin's -vg gap setting; larger values make bars narrower. "
+            "FigureSpec plot style entries can apply these same fields to supported plots. "
+            "Symbol and line styles use Origin integer codes because those are what the "
+            "automation layer accepts."
         ),
-        keywords=("line color", "line width", "symbol", "transparency", "plot_index"),
+        keywords=(
+            "line color",
+            "line width",
+            "layer_index",
+            "bar gap",
+            "column width",
+            "symbol",
+            "transparency",
+            "plot_index",
+        ),
     ),
     KnowledgeEntry(
         collection="reference",
@@ -1428,6 +1462,7 @@ def _entries(official_docs_version: str | None = None) -> list[KnowledgeEntry]:
         *_tool_entries(),
         *REFERENCE_ENTRIES,
         *_official_doc_entries(official_docs_version),
+        *_plot_style_entries(),
         *_plot_type_entries(),
         *_analysis_entries(),
         *PYTHON_API_ENTRIES,
@@ -1510,6 +1545,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_query_mcp_tools",
         "origin_browse_official_docs",
         "origin_query_official_docs",
+        "origin_plot_style_capabilities",
     }:
         return "knowledge"
     if name.startswith(("origin_import_", "origin_append_", "origin_read_", "origin_write_")):
@@ -1574,6 +1610,72 @@ def _tool_group_for_name(name: str) -> str:
     }:
         return "analysis"
     return "core"
+
+
+def _plot_style_entries() -> list[KnowledgeEntry]:
+    entries = [
+        KnowledgeEntry(
+            collection="reference",
+            path="plot-style-capabilities",
+            title="Plot style capability registry",
+            summary=(
+                "Semantic registry for plot style controls across common Origin chart types."
+            ),
+            body=(
+                "This registry is the source of truth for semantic style controls exposed by "
+                "origin-mcp. It maps user terms such as 柱宽, 折线粗细, 点大小, 色带, and "
+                "误差棒帽宽 to MCP tools, Origin routes, supported chart types, and "
+                "implementation status. Use origin_plot_style_capabilities for structured "
+                "tool output."
+            ),
+            keywords=(
+                "plot style",
+                "capability",
+                "registry",
+                "柱宽",
+                "折线粗细",
+                "点大小",
+                "色带",
+                "bar width",
+                "colormap",
+            ),
+            metadata={"capability_count": len(PLOT_STYLE_CAPABILITIES)},
+        )
+    ]
+    for item in PLOT_STYLE_CAPABILITIES:
+        entries.append(
+            KnowledgeEntry(
+                collection="reference",
+                path=f"plot-style-capabilities/{item.name}",
+                title=item.name,
+                summary=f"{item.name}: {item.controls}. Status: {item.status}.",
+                body=(
+                    f"{item.name} controls {item.controls}. "
+                    f"Aliases: {', '.join(item.aliases)}. "
+                    f"Chart types: {', '.join(item.chart_types)}. "
+                    f"Status: {item.status}. "
+                    f"Setter: {item.setter or 'not exposed as a stable semantic setter yet'}. "
+                    f"Origin route: {item.origin_route or 'not specified'}. "
+                    f"Value semantics: {item.value_semantics or 'not specified'}. "
+                    "Readable field: "
+                    f"{item.readable_field or 'not readable through get_graph_info'}. "
+                    f"{item.notes or ''}"
+                ).strip(),
+                keywords=(
+                    "plot style",
+                    "style capability",
+                    item.name,
+                    item.controls,
+                    item.status,
+                    *(item.aliases),
+                    *(item.chart_types),
+                    *((item.setter,) if item.setter else ()),
+                    *((item.origin_route,) if item.origin_route else ()),
+                ),
+                metadata=item.as_dict(),
+            )
+        )
+    return entries
 
 
 def _plot_type_entries() -> list[KnowledgeEntry]:

@@ -62,6 +62,14 @@ class FakeFigureSpecClient:
             "plot_type": kwargs["plot_type"],
         }
 
+    def set_plot_style(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("set_plot_style", kwargs))
+        return {
+            "graph_name": kwargs.get("graph_name"),
+            "layer_index": kwargs.get("layer_index", 0),
+            "styled_plots": 1,
+        }
+
     def add_graph_label(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("add_graph_label", kwargs))
         return {"text": kwargs["text"]}
@@ -231,3 +239,63 @@ def test_origin_execute_figure_spec_runs_grid_multi_panel(
     assert "run_labtalk" in called
     assert "arrange_layers" in called
     assert "add_plot_to_graph" in called
+
+
+def test_origin_execute_figure_spec_applies_combo_plot_styles(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("month,y2020,y2021,mean\n1,10,12,11\n2,20,24,22\n", encoding="utf-8")
+    spec = {
+        "figure": {"id": "combo_demo", "title": "Combo Demo"},
+        "data": [
+            {
+                "id": "rain",
+                "source": str(data_path),
+                "roles": {"x": "month"},
+            }
+        ],
+        "layers": [
+            {
+                "id": "panel",
+                "data_ref": "rain",
+                "x": {"title": "Month"},
+                "y": {"title": "Rainfall"},
+            }
+        ],
+        "plots": [
+            {
+                "id": "bars",
+                "layer": "panel",
+                "type": "column",
+                "map": {"x": "month", "y": ["y2020", "y2021"]},
+                "style": {"bar_gap": 80},
+            },
+            {
+                "id": "mean",
+                "layer": "panel",
+                "type": "line",
+                "map": {"x": "month", "y": "mean"},
+                "style": {"line_width": 1.2, "color": "black"},
+            },
+        ],
+    }
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert result["ok"] is True
+    style_calls = [kwargs for name, kwargs in fake.calls if name == "set_plot_style"]
+    assert style_calls == [
+        {"graph_name": "Graph1", "layer_index": 0, "plot_index": 0, "bar_gap": 80},
+        {"graph_name": "Graph1", "layer_index": 0, "plot_index": 1, "bar_gap": 80},
+        {
+            "graph_name": "Graph1",
+            "layer_index": 0,
+            "plot_index": 2,
+            "color": "black",
+            "line_width": 1.2,
+        },
+    ]

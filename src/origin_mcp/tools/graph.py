@@ -10,6 +10,7 @@ from origin_mcp.models import (
     PlotStyleRequest,
     ProjectObjectRequest,
 )
+from origin_mcp.plot_style_registry import plot_style_capabilities
 
 from ._shared import (
     _mcp_tool,
@@ -24,6 +25,21 @@ def origin_palette_catalog() -> dict[str, Any]:
     """List built-in palette names, semantic roles, and source links."""
 
     return _wrap(lambda: _ok("Listed Origin MCP palettes.", palettes=palette_catalog()))
+
+
+@_mcp_tool()
+def origin_plot_style_capabilities(
+    chart_type: str | None = None,
+    query: str | None = None,
+) -> dict[str, Any]:
+    """List semantic plot style controls by chart type or user-facing term."""
+
+    return _wrap(
+        lambda: _ok(
+            "Listed Origin MCP plot style capabilities.",
+            **plot_style_capabilities(chart_type=chart_type, query=query),
+        )
+    )
 
 
 @_mcp_tool()
@@ -207,22 +223,26 @@ def origin_set_axis(
 @_mcp_tool()
 def origin_set_plot_style(
     graph_name: str | None = None,
+    layer_index: int = 0,
     plot_index: int | None = None,
     color: str | tuple[int, int, int] | None = None,
     line_width: float | None = None,
+    bar_gap: float | None = None,
     line_style: int | None = None,
     symbol_kind: int | None = None,
     symbol_size: float | None = None,
     transparency: float | None = None,
 ) -> dict[str, Any]:
-    """Set line, color, symbol, and transparency style on one or all plots."""
+    """Set line, color, symbol, column/bar gap, and transparency style on plots."""
 
     def run() -> dict[str, Any]:
         req = PlotStyleRequest(
             graph_name=graph_name,
+            layer_index=layer_index,
             plot_index=plot_index,
             color=color,
             line_width=line_width,
+            bar_gap=bar_gap,
             line_style=line_style,
             symbol_kind=symbol_kind,
             symbol_size=symbol_size,
