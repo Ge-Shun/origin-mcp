@@ -194,6 +194,36 @@ def plot_style_capabilities(
     }
 
 
+def resolve_plot_style_capability(
+    property_name: str,
+    chart_type: str | None = None,
+    plot_type_id: int | None = None,
+) -> dict[str, Any]:
+    property_key = property_name.strip().lower().replace("-", "_").replace(" ", "_")
+    if not property_key:
+        raise ValueError("property_name is empty.")
+    result = plot_style_capabilities(chart_type=chart_type, plot_type_id=plot_type_id)
+    matches = [
+        item
+        for item in result["capabilities"]
+        if _capability_name_matches(item, property_key)
+    ]
+    if not matches:
+        raise ValueError(f"Unsupported plot style property: {property_name}.")
+    if len(matches) > 1:
+        implemented = [item for item in matches if item["status"] == "implemented"]
+        if len(implemented) == 1:
+            matches = implemented
+        else:
+            names = ", ".join(item["name"] for item in matches)
+            raise ValueError(f"Ambiguous plot style property {property_name!r}: {names}.")
+    capability = matches[0]
+    return {
+        **result,
+        "capability": capability,
+    }
+
+
 def all_plot_style_capabilities() -> tuple[PlotStyleCapability, ...]:
     return _load_capabilities(_all_resources())
 
@@ -293,6 +323,19 @@ def _matches_query(item: PlotStyleCapability, query_terms: tuple[str, ...]) -> b
         )
     ).lower()
     return all(term in haystack for term in query_terms)
+
+
+def _capability_name_matches(capability: dict[str, Any], property_key: str) -> bool:
+    names = [
+        str(capability["name"]),
+        *(str(alias) for alias in capability.get("aliases", [])),
+    ]
+    normalized = {
+        item.strip().lower().replace("-", "_").replace(" ", "_")
+        for item in names
+        if item.strip()
+    }
+    return property_key in normalized
 
 
 def _query_terms(query: str | None) -> tuple[str, ...]:

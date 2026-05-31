@@ -1585,6 +1585,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_format_graph",
         "origin_set_axis",
         "origin_set_plot_style",
+        "origin_set_plot_property",
         "origin_apply_nature_style",
         "origin_diagnose_graph",
         "origin_apply_image_panel_style",
@@ -1630,7 +1631,8 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
                 "origin-mcp. It maps user terms such as 柱宽, 折线粗细, 点大小, 色带, and "
                 "误差棒帽宽 to MCP tools, Origin routes, supported chart types, and "
                 "implementation status. Use origin_plot_style_capabilities for structured "
-                "tool output."
+                "tool output. Use origin_set_plot_property when you want a single "
+                "registry-backed style property applied only if a safe setter exists."
             ),
             keywords=(
                 "plot style",

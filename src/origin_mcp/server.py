@@ -85,6 +85,7 @@ from .tools.graph import (
     origin_set_column_designations,
     origin_set_column_labels,
     origin_set_graph_page,
+    origin_set_plot_property,
     origin_set_plot_style,
 )
 from .tools.knowledge import (

@@ -119,6 +119,14 @@ Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make
 columns or bars narrower. FigureSpec plot `style` entries can use the same
 fields for supported plot primitives.
 
+For natural-language or registry-backed edits, `origin_set_plot_property`
+resolves a semantic `property_name` such as `柱宽`, `折线粗细`, `点大小`, or
+`误差棒帽宽` against the plot style capability registry. It only applies
+properties that are marked `implemented` and map to a known safe
+`origin_set_plot_style` keyword. Known-but-planned properties return
+`applied=false` with the matching capability and safe alternatives instead of
+guessing an Origin/LabTalk route.
+
 Use `origin_plot_style_capabilities(chart_type, plot_type_id, query)` before
 changing an unfamiliar chart type. It is backed by the same registry as the
 knowledge base: `core.json` holds the small common capability set, while

@@ -6,9 +6,19 @@ import sys
 from pathlib import Path
 
 import origin_mcp.server as server
+import origin_mcp.tools.graph as graph_tools
 import origin_mcp.tools.plotting as plotting_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
 from origin_mcp.server import _error, _json_safe
+
+
+class FakeGraphClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def set_plot_style(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("set_plot_style", kwargs))
+        return {"styled_plots": 1, **kwargs}
 
 
 def test_json_safe_replaces_non_finite_floats() -> None:
@@ -35,6 +45,7 @@ def test_default_mcp_tool_profile_is_compact() -> None:
     assert "origin_plot_line" in names
     assert "origin_palette_catalog" in names
     assert "origin_plot_style_capabilities" in names
+    assert "origin_set_plot_property" in names
     assert "origin_set_axis" in names
 
 
@@ -54,7 +65,7 @@ def test_full_mcp_tool_profile_registers_all_tools() -> None:
         text=True,
     )
 
-    assert int(output.strip()) == 152
+    assert int(output.strip()) == 153
 
 
 def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
@@ -65,6 +76,70 @@ def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
     assert result["data"]["loaded_sources"] == ["core.json", "column_bar.json"]
     assert result["data"]["capabilities"][0]["name"] == "bar_gap"
     assert result["data"]["capabilities"][0]["origin_route"] == "LabTalk set -vg"
+
+
+def test_set_plot_property_resolves_chinese_bar_width_alias(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="柱宽",
+        value=80,
+        graph_name="Graph1",
+        layer_index=1,
+        plot_index=2,
+        chart_type="柱状图",
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["applied"] is True
+    assert result["data"]["property_name"] == "bar_gap"
+    assert result["data"]["capability"]["setter"] == "origin_set_plot_style(bar_gap=...)"
+    assert fake.calls == [
+        (
+            "set_plot_style",
+            {
+                "graph_name": "Graph1",
+                "layer_index": 1,
+                "plot_index": 2,
+                "bar_gap": 80,
+            },
+        )
+    ]
+
+
+def test_set_plot_property_reports_planned_capability_without_mutating(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="色带",
+        value="viridis",
+        chart_type="热图",
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["applied"] is False
+    assert result["data"]["capability"]["name"] == "colormap"
+    assert result["data"]["capability"]["status"] == "planned"
+    assert result["data"]["alternatives"]
+    assert fake.calls == []
+
+
+def test_set_plot_property_rejects_unknown_property(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = server.origin_set_plot_property(
+        property_name="不存在的样式属性",
+        value=1,
+        chart_type="柱状图",
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_request"
+    assert "Unsupported plot style property" in result["message"]
+    assert fake.calls == []
 
 
 def test_plot_style_capabilities_tool_accepts_plot_type_id() -> None:

@@ -10,7 +10,10 @@ from origin_mcp.models import (
     PlotStyleRequest,
     ProjectObjectRequest,
 )
-from origin_mcp.plot_style_registry import plot_style_capabilities
+from origin_mcp.plot_style_registry import (
+    plot_style_capabilities,
+    resolve_plot_style_capability,
+)
 
 from ._shared import (
     _mcp_tool,
@@ -18,6 +21,19 @@ from ._shared import (
     _wrap,
     client,
 )
+
+_SET_PLOT_STYLE_PROPERTIES = {
+    "color": "color",
+    "line_width": "line_width",
+    "bar_gap": "bar_gap",
+    "line_style": "line_style",
+    "symbol_kind": "symbol_kind",
+    "symbol_size": "symbol_size",
+    "transparency": "transparency",
+    "bar_border_width": "line_width",
+    "errorbar_width": "line_width",
+    "three_d_symbol_size": "symbol_size",
+}
 
 
 @_mcp_tool()
@@ -256,6 +272,71 @@ def origin_set_plot_style(
         return _ok("Updated Origin plot style.", **client.set_plot_style(**req.model_dump()))
 
     return _wrap(run)
+
+
+@_mcp_tool()
+def origin_set_plot_property(
+    property_name: str,
+    value: Any,
+    graph_name: str | None = None,
+    layer_index: int = 0,
+    plot_index: int | None = None,
+    chart_type: str | None = None,
+    plot_type_id: int | None = None,
+) -> dict[str, Any]:
+    """Set one registry-backed plot style property if it is implemented."""
+
+    def run() -> dict[str, Any]:
+        resolved = resolve_plot_style_capability(
+            property_name=property_name,
+            chart_type=chart_type,
+            plot_type_id=plot_type_id,
+        )
+        capability = resolved["capability"]
+        target_kwarg = _plot_style_target_kwarg(capability)
+        if capability["status"] != "implemented" or not target_kwarg:
+            alternatives = [
+                item
+                for item in resolved["capabilities"]
+                if item["status"] == "implemented" and _plot_style_target_kwarg(item)
+            ]
+            return _ok(
+                "Plot style property is known but not implemented as a safe setter.",
+                applied=False,
+                requested_property=property_name,
+                value=value,
+                capability=capability,
+                alternatives=alternatives,
+                chart_type=resolved["chart_type"],
+                plot_type=resolved["plot_type"],
+                loaded_sources=resolved["loaded_sources"],
+            )
+        result = client.set_plot_style(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            plot_index=plot_index,
+            **{target_kwarg: value},
+        )
+        return _ok(
+            "Updated Origin plot style property.",
+            applied=True,
+            requested_property=property_name,
+            property_name=capability["name"],
+            value=value,
+            capability=capability,
+            chart_type=resolved["chart_type"],
+            plot_type=resolved["plot_type"],
+            loaded_sources=resolved["loaded_sources"],
+            result=result,
+        )
+
+    return _wrap(run)
+
+
+def _plot_style_target_kwarg(capability: dict[str, Any]) -> str | None:
+    if capability.get("status") != "implemented" or not capability.get("setter"):
+        return None
+    return _SET_PLOT_STYLE_PROPERTIES.get(str(capability["name"]))
 
 
 @_mcp_tool()
