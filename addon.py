@@ -360,6 +360,12 @@ def _serve_foreground_cooperative(server: Any) -> None:
     server.timeout = 0.05
     while not _bridge_shutdown_requested(server):
         server.handle_request()
+        # Run queued async tasks on this (Origin UI) thread. The embedded task
+        # manager has no worker thread precisely because originpro must stay on
+        # the UI thread, so submit_task work is drained here between requests.
+        pump = getattr(server, "_pump_cooperative_tasks", None)
+        if callable(pump):
+            pump()
         _pump_windows_messages()
         time.sleep(0.001)
 
@@ -466,7 +472,11 @@ def start_origin_mcp_bridge(
         },
     )
     try:
-        package_source = _ensure_origin_mcp_importable(src_dir)
+        # Drop any stale cached origin_mcp modules first -- Origin's Python
+        # Console commonly reruns this addon during development -- then resolve
+        # src onto sys.path and confirm the bridge import. Clearing before
+        # resolving is what lets a restarted bridge pick up an adjacent src
+        # checkout instead of continuing to serve an older installed copy.
         _clear_origin_mcp_imports()
         package_source = _ensure_origin_mcp_importable(src_dir)
         from origin_mcp.bridge_handshake import generate_token

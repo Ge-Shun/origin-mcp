@@ -79,28 +79,24 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 The bridge runs inside Origin's own Python so `originpro` stays on Origin's UI
 thread. There is nothing to configure — start it once per Origin session:
 
-For daily use, build the Origin OPX installer from
-[docs/origin-ui-buttons.md](docs/origin-ui-buttons.md). After that, the Origin
-App icon is a single bridge toggle. The same document also includes manual
-toolbar/menu scripts for foreground fallback setups.
+**Origin Apps (recommended for daily use).** Build and install the two bridge
+Apps once with the steps in
+[docs/origin-ui-buttons.md](docs/origin-ui-buttons.md). After that, click
+**Origin MCP Bridge Start** in the Apps gallery to start the bridge and
+**Origin MCP Bridge Stop** to stop it.
 
-For manual startup or troubleshooting:
-
-1. Open Origin, then open its **Python Console**.
-2. Paste this single line (replace the path with your checkout):
+**Python Console (one-off or troubleshooting).** Open Origin's **Python Console**
+and paste this line (replace the path with your checkout):
 
 ```python
 import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
-A `Bridge is running inside Origin.` box confirms startup. Keep that console
-running while you use the tools.
-
-**To stop, just ask your MCP assistant to shut the Origin bridge down** — it
-calls `origin_bridge_shutdown`, so no extra terminal or console input is needed.
-If you are not using an assistant, double-click `scripts\stop-bridge.cmd` (or
-run `python scripts\stop_bridge.py`) to send the same shutdown request. The
-serving console returns to its prompt and Origin stays open.
+A `Bridge is running inside Origin.` box confirms startup; keep that console
+running while you use the tools. To stop, ask your MCP assistant to shut the
+bridge down (it calls `origin_bridge_shutdown`), or double-click
+`scripts\stop-bridge.cmd` (or run `python scripts\stop_bridge.py`). Origin stays
+open either way.
 
 If a package is missing or the bridge will not start, see
 [docs/origin-bridge.md](docs/origin-bridge.md).
@@ -109,6 +105,17 @@ If a package is missing or the bridge will not start, see
 
 The bridge listens only on `127.0.0.1` and authenticates local requests by
 default with a per-session token, so normal use needs no security setup.
+
+Treat that token as a credential. Any local process that presents it can drive
+Origin with the full tool surface, including arbitrary LabTalk execution through
+`origin_run_labtalk`. The token is generated per session and written to an
+owner-scoped file in your per-user temporary directory
+(`%TEMP%/origin-mcp/bridge.json` on Windows), which a standard single-user
+machine already protects through the directory's OS permissions. If you redirect
+`TEMP` or `ORIGIN_MCP_BRIDGE_HANDSHAKE` to a directory other local users can
+read, the token — and therefore control of Origin — is exposed to them. Setting
+`ORIGIN_MCP_BRIDGE_NO_AUTH` removes the token boundary entirely and should be
+used only when you fully trust every local process.
 
 If you need to restrict which files tools may read or write, set
 `ORIGIN_MCP_ALLOWED_ROOTS` to the allowed directories. Avoid disabling bridge

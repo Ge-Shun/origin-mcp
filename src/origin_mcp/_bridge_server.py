@@ -5,6 +5,7 @@ import json
 import socketserver
 import threading
 import time
+import traceback
 from typing import TYPE_CHECKING, Any
 
 from . import __version__
@@ -12,7 +13,7 @@ from ._bridge_dispatch import TASKABLE_METHODS, call_client_method, call_origin_
 from ._bridge_protocol import error_code, json_safe, serialize_bridge_value
 from ._bridge_tasks import DEFAULT_MAX_TASKS, BridgeTaskManager
 from .errors import OriginOperationError
-from .logging_config import log_bridge_event
+from .logging_config import debug_logging_enabled, log_bridge_event
 from .origin_client import OriginClient
 from .runtime import python_runtime_profile
 
@@ -31,6 +32,11 @@ else:
 
 
 class _OriginBridgeServerState(_StateBase):
+    # Whether the task manager owns a background worker thread. The cooperative
+    # embedded server overrides this to False so Origin calls run on its serving
+    # (UI) thread; see ``serve_forever`` and ``_pump_cooperative_tasks``.
+    tasks_use_worker_thread: bool = True
+
     def _init_bridge_state(
         self,
         token: str | None = None,
@@ -39,7 +45,11 @@ class _OriginBridgeServerState(_StateBase):
     ) -> None:
         self.token = token
         self.client = client or OriginClient()
-        self.tasks = BridgeTaskManager(self.client, max_tasks=max_tasks)
+        self.tasks = BridgeTaskManager(
+            self.client,
+            max_tasks=max_tasks,
+            use_worker_thread=self.tasks_use_worker_thread,
+        )
         self.max_tasks = max(1, max_tasks)
         self.shutdown_requested = threading.Event()
 
@@ -49,12 +59,24 @@ class _OriginBridgeServerState(_StateBase):
     def shutdown(self) -> None:
         self.request_shutdown()
 
+    def _pump_cooperative_tasks(self) -> None:
+        """Drain queued async tasks on the calling thread when no worker exists.
+
+        A no-op for the threaded server (its worker thread runs tasks). For the
+        embedded server this is what executes ``submit_task`` work on the
+        serving thread, keeping originpro on Origin's UI thread.
+        """
+
+        if not self.tasks_use_worker_thread:
+            self.tasks.pump_pending()
+
     def serve_forever(self, poll_interval: float = 0.5) -> None:
         previous_timeout = self.timeout
         self.timeout = poll_interval
         try:
             while not self.shutdown_requested.is_set():
                 self.handle_request()
+                self._pump_cooperative_tasks()
         finally:
             self.timeout = previous_timeout
 
@@ -81,6 +103,9 @@ class OriginEmbeddedBridgeServer(_OriginBridgeServerState, socketserver.TCPServe
     # handle_request(); each handler invocation must service one request and
     # return so the message pump keeps running.
     persistent_connections = False
+    # originpro must run on Origin's UI thread, so async tasks are executed on
+    # the serving loop (no background worker) via pump_pending().
+    tasks_use_worker_thread = False
 
     def __init__(
         self,
@@ -105,6 +130,7 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             request_id = None
             method_for_log = "<invalid_request>"
             started_at = time.monotonic()
+            error_traceback: str | None = None
             try:
                 request = json.loads(line.decode("utf-8"))
                 if isinstance(request, dict):
@@ -115,8 +141,17 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                 response = self._dispatch(request)
             except Exception as exc:
                 response = self._error_response(request_id, exc)
+                # Capture the stack here, while the exception is live. The
+                # response intentionally omits it (never leak internals to the
+                # client); it is logged locally below only when debug is on.
+                error_traceback = traceback.format_exc()
             duration_ms = (time.monotonic() - started_at) * 1000.0
             ok = bool(response.get("ok"))
+            extra = (
+                {"error_traceback": error_traceback}
+                if (not ok and error_traceback and debug_logging_enabled())
+                else None
+            )
             log_bridge_event(
                 method_for_log,
                 request_id=request_id,
@@ -125,6 +160,7 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                 error_code=None if ok else response.get("error_code"),
                 error_type=None if ok else response.get("error_type"),
                 error_message=None if ok else response.get("message"),
+                extra=extra,
             )
             try:
                 self.wfile.write(json.dumps(response, separators=(",", ":")).encode("utf-8"))

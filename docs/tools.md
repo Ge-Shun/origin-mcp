@@ -43,6 +43,28 @@ worksheet. Calls without explicit names still create fresh Origin objects. A few
 worksheet-command Plot Type ID routes that do not expose an output graph target
 still use Origin's native creation route and do not clear an existing graph.
 
+### Parameterized plotting with `origin_plot`
+
+`origin_plot(path, kind, ...)` is a single compact-profile entry point for the
+table plot kinds that each also have a dedicated `origin_plot_*` wrapper in the
+full profile. It lets compact-mode clients reach every one of these kinds
+without enabling `ORIGIN_MCP_TOOL_PROFILE=full`. `kind` must be one of:
+`area`, `stack_area`, `fill_area`, `bar`, `stack_bar`, `floating_bar`,
+`column_stack`, `pie`, `ternary`, `ternary_contour`, `bubble`,
+`bubble_color_mapped`, `color_mapped`, `vector_xyam`, `vector_xyxy`,
+`vector_3d`, `high_low_close`, `candlestick`, `waterfall`, `ribbon_3d`,
+`bars_3d`, `errorbar_3d`, `polar_xr_ytheta`, `smith`, or `dendrogram`. An
+unknown `kind` returns `ok=false` with `error_code=invalid_request` and lists
+the valid kinds. For `line`, `scatter`, `column`, `histogram`, and `box` use the
+dedicated tools; for matrix-range plots use `origin_plot_matrix_id`. It accepts
+the shared `selected_cols`, `graph_name`, `title`, `export_path`, and
+`style_mode` arguments and follows the same idempotent `graph_name` behavior
+described above.
+
+```json
+{"path": "data/processed/sales.csv", "kind": "bar", "graph_name": "Sales"}
+```
+
 ## FigureSpec Tools
 
 `origin-mcp` includes a first-pass declarative FigureSpec workflow for

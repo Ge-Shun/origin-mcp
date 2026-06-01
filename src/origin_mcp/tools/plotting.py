@@ -19,6 +19,7 @@ from .plotting_basic import (
 from .plotting_plot_ids import (
     _plot_matrix_route,
     _pti,
+    origin_plot,
     origin_plot_3d_bars,
     origin_plot_3d_errorbar,
     origin_plot_3d_ribbon,

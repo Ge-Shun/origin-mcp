@@ -117,6 +117,7 @@ from .tools.plotting import (
     _pti,
     origin_batch_plot_from_template,
     origin_chart_atlas_route,
+    origin_plot,
     origin_plot_3d_bars,
     origin_plot_3d_errorbar,
     origin_plot_3d_ribbon,

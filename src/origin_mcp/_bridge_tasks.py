@@ -48,14 +48,29 @@ class BridgeTask:
 
 
 class BridgeTaskManager:
-    def __init__(self, client: OriginClient, max_tasks: int = DEFAULT_MAX_TASKS) -> None:
+    def __init__(
+        self,
+        client: OriginClient,
+        max_tasks: int = DEFAULT_MAX_TASKS,
+        *,
+        use_worker_thread: bool = True,
+    ) -> None:
         self._client = client
         self._max_tasks = max(1, max_tasks)
         self._tasks: dict[str, BridgeTask] = {}
         self._queue: queue.Queue[str] = queue.Queue()
         self._lock = threading.Lock()
-        self._worker = threading.Thread(target=self._work, daemon=True, name="origin-mcp-bridge")
-        self._worker.start()
+        # The threaded bridge runs Origin calls off a dedicated worker thread.
+        # The embedded cooperative bridge must keep originpro on Origin's UI
+        # thread, so it owns no worker and drains the queue via ``pump_pending``
+        # from its serving loop instead.
+        self._use_worker_thread = use_worker_thread
+        self._worker: threading.Thread | None = None
+        if use_worker_thread:
+            self._worker = threading.Thread(
+                target=self._work, daemon=True, name="origin-mcp-bridge"
+            )
+            self._worker.start()
 
     def submit(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method not in TASKABLE_METHODS:
@@ -124,17 +139,43 @@ class BridgeTaskManager:
         while True:
             task_id = self._queue.get()
             try:
-                task = self._start_task(task_id)
-                if task is None:
-                    continue
-                try:
-                    result = call_origin_method(self._client, task.method, task.params)
-                except Exception as exc:
-                    self._finish_task(task_id, error=exc)
-                else:
-                    self._finish_task(task_id, result=result)
+                self._run_one(task_id)
             finally:
                 self._queue.task_done()
+
+    def pump_pending(self, max_items: int | None = None) -> int:
+        """Run queued tasks on the calling thread; return the number executed.
+
+        The embedded cooperative bridge has no worker thread because originpro
+        must stay on Origin's UI thread. Its serving loop calls this between
+        ``handle_request`` cycles to drain the queue on that thread. ``submit``
+        only enqueues, so the async ``submit_task``/``task_status`` contract is
+        unchanged -- execution simply moves onto the serving (UI) thread.
+        """
+
+        executed = 0
+        while max_items is None or executed < max_items:
+            try:
+                task_id = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                self._run_one(task_id)
+            finally:
+                self._queue.task_done()
+            executed += 1
+        return executed
+
+    def _run_one(self, task_id: str) -> None:
+        task = self._start_task(task_id)
+        if task is None:
+            return
+        try:
+            result = call_origin_method(self._client, task.method, task.params)
+        except Exception as exc:
+            self._finish_task(task_id, error=exc)
+        else:
+            self._finish_task(task_id, result=result)
 
     def _start_task(self, task_id: str) -> BridgeTask | None:
         with self._lock:

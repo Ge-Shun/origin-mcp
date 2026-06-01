@@ -40,6 +40,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_read_worksheet",
         "origin_write_worksheet",
         "origin_recommend_chart",
+        "origin_plot",
         "origin_plot_line",
         "origin_plot_scatter",
         "origin_plot_line_symbol",

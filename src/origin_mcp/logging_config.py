@@ -5,6 +5,11 @@ operators can inspect MCP tool calls after the fact. The default location is
 ``%TEMP%/origin-mcp/bridge.log`` on Windows or ``$TMPDIR/origin-mcp/bridge.log``
 elsewhere. Override with ``ORIGIN_MCP_LOG_FILE`` (set to ``-`` or ``off`` to
 disable file logging entirely). The active path is exposed by ``origin_doctor``.
+
+Set ``ORIGIN_MCP_DEBUG=1`` to also record the Python traceback of failed bridge
+dispatches in the log file (under an ``error_traceback`` field). It stays in the
+local log only and is never returned to the MCP client, so it is safe to enable
+when diagnosing opaque originpro/Origin failures.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ _DEFAULT_DIRNAME = "origin-mcp"
 _MAX_BYTES = 1_048_576  # 1 MiB per file
 _BACKUP_COUNT = 3
 _DISABLED_VALUES = {"-", "", "0", "off", "false", "no", "none"}
+_DEBUG_TRUE_VALUES = {"1", "true", "yes", "on"}
 
 _lock = threading.Lock()
 _configured = False
@@ -41,6 +47,13 @@ def resolved_log_path() -> Path | None:
             return None
         return Path(normalized).expanduser()
     return Path(tempfile.gettempdir()) / _DEFAULT_DIRNAME / _DEFAULT_BASENAME
+
+
+def debug_logging_enabled() -> bool:
+    """Return True when ORIGIN_MCP_DEBUG requests verbose diagnostic logging."""
+
+    value = os.environ.get("ORIGIN_MCP_DEBUG")
+    return value is not None and value.strip().lower() in _DEBUG_TRUE_VALUES
 
 
 def get_bridge_logger() -> logging.Logger:

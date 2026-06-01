@@ -10,6 +10,7 @@ import origin_mcp.tools.analysis as analysis_tools
 import origin_mcp.tools.graph as graph_tools
 import origin_mcp.tools.plotting as plotting_tools
 import origin_mcp.tools.plotting_basic as plotting_basic_tools
+import origin_mcp.tools.plotting_plot_ids as plotting_plot_ids_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
 from origin_mcp.server import _error, _json_safe
 
@@ -452,6 +453,48 @@ def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(
     assert calls[0]["template"] == "Contour"
     assert calls[0]["selected_cols"] == ["x", "y", "z"]
     assert calls[0]["graph_name"] == "Heat"
+
+
+def test_origin_plot_routes_kind_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    calls = []
+
+    def fake_plot_table_id(**kwargs):
+        calls.append(kwargs)
+        return {"ok": True, "message": "ok", "data": {}}
+
+    monkeypatch.setattr(plotting_plot_ids_tools, "_plot_table_id", fake_plot_table_id)
+
+    result = server.origin_plot(
+        path=str(path),
+        kind="bar",
+        selected_cols=["x", "y"],
+        graph_name="Bar",
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["plot_type_id"] == 215
+    assert calls[0]["template"] == "bar"
+    assert calls[0]["selected_cols"] == ["x", "y"]
+    assert calls[0]["graph_name"] == "Bar"
+
+
+def test_origin_plot_rejects_unknown_kind(tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+
+    result = server.origin_plot(path=str(path), kind="not_a_kind")
+
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_request"
+    assert "not_a_kind" in result["message"]
+
+
+def test_origin_plot_is_in_compact_profile() -> None:
+    from origin_mcp.tools._shared import COMPACT_TOOL_NAMES
+
+    assert "origin_plot" in COMPACT_TOOL_NAMES
 
 
 def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:

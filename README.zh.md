@@ -70,26 +70,21 @@ MCP 客户端配置示例：
 bridge 跑在 Origin 自带的 Python 里，这样 `originpro` 始终在 Origin 的 UI 线程上
 执行。无需任何额外配置，每个 Origin 会话启动一次即可：
 
-日常使用时，可以按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md)
-生成 Origin OPX 安装器。安装后，Origin App 图标就是单按钮 bridge 开关。该文档也保留了
-手动工具栏/菜单脚本，作为前台模式的兜底方案。
+**Origin App（推荐日常使用）。** 按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md)
+一次性生成并安装两个 bridge App。之后在 Apps 库里点 **Origin MCP Bridge Start** 启动
+bridge，点 **Origin MCP Bridge Stop** 关闭。
 
-手动启动或排查问题时：
-
-1. 打开 Origin，再打开它的 **Python Console**。
-2. 粘贴这一行（把路径换成你的项目路径）：
+**Python Console（临时使用或排查问题）。** 打开 Origin 的 **Python Console**，粘贴这一行
+（把路径换成你的项目路径）：
 
 ```python
 import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
-看到 `Bridge is running inside Origin.` 提示框即表示启动成功，使用工具期间保持该
-控制台运行。
-
-**要关闭时，直接让你的 MCP 助手关闭 Origin bridge 即可** —— 它会调用
-`origin_bridge_shutdown`，无需另开终端或在控制台里输入。如果不用助手，双击
-`scripts\stop-bridge.cmd`（或运行 `python scripts\stop_bridge.py`）即可发送同样的
-关闭请求：serve 的控制台会回到提示符，Origin 不会被关闭。
+看到 `Bridge is running inside Origin.` 提示框即表示启动成功，使用工具期间保持该控制台
+运行。要关闭时，让 MCP 助手关闭 bridge（它会调用 `origin_bridge_shutdown`），或双击
+`scripts\stop-bridge.cmd`（或运行 `python scripts\stop_bridge.py`）。两种方式都不会
+关闭 Origin。
 
 若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
 
@@ -97,6 +92,13 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 
 bridge 只监听 `127.0.0.1`，并默认用每次会话自动生成的 token 验证本机请求，正常使用
 无需额外安全配置。
+
+请把该 token 当作凭据对待：任何持有它的本机进程都能用完整工具集驱动 Origin，包括通过
+`origin_run_labtalk` 执行任意 LabTalk 代码。token 每次会话生成，写入当前用户临时目录下
+属主可访问的文件（Windows 上为 `%TEMP%/origin-mcp/bridge.json`）；在标准单用户机器上，
+该目录已由操作系统权限保护。但若你把 `TEMP` 或 `ORIGIN_MCP_BRIDGE_HANDSHAKE` 重定向到
+其他本机用户可读的目录，token（以及对 Origin 的控制权）就会暴露给他们。设置
+`ORIGIN_MCP_BRIDGE_NO_AUTH` 会彻底取消 token 边界，仅在你完全信任本机所有进程时使用。
 
 如需限制工具可读写的文件范围，可设置 `ORIGIN_MCP_ALLOWED_ROOTS` 为允许访问的目录。
 除非你完全信任本机所有进程，否则不要关闭 bridge 鉴权。

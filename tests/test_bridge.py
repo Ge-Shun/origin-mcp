@@ -213,6 +213,56 @@ def test_embedded_bridge_server_handles_request_without_handler_threads() -> Non
     assert result["max_tasks"] == 200
 
 
+class ThreadRecordingClient(FakeOriginClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.call_thread_ident: int | None = None
+
+    def run_labtalk(self, script: str) -> dict[str, Any]:
+        self.call_thread_ident = threading.get_ident()
+        return {"result": True, "script": script}
+
+
+def test_threaded_bridge_server_uses_task_worker_thread() -> None:
+    server = OriginBridgeServer(("127.0.0.1", 0), client=FakeOriginClient())
+    try:
+        assert server.tasks_use_worker_thread is True
+        assert server.tasks._worker is not None
+        assert server.tasks._worker.is_alive()
+    finally:
+        server.server_close()
+
+
+def test_embedded_bridge_runs_tasks_on_serving_thread() -> None:
+    # originpro must run on Origin's UI thread. The embedded server therefore
+    # owns no task worker thread and executes submit_task work on its serving
+    # loop. This locks the thread affinity, not just mutual exclusion.
+    client = ThreadRecordingClient()
+    server = OriginEmbeddedBridgeServer(("127.0.0.1", 0), client=client)
+    assert server.tasks_use_worker_thread is False
+    assert server.tasks._worker is None
+
+    serve_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    serve_thread.start()
+    try:
+        bclient = bridge_client(server)
+        submitted = bclient.request(
+            "submit_task",
+            {"method": "run_labtalk", "params": {"script": "type ok;"}},
+        )
+        task_id = submitted["task"]["task_id"]
+        completed = wait_for_status(bclient, task_id, "completed")
+    finally:
+        server.shutdown()
+        server.server_close()
+        serve_thread.join(timeout=2)
+
+    assert completed["status"] == "completed"
+    assert completed["result"]["script"] == "type ok;"
+    # The Origin call ran on the serving (UI) thread, never a worker thread.
+    assert client.call_thread_ident == serve_thread.ident
+
+
 def test_bridge_client_calls_origin_methods() -> None:
     with running_bridge() as server:
         client = bridge_client(server)
@@ -758,6 +808,55 @@ def test_bridge_writes_structured_log_records(
     success_record = next(record for record in records if record["method"] == "ping")
     assert success_record["ok"] is True
     assert "duration_ms" in success_record
+
+
+def test_bridge_logs_traceback_when_debug_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "bridge.log"
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(log_path))
+    monkeypatch.setenv("ORIGIN_MCP_DEBUG", "1")
+    bridge_logging.reset_for_tests()
+    try:
+        with running_bridge() as server:
+            with pytest.raises(OriginBridgeError):
+                bridge_client(server).request("does_not_exist")
+    finally:
+        bridge_logging.reset_for_tests()
+
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line
+    ]
+    error_record = next(record for record in records if record["method"] == "does_not_exist")
+    assert error_record["ok"] is False
+    assert "error_traceback" in error_record
+    assert "Traceback (most recent call last)" in error_record["error_traceback"]
+
+
+def test_bridge_omits_traceback_without_debug(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "bridge.log"
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(log_path))
+    monkeypatch.delenv("ORIGIN_MCP_DEBUG", raising=False)
+    bridge_logging.reset_for_tests()
+    try:
+        with running_bridge() as server:
+            with pytest.raises(OriginBridgeError):
+                bridge_client(server).request("does_not_exist")
+    finally:
+        bridge_logging.reset_for_tests()
+
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line
+    ]
+    error_record = next(record for record in records if record["method"] == "does_not_exist")
+    assert error_record["ok"] is False
+    # Default logging keeps the structured fields but no raw stack.
+    assert "error_traceback" not in error_record
+    assert error_record["error_code"] == "unsupported_bridge_method"
 
 
 def test_origin_doctor_reports_log_path(

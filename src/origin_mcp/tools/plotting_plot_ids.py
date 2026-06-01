@@ -454,6 +454,38 @@ def _pti(
     )
 
 
+@_mcp_tool()
+def origin_plot(
+    path: str,
+    kind: str,
+    selected_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    export_path: str | None = None,
+    style_mode: str = "origin_default",
+) -> dict[str, Any]:
+    """Create a table-based plot selected by ``kind``.
+
+    A single parameterized entry point for the table plot kinds that each also
+    have a dedicated ``origin_plot_*`` tool, so the compact tool profile can
+    reach every kind without enabling the full profile. ``kind`` must be one of:
+    area, stack_area, fill_area, bar, stack_bar, floating_bar, column_stack,
+    pie, ternary, ternary_contour, bubble, bubble_color_mapped, color_mapped,
+    vector_xyam, vector_xyxy, vector_3d, high_low_close, candlestick, waterfall,
+    ribbon_3d, bars_3d, errorbar_3d, polar_xr_ytheta, smith, dendrogram. For
+    line/scatter/column/histogram/box use the dedicated tools; for matrix-range
+    plots use origin_plot_matrix_id.
+    """
+
+    def run() -> dict[str, Any]:
+        if kind not in PLOT_TYPE_ID_ROUTES:
+            valid = ", ".join(sorted(PLOT_TYPE_ID_ROUTES))
+            raise ValueError(f"Unknown plot kind: {kind!r}. Valid kinds: {valid}.")
+        return _pti(path, kind, selected_cols, graph_name, title, export_path, style_mode)
+
+    return _wrap(run)
+
+
 def _plot_matrix_route(
     data_range: str,
     route: str,
