@@ -82,6 +82,76 @@ def test_request_stop_only_signals_shutdown_event() -> None:
     assert server.closed is False
 
 
+def test_stop_background_bridge_waits_for_thread_cleanup() -> None:
+    addon = load_addon_module()
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.shutdown_called = False
+            self.close_count = 0
+
+        def shutdown(self) -> None:
+            self.shutdown_called = True
+
+        def server_close(self) -> None:
+            self.close_count += 1
+
+    class FakeThread:
+        def __init__(self) -> None:
+            self.joined = False
+
+        def join(self, timeout: float | None = None) -> None:
+            self.joined = True
+
+    server = FakeServer()
+    thread = FakeThread()
+    addon._origin_mcp_bridge_server = server
+    addon._origin_mcp_bridge_thread = thread
+    try:
+        result = addon.stop_origin_mcp_bridge()
+    finally:
+        addon._origin_mcp_bridge_server = None
+        addon._origin_mcp_bridge_thread = None
+
+    assert result == {"stopped": True}
+    assert server.shutdown_called is True
+    assert thread.joined is True
+    assert server.close_count == 0
+
+
+def test_background_bridge_finalizes_when_serve_loop_exits(monkeypatch, tmp_path) -> None:
+    addon = load_addon_module()
+    status_path = tmp_path / "bridge-status.json"
+    monkeypatch.setenv("ORIGIN_MCP_BRIDGE_STATUS", str(status_path))
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.close_count = 0
+
+        def serve_forever(self) -> None:
+            return None
+
+        def server_close(self) -> None:
+            self.close_count += 1
+
+    server = FakeServer()
+
+    addon._origin_mcp_bridge_server = server
+    addon._origin_mcp_bridge_thread = object()
+    try:
+        addon._serve_background(server)
+    finally:
+        addon._origin_mcp_bridge_server = None
+        addon._origin_mcp_bridge_thread = None
+
+    data = json.loads(status_path.read_text(encoding="utf-8"))
+    assert server.close_count == 1
+    assert data["message"] == "stopped"
+    assert data["running"] is False
+    assert addon._origin_mcp_bridge_server is None
+    assert addon._origin_mcp_bridge_thread is None
+
+
 def test_addon_status_file_is_json(monkeypatch, tmp_path) -> None:
     addon = load_addon_module()
     status_path = tmp_path / "bridge-status.json"

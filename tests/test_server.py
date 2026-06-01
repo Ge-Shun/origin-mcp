@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import origin_mcp.server as server
+import origin_mcp.tools.analysis as analysis_tools
 import origin_mcp.tools.graph as graph_tools
 import origin_mcp.tools.plotting as plotting_tools
 import origin_mcp.tools.plotting_basic as plotting_basic_tools
@@ -345,6 +346,37 @@ def test_error_response_codes_unsupported_analysis() -> None:
     )
 
     assert result["error_code"] == "unsupported_analysis_type"
+
+
+def test_origin_run_analysis_delegates_linear_fit_to_structured_api(
+    monkeypatch,
+) -> None:
+    calls = {}
+
+    class FakeClient:
+        def linear_fit_result(self, **kwargs):
+            calls["linear_fit_result"] = kwargs
+            return {"mode": "result", "result": {"parameters": []}}
+
+    monkeypatch.setattr(analysis_tools, "client", FakeClient())
+
+    result = server.origin_run_analysis(
+        analysis="linear_fit",
+        worksheet="[Book1]Data",
+        x_col="x",
+        y_col="y",
+        options={"y_error_col": "err"},
+    )
+
+    assert result["ok"] is True
+    assert result["data"]["mode"] == "result"
+    assert calls["linear_fit_result"] == {
+        "worksheet": "[Book1]Data",
+        "x_col": "x",
+        "y_col": "y",
+        "y_error_col": "err",
+        "options": {"y_error_col": "err"},
+    }
 
 
 def test_error_response_defaults_for_unmarked_operation_errors() -> None:

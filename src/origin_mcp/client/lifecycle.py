@@ -122,9 +122,11 @@ class _LifecycleMixin(_OriginClientBase):
             func = getattr(op, name, None)
             if callable(func):
                 func()
+                self._op = None
                 self._capabilities = None
                 return {"closed": True}
         self.run_labtalk("exit;")
+        self._op = None
         self._capabilities = None
         return {"closed": True}
 
@@ -133,6 +135,7 @@ class _LifecycleMixin(_OriginClientBase):
         detach = getattr(op, "detach", None)
         if callable(detach):
             detach()
+            self._op = None
             self._capabilities = None
             return {"detached": True, "closed": False}
 
@@ -141,6 +144,7 @@ class _LifecycleMixin(_OriginClientBase):
         release = getattr(po, "Exit", None)
         if callable(release):
             release(True)
+            self._op = None
             self._capabilities = None
             return {"detached": True, "closed": False}
 
@@ -153,16 +157,19 @@ class _LifecycleMixin(_OriginClientBase):
         force_exit = getattr(po, "Exit", None)
         if callable(force_exit):
             force_exit(False)
+            self._op = None
             self._capabilities = None
             return {"closed": True, "forced": True}
 
         exit_func = getattr(op, "exit", None)
         if callable(exit_func):
             exit_func()
+            self._op = None
             self._capabilities = None
             return {"closed": True, "forced": False}
 
         self.run_labtalk("exit;")
+        self._op = None
         self._capabilities = None
         return {"closed": True, "forced": False}
 

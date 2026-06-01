@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import origin_mcp.bridge as bridge
+import origin_mcp.bridge_client as bridge_client_module
 import origin_mcp.logging_config as bridge_logging
 import origin_mcp.server as mcp_server
 import origin_mcp.tools.bridge as bridge_tools
@@ -377,7 +378,7 @@ def test_bridge_accepts_matching_token() -> None:
     assert result["bridge"] == "origin-mcp-bridge"
 
 
-def test_bridge_shutdown_stops_server_and_releases_origin() -> None:
+def test_bridge_shutdown_stops_server_and_detaches_origin() -> None:
     fake_client = FakeOriginClient()
     server = OriginBridgeServer(
         ("127.0.0.1", 0),
@@ -392,6 +393,33 @@ def test_bridge_shutdown_stops_server_and_releases_origin() -> None:
         server.server_close()
 
     assert result["shutdown_requested"] is True
+    assert result["release_origin"] is True
+    assert result["close_origin"] is False
+    assert result["origin_release_method"] == "detach"
+    assert result["origin_release"] == {"detached": True, "closed": False}
+    assert fake_client.detached is True
+    assert fake_client.force_closed is False
+    assert not thread.is_alive()
+
+
+def test_bridge_shutdown_can_force_close_origin() -> None:
+    fake_client = FakeOriginClient()
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown", {"close_origin": True})
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["shutdown_requested"] is True
+    assert result["release_origin"] is True
+    assert result["close_origin"] is True
+    assert result["origin_release_method"] == "force_quit"
     assert result["origin_release"] == {"closed": True, "forced": True}
     assert fake_client.force_closed is True
     assert fake_client.detached is False
@@ -412,7 +440,7 @@ def test_bridge_shutdown_can_keep_origin_alive() -> None:
     finally:
         server.server_close()
 
-    assert result == {"shutdown_requested": True, "release_origin": False}
+    assert result == {"shutdown_requested": True, "release_origin": False, "close_origin": False}
     assert fake_client.force_closed is False
     assert fake_client.detached is False
     assert not thread.is_alive()
@@ -546,7 +574,54 @@ def test_server_bridge_shutdown_wraps_response(monkeypatch: pytest.MonkeyPatch) 
 
     assert result["ok"] is True
     assert result["data"]["shutdown_requested"] is True
-    assert calls == [("shutdown", {"release_origin": True})]
+    assert calls == [("shutdown", {"release_origin": True, "close_origin": False})]
+
+
+def test_server_bridge_shutdown_can_request_origin_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def fake_request(method: str, params: dict[str, Any] | None = None, **_kwargs: Any):
+        calls.append((method, params))
+        return {"shutdown_requested": True, "release_origin": True, "close_origin": True}
+
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
+
+    result = mcp_server.origin_bridge_shutdown(close_origin=True)
+
+    assert result["ok"] is True
+    assert result["data"]["close_origin"] is True
+    assert calls == [("shutdown", {"release_origin": True, "close_origin": True})]
+
+
+def test_request_bridge_shutdown_closes_shared_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = FakeOriginClient()
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        result = bridge_client_module.request_bridge(
+            "shutdown",
+            {"release_origin": False},
+            host=str(host),
+            port=int(port),
+            timeout=2.0,
+        )
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+        bridge_client_module.close_shared_bridge_clients()
+
+    assert result["shutdown_requested"] is True
+    assert bridge_client_module._shared_clients == {}
+    assert not thread.is_alive()
 
 
 def test_server_bridge_status_reports_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:

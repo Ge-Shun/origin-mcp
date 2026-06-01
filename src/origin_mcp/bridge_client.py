@@ -233,6 +233,26 @@ def _shared_client(config: OriginBridgeConfig) -> OriginBridgeClient:
         return client
 
 
+def close_shared_bridge_clients(config: OriginBridgeConfig | None = None) -> None:
+    """Close cached bridge client sockets.
+
+    Tool calls reuse persistent sockets for normal bridge traffic. After a
+    bridge shutdown request those sockets should be discarded immediately so
+    this MCP process cannot keep stale connections or retry against a stopped
+    bridge instance.
+    """
+
+    with _shared_client_lock:
+        if config is None:
+            clients = list(_shared_clients.values())
+            _shared_clients.clear()
+        else:
+            client = _shared_clients.pop(config, None)
+            clients = [] if client is None else [client]
+    for client in clients:
+        client.close()
+
+
 def request_bridge(
     method: str,
     params: dict[str, Any] | None = None,
@@ -243,7 +263,11 @@ def request_bridge(
     timeout: float | None = None,
 ) -> dict[str, Any]:
     config = OriginBridgeConfig.from_env(host=host, port=port, token=token, timeout=timeout)
-    return _shared_client(config).request(method, params=params)
+    try:
+        return _shared_client(config).request(method, params=params)
+    finally:
+        if method == "shutdown":
+            close_shared_bridge_clients(config)
 
 
 def _bridge_json_safe(value: Any) -> Any:

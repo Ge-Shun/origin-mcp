@@ -120,3 +120,23 @@ def test_compact_profile_registers_exactly_the_compact_allow_list() -> None:
 
     names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
     assert names == set(server.COMPACT_TOOL_NAMES)
+
+
+def test_compact_profile_includes_analysis_wrappers() -> None:
+    """Compact mode should expose the user-facing analysis tools, not only the generic runner."""
+
+    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+
+    assert {
+        "origin_run_analysis",
+        "origin_linear_fit",
+        "origin_polynomial_fit",
+        "origin_smooth",
+        "origin_descriptive_stats",
+        "origin_differentiate",
+        "origin_integrate",
+        "origin_peak_find",
+        "origin_nonlinear_fit",
+        "origin_nonlinear_fit_structured",
+        "origin_list_fit_functions",
+    } <= names

@@ -28,6 +28,18 @@ def origin_run_analysis(
     """Run a named Origin analysis X-Function through LabTalk."""
 
     def run() -> dict[str, Any]:
+        if analysis.strip().lower().replace("-", "_") in {"linear_fit", "fitlr"}:
+            if x_col is not None and y_col is not None:
+                return _ok(
+                    "Ran Origin linear fitting.",
+                    **client.linear_fit_result(
+                        worksheet=worksheet,
+                        x_col=x_col,
+                        y_col=y_col,
+                        y_error_col=(options or {}).get("y_error_col"),
+                        options=options,
+                    ),
+                )
         req = AnalysisRequest(
             analysis=analysis,
             worksheet=worksheet,

@@ -306,6 +306,19 @@ def _clear_failed_imports() -> None:
         sys.modules.pop(module_name, None)
 
 
+def _clear_origin_mcp_imports() -> None:
+    """Drop cached origin_mcp modules before starting a fresh bridge.
+
+    Origin's Python Console commonly stays alive while addon.py is rerun during
+    development. Without clearing these modules, a restarted bridge can keep
+    serving old code from sys.modules even though the checkout on disk changed.
+    """
+
+    for module_name in list(sys.modules):
+        if module_name == "origin_mcp" or module_name.startswith("origin_mcp."):
+            sys.modules.pop(module_name, None)
+
+
 def _pump_windows_messages() -> None:
     if os.name != "nt":
         return
@@ -331,6 +344,13 @@ def _serve_foreground_cooperative(server: Any) -> None:
         time.sleep(0.001)
 
 
+def _serve_background(server: Any) -> None:
+    try:
+        server.serve_forever()
+    finally:
+        _finalize_bridge_stopped(server)
+
+
 def _bridge_shutdown_requested(server: Any) -> bool:
     event = getattr(server, "shutdown_requested", None)
     return bool(event is not None and event.is_set())
@@ -339,7 +359,10 @@ def _bridge_shutdown_requested(server: Any) -> bool:
 def _finalize_bridge_stopped(server: Any) -> None:
     """Close the server socket, clear module globals, and record the stop."""
 
-    server.server_close()
+    try:
+        server.server_close()
+    except Exception:
+        pass
     handshake_path = globals().get("_origin_mcp_handshake_path")
     if handshake_path is not None:
         try:
@@ -424,6 +447,8 @@ def start_origin_mcp_bridge(
     )
     try:
         package_source = _ensure_origin_mcp_importable(src_dir)
+        _clear_origin_mcp_imports()
+        package_source = _ensure_origin_mcp_importable(src_dir)
         from origin_mcp.bridge_handshake import generate_token
 
         if token is None and not _env_bool("ORIGIN_MCP_BRIDGE_NO_AUTH", False):
@@ -502,7 +527,8 @@ def start_origin_mcp_bridge(
         )
     if background:
         thread = threading.Thread(
-            target=server.serve_forever,
+            target=_serve_background,
+            args=(server,),
             name="origin-mcp-bridge",
             daemon=True,
         )
@@ -530,7 +556,6 @@ def stop_origin_mcp_bridge() -> dict[str, Any]:
     server.shutdown()
     if thread is not None:
         thread.join(timeout=2)
-    _finalize_bridge_stopped(server)
     return {"stopped": True}
 
 

@@ -159,16 +159,22 @@ def origin_bridge_status(
 @_mcp_tool()
 def origin_bridge_shutdown(
     release_origin: bool = True,
+    close_origin: bool = False,
     host: str | None = None,
     port: int | None = None,
     token: str | None = None,
     timeout: float | None = 2.0,
 ) -> dict[str, Any]:
-    """Ask the Origin GUI bridge to stop serving requests."""
+    """Ask the Origin GUI bridge to stop serving requests.
+
+    By default this releases the Origin automation connection without closing
+    Origin itself. Set ``close_origin=True`` to force-close Origin as part of
+    shutdown.
+    """
 
     return _bridge_call(
         "shutdown",
-        {"release_origin": release_origin},
+        {"release_origin": release_origin, "close_origin": close_origin},
         host=host,
         port=port,
         token=token,

@@ -71,3 +71,50 @@ def test_peak_find_adapter_maps_common_names() -> None:
     assert "smooth:=7" in command
     assert "dir:=p" in command
     assert "value:=20" in command
+
+
+def test_peak_find_adapter_leaves_output_ranges_unquoted() -> None:
+    adapter = resolve_analysis_adapter("peak_find", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet=None,
+        options={"ocenter": "[PeakOut]Peaks!(1)", "ocenter_x": "[PeakOut]Peaks!(2)"},
+    )
+
+    assert "ocenter:=[PeakOut]Peaks!(1)" in command
+    assert "ocenter_x:=[PeakOut]Peaks!(2)" in command
+
+
+def test_descriptive_stats_adapter_uses_moments_input_without_worksheet_output() -> None:
+    adapter = resolve_analysis_adapter("descriptive_stats", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(signal)",
+        output_sheet="IgnoredOut",
+        options={"mean": "meanVar", "sd": "sdVar", "se": "seVar"},
+    )
+
+    assert command.startswith("moments ix:=[Book1]1!(signal)")
+    assert "oy:=" not in command
+    assert "mean:=meanVar" in command
+    assert "sd:=sdVar" in command
+    assert "se:=seVar" in command
+
+
+def test_xy_math_adapters_accept_output_ranges() -> None:
+    diff = resolve_analysis_adapter("differentiate", 10.3).command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[DiffOut]Result!(1,2)",
+        options={"points": 5, "derivative_order": 1},
+    )
+    integ = resolve_analysis_adapter("integrate", 10.3).command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[IntegOut]Result!(1,2)",
+        options={},
+    )
+
+    assert "differentiate iy:=[Book1]1!(time,signal)" in diff
+    assert "oy:=[DiffOut]Result!(1,2)" in diff
+    assert "npts:=5" in diff
+    assert "order:=1" in diff
+    assert "integ1 iy:=[Book1]1!(time,signal)" in integ
+    assert "oy:=[IntegOut]Result!(1,2)" in integ

@@ -303,6 +303,116 @@ def test_run_analysis_structures_polynomial_output(monkeypatch: pytest.MonkeyPat
     assert result["metrics"]["RSqCOD"] == 0.99
 
 
+def test_run_analysis_structures_moments_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(signal)"  # type: ignore[method-assign]
+    captured = {}
+
+    def fake_run_labtalk(script: str):
+        captured["script"] = script
+        return {"result": True}
+
+    monkeypatch.setattr(client, "run_labtalk", fake_run_labtalk)
+    monkeypatch.setattr(
+        client,
+        "_moments_output_variables",
+        lambda: {
+            "mean": "meanVar",
+            "sd": "sdVar",
+            "se": "seVar",
+            "n": "nVar",
+            "sum": "sumVar",
+            "skewness": "skewVar",
+            "kurtosis": "kurtVar",
+            "cv": "cvVar",
+        },
+    )
+    values = {
+        "meanVar": 10.5,
+        "sdVar": 2.0,
+        "seVar": 0.5,
+        "nVar": 16,
+        "sumVar": 168.0,
+        "skewVar": 0.1,
+        "kurtVar": -1.2,
+        "cvVar": 0.19,
+    }
+    monkeypatch.setattr(client, "_safe_eval", lambda expression: values.get(expression))
+
+    result = client.run_analysis(
+        analysis="descriptive_stats",
+        worksheet="[Book1]Sheet1",
+        y_col="signal",
+        output_sheet="StatsOut",
+    )
+
+    assert "moments ix:=[Book1]Sheet1!(signal)" in captured["script"]
+    assert "oy:=" not in captured["script"]
+    assert "mean:=meanVar" in captured["script"]
+    assert result["metrics"]["Mean"] == 10.5
+    assert result["metrics"]["StandardDeviation"] == 2.0
+    assert result["metrics"]["N"] == 16
+    assert result["metrics"]["Sum"] == 168.0
+    assert result["metrics"]["CoefficientOfVariation"] == 0.19
+
+
+def test_run_analysis_prepares_xy_output_for_differentiate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,signal)"  # type: ignore[method-assign]
+    client.run_labtalk = lambda _script: {"result": True}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        client,
+        "_prepare_analysis_xy_output",
+        lambda output_sheet: f"[{output_sheet}]Result!(1,2)",
+    )
+
+    result = client.run_analysis(
+        analysis="differentiate",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="signal",
+        output_sheet="DiffOut",
+    )
+
+    assert result["output_target"] == "[DiffOut]Result!(1,2)"
+    assert "oy:=[DiffOut]Result!(1,2)" in result["script"]
+
+
+def test_run_analysis_prepares_peak_find_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    client._capabilities = {"origin_version": 10.3, "features": {}}
+    client._analysis_range = lambda *_args: "[Book1]Sheet1!(time,signal)"  # type: ignore[method-assign]
+    client.run_labtalk = lambda _script: {"result": True}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        client,
+        "_prepare_peak_find_outputs",
+        lambda output_sheet: {
+            "worksheet": f"[{output_sheet}]Peaks",
+            "ocenter": f"[{output_sheet}]Peaks!(1)",
+            "ocenter_x": f"[{output_sheet}]Peaks!(2)",
+            "ocenter_y": f"[{output_sheet}]Peaks!(3)",
+        },
+    )
+
+    result = client.run_analysis(
+        analysis="peak_find",
+        worksheet="[Book1]Sheet1",
+        x_col="time",
+        y_col="signal",
+        output_sheet="PeakOut",
+    )
+
+    assert result["output_target"] == "[PeakOut]Peaks"
+    assert "oy:=" not in result["script"]
+    assert "ocenter:=[PeakOut]Peaks!(1)" in result["script"]
+    assert "ocenter_x:=[PeakOut]Peaks!(2)" in result["script"]
+    assert "ocenter_y:=[PeakOut]Peaks!(3)" in result["script"]
+
+
 def test_structure_fit_result_extracts_parameters_and_metrics() -> None:
     client = OriginClient()
 
@@ -391,6 +501,7 @@ def test_detach_clears_cached_capabilities(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert result == {"detached": True, "closed": False}
     assert client._capabilities is None
+    assert client._op is None
 
 
 class FakeBook:

@@ -136,12 +136,25 @@ class _AnalysisMixin(_OriginClientBase):
         options_for_script = dict(options or {})
         output_target = output_sheet
         polynomial_outputs: dict[str, str] = {}
-        if output_sheet and analysis_name in ANALYSIS_XY_OUTPUTS:
+        moments_outputs: dict[str, str] = {}
+        peak_find_outputs: dict[str, str] = {}
+        if output_sheet and analysis_name in ANALYSIS_XY_OUTPUTS | {"differentiate", "integrate"}:
             output_target = self._prepare_analysis_xy_output(output_sheet)
         if analysis_name == "polynomial_fit":
             polynomial_outputs = self._polynomial_output_variables()
             for key, value in polynomial_outputs.items():
                 options_for_script.setdefault(key, value)
+        if analysis_name == "descriptive_stats":
+            output_target = None
+            moments_outputs = self._moments_output_variables()
+            for key, value in moments_outputs.items():
+                options_for_script.setdefault(key, value)
+        if analysis_name == "peak_find" and output_sheet:
+            output_target = None
+            peak_find_outputs = self._prepare_peak_find_outputs(output_sheet)
+            for key, value in peak_find_outputs.items():
+                if key != "worksheet":
+                    options_for_script.setdefault(key, value)
         script = self._analysis_script(
             analysis=analysis,
             worksheet=worksheet,
@@ -167,6 +180,12 @@ class _AnalysisMixin(_OriginClientBase):
         }
         if output_target and output_target != output_sheet:
             response["output_target"] = output_target
+        if moments_outputs:
+            moments = self._structure_moments_outputs(moments_outputs)
+            response["metrics"].update(moments["metrics"])
+            response["sections"].update(moments["sections"])
+        if peak_find_outputs:
+            response["output_target"] = peak_find_outputs["worksheet"]
         if include_output:
             if not output_sheet:
                 output_warning = "include_output requires output_sheet."
@@ -187,6 +206,10 @@ class _AnalysisMixin(_OriginClientBase):
                     if polynomial["parameters"]:
                         response["parameters"] = polynomial["parameters"]
                     response["metrics"].update(polynomial["metrics"])
+                if moments_outputs:
+                    moments = self._structure_moments_outputs(moments_outputs)
+                    response["metrics"].update(moments["metrics"])
+                    response["sections"].update(moments["sections"])
                 if not output.get("found", True) and output.get("error"):
                     response["warnings"].append(str(output["error"]))
         return response
@@ -229,6 +252,49 @@ class _AnalysisMixin(_OriginClientBase):
             "AdjRSq": f"{prefix}a",
             "RSqCOD": f"{prefix}r",
         }
+
+    @staticmethod
+    def _moments_output_variables() -> dict[str, str]:
+        prefix = f"om{uuid.uuid4().hex[:6]}"
+        return {
+            "mean": f"{prefix}mean",
+            "sd": f"{prefix}sd",
+            "se": f"{prefix}se",
+            "n": f"{prefix}n",
+            "sum": f"{prefix}sum",
+            "skewness": f"{prefix}sk",
+            "kurtosis": f"{prefix}ku",
+            "cv": f"{prefix}cv",
+        }
+
+    def _prepare_peak_find_outputs(self, output_sheet: str) -> dict[str, str]:
+        wks = self._new_sheet(book_name=output_sheet, sheet_name="Peaks")
+        ref = self._worksheet_ref(wks)
+        worksheet = f"[{ref.book_name}]{ref.sheet_name}"
+        return {
+            "worksheet": worksheet,
+            "ocenter": f"{worksheet}!(1)",
+            "ocenter_x": f"{worksheet}!(2)",
+            "ocenter_y": f"{worksheet}!(3)",
+        }
+
+    def _structure_moments_outputs(self, variables: dict[str, str]) -> dict[str, Any]:
+        names = {
+            "mean": "Mean",
+            "sd": "StandardDeviation",
+            "se": "StandardError",
+            "n": "N",
+            "sum": "Sum",
+            "skewness": "Skewness",
+            "kurtosis": "Kurtosis",
+            "cv": "CoefficientOfVariation",
+        }
+        metrics: dict[str, Any] = {}
+        for key, name in names.items():
+            value = self._safe_eval(variables[key])
+            if is_analysis_number(value):
+                metrics[name] = value
+        return {"metrics": metrics, "sections": {"moments_variables": variables}}
 
     def _structure_polynomial_outputs(
         self,

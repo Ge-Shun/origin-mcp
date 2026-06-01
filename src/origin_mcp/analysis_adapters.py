@@ -15,7 +15,7 @@ class AnalysisAdapter:
     minimum_origin_version: float | None = None
     range_required: bool = False
     input_option: str = "iy"
-    output_option: str = "oy"
+    output_option: str | None = "oy"
     option_aliases: dict[str, str] = field(default_factory=dict)
     symbol_options: tuple[str, ...] = ()
     note: str = ""
@@ -35,7 +35,7 @@ class AnalysisAdapter:
         parts = [self.x_function]
         if range_expr:
             parts.append(f"{self.input_option}:={range_expr}")
-        if output_sheet:
+        if output_sheet and self.output_option:
             parts.append(f"{self.output_option}:={output_sheet}")
         option_text = xf_options(self.normalize_options(options), self.symbol_options)
         if option_text:
@@ -91,12 +91,22 @@ ANALYSIS_ADAPTERS = {
         x_function="differentiate",
         aliases=("diff", "derivative"),
         range_required=True,
+        option_aliases={
+            "derivative_order": "order",
+            "polynomial_order": "poly",
+            "window_points": "npts",
+            "points": "npts",
+        },
     ),
     "integrate": AnalysisAdapter(
         name="integrate",
         x_function="integ1",
         aliases=("integration", "integ1"),
         range_required=True,
+        option_aliases={
+            "baseline": "baseline",
+            "subtract_baseline": "sub",
+        },
     ),
     "peak_find": AnalysisAdapter(
         name="peak_find",
@@ -119,13 +129,26 @@ ANALYSIS_ADAPTERS = {
             "left_indices": "oleft",
             "right_indices": "oright",
         },
-        symbol_options=("method", "dir", "option", "filter"),
+        symbol_options=(
+            "method",
+            "dir",
+            "option",
+            "filter",
+            "ocenter",
+            "ocenter_x",
+            "ocenter_y",
+            "oleft",
+            "oright",
+        ),
     ),
     "descriptive_stats": AnalysisAdapter(
         name="descriptive_stats",
         x_function="moments",
         aliases=("moments", "statistics", "stats"),
         range_required=True,
+        input_option="ix",
+        output_option=None,
+        symbol_options=("mean", "sd", "se", "n", "sum", "skewness", "kurtosis", "cv"),
     ),
 }
 

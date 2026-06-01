@@ -197,15 +197,19 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
 
     def _shutdown_bridge(self, params: dict[str, Any]) -> dict[str, Any]:
         release_origin = bool(params.get("release_origin", True))
+        close_origin = bool(params.get("close_origin", False))
         result: dict[str, Any] = {
             "shutdown_requested": True,
             "release_origin": release_origin,
+            "close_origin": close_origin,
         }
         if release_origin:
-            release = getattr(self.server.client, "force_quit", None)
+            release_method = "force_quit" if close_origin else "detach"
+            release = getattr(self.server.client, release_method, None)
             if callable(release):
                 try:
                     result["origin_release"] = release()
+                    result["origin_release_method"] = release_method
                 except Exception as exc:
                     result["origin_release_error"] = {
                         "message": str(exc),
@@ -214,7 +218,7 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                     }
             else:
                 result["origin_release_error"] = {
-                    "message": "Origin client does not provide force_quit().",
+                    "message": f"Origin client does not provide {release_method}().",
                     "error_code": "origin_release_unavailable",
                     "error_type": "AttributeError",
                 }
