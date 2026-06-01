@@ -89,22 +89,11 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 
 ## 安全性
 
-bridge 只监听 `127.0.0.1`，但本机任何能访问该端口的进程都能操控 Origin——包括
-通过 `origin_run_labtalk` 执行任意 LabTalk 脚本。为此，bridge 现在**默认启用鉴权**：
+bridge 只监听 `127.0.0.1`，并默认用每次会话自动生成的 token 验证本机请求，正常使用
+无需额外安全配置。
 
-- 启动时自动生成一个随机的会话 token，并连同实际绑定的 host/port 一起写入临时目录
-  下的握手文件（`%TEMP%/origin-mcp/bridge.json`）。MCP server 与 `stop_bridge` 会自动
-  读取，因此**零配置**即默认开启鉴权。
-- 显式设置 `ORIGIN_MCP_BRIDGE_TOKEN`（需在两个进程中都设置）会覆盖自动生成的 token，
-  且优先级高于握手文件。
-- `ORIGIN_MCP_BRIDGE_HANDSHAKE` 可覆盖握手文件位置（当两个进程不共享同一临时目录时
-  有用）。
-- `ORIGIN_MCP_BRIDGE_NO_AUTH=1` 会完全关闭鉴权。**不推荐**；以该模式启动时 bridge
-  会打印告警。
-
-如需限制工具可读写的文件范围（数据导入、导出、项目与模板路径），设置
-`ORIGIN_MCP_ALLOWED_ROOTS` 为一个或多个目录（用操作系统路径分隔符分隔）。设置后，
-位于这些根目录之外的路径会以 `path_not_allowed` 被拒绝。默认不设置（不限制）。
+如需限制工具可读写的文件范围，可设置 `ORIGIN_MCP_ALLOWED_ROOTS` 为允许访问的目录。
+除非你完全信任本机所有进程，否则不要关闭 bridge 鉴权。
 
 ## 许可证
 
