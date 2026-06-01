@@ -30,8 +30,8 @@ pull request。
 `origin-mcp` 以两个协作进程运行，受支持的 Python 版本按角色区分：
 
 - **MCP server core**（`python -m origin_mcp` 进程，仅通过本机回环与 bridge
-  通信）：Python 3.10+。本地检查目前已在 Python 3.12 和 3.14 上通过，3.10/3.11/
-  3.13 预期同样可用。
+  通信）：Python 3.10+。CI 会在 Windows 上使用 Python 3.10、3.11、3.12、3.13
+  和 3.14 测试该核心进程。
 - **Origin bridge**（`addon.py`）：运行在 Origin 自带的内嵌 Python 中，版本由你
   安装的 Origin 决定，无需自行选择。
 

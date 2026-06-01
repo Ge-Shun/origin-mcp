@@ -37,8 +37,8 @@ welcome.
 versions differ by role:
 
 - **MCP server core** (the `python -m origin_mcp` process, which only talks to
-  the bridge over localhost): Python 3.10+. Local checks currently pass on
-  Python 3.12 and 3.14, and 3.10/3.11/3.13 are expected to work as well.
+  the bridge over localhost): Python 3.10+. CI tests this core on Windows with
+  Python 3.10, 3.11, 3.12, 3.13, and 3.14.
 - **Origin bridge** (`addon.py`): runs inside Origin's own embedded Python, so
   its version is whatever your Origin install ships — there is nothing to pick.
 
