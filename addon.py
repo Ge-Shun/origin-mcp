@@ -10,6 +10,7 @@ import sysconfig
 import threading
 import time
 import traceback
+import types
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,17 @@ RUNTIME_PACKAGES = {
     "xlrd": "xlrd>=2.0",
 }
 _STATUS_STATE: dict[str, Any] = {}
+
+
+def _register_control_module_alias() -> None:
+    """Expose this running addon under a stable module name for Origin UI scripts."""
+
+    current_module = sys.modules.get(__name__)
+    if current_module is None:
+        current_module = types.ModuleType(__name__)
+        current_module.__dict__.update(globals())
+        sys.modules[__name__] = current_module
+    sys.modules["origin_mcp_addon"] = current_module
 
 
 def _addon_dir() -> Path:
@@ -84,17 +96,25 @@ def _notify(message: str, fields: dict[str, Any] | None = None) -> None:
     _emit(message, fields=fields)
     if os.name != "nt":
         return
-    try:
-        import ctypes
 
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            message,
-            "origin-mcp bridge",
-            0x00000040,
-        )
-    except Exception:
-        pass
+    def _show() -> None:
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                message,
+                "origin-mcp bridge",
+                0x00000040,
+            )
+        except Exception:
+            pass
+
+    # Show the box on a daemon thread so a modal popup never blocks the caller.
+    # In foreground mode the caller goes straight into the cooperative serve
+    # loop; a blocking MessageBox here would leave the socket bound but never
+    # answering until the user dismissed the dialog.
+    threading.Thread(target=_show, name="origin-mcp-notify", daemon=True).start()
 
 
 class _StdioCompat:
@@ -587,6 +607,9 @@ def origin_mcp_bridge_status() -> dict[str, Any]:
         return {"running": False}
     actual_host, actual_port = server.server_address
     return {"running": True, "host": actual_host, "port": actual_port}
+
+
+_register_control_module_alias()
 
 
 if __name__ == "__main__":

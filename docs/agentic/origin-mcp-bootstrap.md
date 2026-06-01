@@ -7,7 +7,8 @@ on a Windows machine.
 
 1. The MCP client is configured to run the local `origin-mcp` server.
 2. The server runtime can import `origin_mcp`.
-3. The Origin GUI bridge is started from Origin's Python console with `addon.py`.
+3. The Origin GUI bridge is started from Origin with `addon.py`, either through
+   installed UI buttons or the Python console.
 4. The MCP client is restarted or reconnected so the server is available.
 
 ## Agent Execution Rules
@@ -148,7 +149,13 @@ Get-CimInstance Win32_Process |
 
 [USER ACTION REQUIRED]
 
-In Origin/OriginPro:
+For daily use, build and install the Origin OPX from `docs/origin-ui-buttons.md`,
+then click the **Origin MCP Bridge** App icon inside Origin as a single bridge
+toggle.
+If the OPX background bridge does not process requests on that installation,
+fall back to the manual foreground startup below.
+
+For manual startup or troubleshooting, in Origin/OriginPro:
 
 1. Open the Python console.
 2. Run the checkout addon by path:

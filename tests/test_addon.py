@@ -24,6 +24,14 @@ def test_addon_status_path_defaults_next_to_addon(monkeypatch) -> None:
     assert addon._status_path() == ROOT / "origin-bridge.status.txt"
 
 
+def test_addon_registers_stable_control_module_alias() -> None:
+    addon = load_addon_module()
+    control_module = addon.sys.modules["origin_mcp_addon"]
+
+    assert control_module.request_stop_origin_mcp_bridge is not None
+    assert control_module.origin_mcp_bridge_status is not None
+
+
 def test_addon_installs_missing_dependencies_by_default(monkeypatch) -> None:
     addon = load_addon_module()
     monkeypatch.delenv("ORIGIN_MCP_INSTALL_MISSING", raising=False)

@@ -19,6 +19,10 @@ _BRIDGE_ENV_VARS = (
 )
 
 
+class FakeOriginClient:
+    pass
+
+
 @pytest.fixture
 def isolated_handshake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Point the handshake file at a temp path and clear all bridge env vars."""
@@ -111,8 +115,6 @@ def test_from_env_falls_back_to_defaults_without_handshake(isolated_handshake: P
 def test_handshake_token_authenticates_against_running_bridge(isolated_handshake: Path) -> None:
     """End-to-end: a token-protected bridge accepts a client configured purely
     from the handshake file, and rejects one that ignores it."""
-
-    from tests.test_bridge import FakeOriginClient
 
     token = bridge_handshake.generate_token()
     server = OriginBridgeServer(("127.0.0.1", 0), token=token, client=FakeOriginClient())

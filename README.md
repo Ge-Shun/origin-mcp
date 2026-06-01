@@ -79,6 +79,13 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 The bridge runs inside Origin's own Python so `originpro` stays on Origin's UI
 thread. There is nothing to configure — start it once per Origin session:
 
+For daily use, build the Origin OPX installer from
+[docs/origin-ui-buttons.md](docs/origin-ui-buttons.md). After that, the Origin
+App icon is a single bridge toggle. The same document also includes manual
+toolbar/menu scripts for foreground fallback setups.
+
+For manual startup or troubleshooting:
+
 1. Open Origin, then open its **Python Console**.
 2. Paste this single line (replace the path with your checkout):
 

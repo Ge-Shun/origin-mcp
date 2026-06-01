@@ -70,6 +70,12 @@ MCP 客户端配置示例：
 bridge 跑在 Origin 自带的 Python 里，这样 `originpro` 始终在 Origin 的 UI 线程上
 执行。无需任何额外配置，每个 Origin 会话启动一次即可：
 
+日常使用时，可以按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md)
+生成 Origin OPX 安装器。安装后，Origin App 图标就是单按钮 bridge 开关。该文档也保留了
+手动工具栏/菜单脚本，作为前台模式的兜底方案。
+
+手动启动或排查问题时：
+
 1. 打开 Origin，再打开它的 **Python Console**。
 2. 粘贴这一行（把路径换成你的项目路径）：
 
