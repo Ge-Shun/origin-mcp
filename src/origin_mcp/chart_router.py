@@ -307,6 +307,7 @@ def _recommendation_candidates(
                 )
 
     if x and y and z:
+        prefer_3d_scatter = intent in {"3d", "3d_scatter", "scatter3d", "xyz", "xyz_scatter"}
         if profile.regular_xyz_grid or intent in {"matrix", "heatmap"}:
             candidates.append(
                 ChartRecommendation(
@@ -314,7 +315,11 @@ def _recommendation_candidates(
                     chart="contour",
                     plot_type_id=243,
                     template="Contour",
-                    score=_score(90, intent, {"matrix", "heatmap", "contour"}),
+                    score=_score(
+                        70 if prefer_3d_scatter else 90,
+                        intent,
+                        {"matrix", "heatmap", "contour"},
+                    ),
                     rationale=(
                         "Detected x/y/z values with a grid-like structure; "
                         "contour/heatmap is appropriate."
@@ -331,7 +336,11 @@ def _recommendation_candidates(
                 chart="3d_scatter",
                 plot_type_id=240,
                 template="3d",
-                score=_score(78, intent, {"scatter", "3d", "relationship"}),
+                score=_score(
+                    94 if prefer_3d_scatter else 78,
+                    intent,
+                    {"scatter", "3d", "3d_scatter", "xyz_scatter", "relationship"},
+                ),
                 rationale=(
                     "Detected x/y/z numeric columns; 3D scatter preserves "
                     "point-level relationships."
@@ -633,6 +642,10 @@ def _normalize_intent(intent: str | None) -> str | None:
         "bubble_colormap": "bubble_color_mapped",
         "colormap": "color_mapped",
         "colour_mapped": "color_mapped",
+        "3d_scatter_xyz": "3d_scatter",
+        "scatter_3d": "3d_scatter",
+        "scatter_xyz": "xyz_scatter",
+        "xyz_3d": "3d_scatter",
     }
     return aliases.get(value, value)
 

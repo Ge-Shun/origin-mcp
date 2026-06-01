@@ -627,6 +627,20 @@ def test_get_graph_info_reports_layers_and_plots(monkeypatch: pytest.MonkeyPatch
     assert result["layers"][0]["axes"]["x"]["scale_name"] == "linear"
 
 
+def test_get_graph_info_detects_parenthesized_panel_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer([FakePlot()])
+    layer.labels["panel_a_panel_tag"] = FakeLabel("(a)")
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.get_graph_info("Graph1")
+
+    assert result["layers"][0]["panel_label_present"] is True
+
+
 def test_set_axis_returns_readback_and_verification(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     layer = FakeLayer()
@@ -1512,6 +1526,22 @@ def test_diagnose_graph_checks_export_quality(
     assert result["checklist"][-2]["passed"] is False
 
 
+def test_diagnose_graph_accepts_external_palette_without_nature_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    layer = FakeLayer([FakePlot()])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = "Value"
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.diagnose_graph("Graph1", palette_name="Viridis")
+
+    assert result["palette_name"] == "Viridis"
+    assert result["issues"][0]["code"] == "external_palette_name"
+
+
 def test_chart_atlas_route_selects_correlation_scatter() -> None:
     client = OriginClient()
 
@@ -1521,6 +1551,16 @@ def test_chart_atlas_route_selects_correlation_scatter() -> None:
     assert route["kind"] == "scatter"
     assert route["regression"] is True
     assert route["palette_role"] == "hero"
+
+
+def test_chart_atlas_route_accepts_3d_scatter_alias() -> None:
+    client = OriginClient()
+
+    route = client.chart_atlas_route("3d scatter xyz", columns=["x", "y", "z"])
+
+    assert route["intent"] == "3d_scatter"
+    assert route["plot_type_id"] == 240
+    assert route["template"] == "3d"
 
 
 def test_plot_auto_routes_bubble_color_mapped_to_plot_type_id(
@@ -1555,6 +1595,31 @@ def test_plot_auto_routes_bubble_color_mapped_to_plot_type_id(
     assert calls["plot_table_by_id"]["selected_cols"] == ["x", "y", "size", "intensity"]
     assert result["recommendation"]["selected"]["chart"] == "bubble_color_mapped"
     assert result["command"] == {"script": "plotxy iy:=... plot:=248;"}
+
+
+def test_plot_auto_prefers_3d_scatter_for_3d_xyz_intent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "xyz.csv"
+    path.write_text("x,y,z\n0,0,1\n0,1,2\n1,0,3\n1,1,4\n", encoding="utf-8")
+    client = OriginClient()
+    worksheet = WorksheetRef("Book1", "Sheet1", ["x", "y", "z"], 4)
+    graph = GraphRef("Auto3D", template="3d", style_mode="origin_default")
+    calls = {}
+
+    def fake_plot_table_by_id(**kwargs: object) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
+        calls["plot_table_by_id"] = kwargs
+        return worksheet, graph, {"script": "plotxyz iz:=... plot:=240;"}
+
+    monkeypatch.setattr(client, "plot_table_by_id", fake_plot_table_by_id)
+    monkeypatch.setattr(client, "diagnose_graph", lambda **_kwargs: {"passed": True})
+
+    result = client.plot_auto(path=path, intent="3d scatter xyz", graph_name="Auto3D")
+
+    assert calls["plot_table_by_id"]["plot_type_id"] == 240
+    assert calls["plot_table_by_id"]["template"] == "3d"
+    assert result["recommendation"]["selected"]["chart"] == "3d_scatter"
 
 
 def test_plot_chart_atlas_defaults_to_origin_style_and_regression(
@@ -2231,6 +2296,48 @@ def test_plot_table_by_id_records_alias_when_origin_uses_different_short_name(
 
     assert formatted["graph_name"] == "Graph7"
     assert 'win -a "Graph7";' in scripts[-1]
+
+
+def test_plot_table_by_id_uses_active_graph_when_pages_do_not_report_new_graph(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    scripts = []
+    graph = GPage(FakeLayer())
+    graph.name = "Graph12"
+
+    class FakeOrigin:
+        def find_graph(self, name: str) -> GPage | None:
+            return graph if name == "Graph12" else None
+
+        def pages(self) -> list[GPage]:
+            return []
+
+        def graph_active(self) -> GPage:
+            return graph
+
+    monkeypatch.setattr(client, "_op", FakeOrigin())
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _worksheet, graph_ref, _command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=240,
+        template="3d",
+        selected_cols=["x", "y", "z"],
+        graph_name="Requested3D",
+    )
+
+    assert graph_ref.graph_name == "Graph12"
+    assert client._find_or_active_graph("Requested3D") is graph
 
 
 def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch) -> None:

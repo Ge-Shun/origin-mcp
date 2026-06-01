@@ -500,7 +500,13 @@ def _apply_axis_specs(
         if isinstance(limits, list):
             start = limits[0] if len(limits) > 0 else None
             end = limits[1] if len(limits) > 1 else None
-        if axis_spec.scale is None and start is None and end is None and axis_spec.step is None:
+        if (
+            axis_spec.scale is None
+            and start is None
+            and end is None
+            and axis_spec.step is None
+            and axis_spec.title is None
+        ):
             continue
         updates.append(
             {

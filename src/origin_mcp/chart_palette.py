@@ -425,6 +425,14 @@ def chart_atlas_routes() -> dict[str, dict[str, Any]]:
             "matrix_required": False,
             "rationale": "Distribution summaries are routed to compact box plots.",
         },
+        "3d_scatter": {
+            "plot_type_id": 240,
+            "template": "3d",
+            "chart_type": "scatter",
+            "palette_role": "hero",
+            "matrix_required": False,
+            "rationale": "XYZ table data is routed to a 3D scatter plot.",
+        },
     }
 
 
@@ -450,6 +458,12 @@ def normalize_chart_intent(intent: str) -> str:
         "time": "time_series",
         "histogram": "distribution",
         "box": "distribution",
+        "3d": "3d_scatter",
+        "3d_scatter_xyz": "3d_scatter",
+        "scatter_3d": "3d_scatter",
+        "scatter_xyz": "3d_scatter",
+        "xyz": "3d_scatter",
+        "xyz_scatter": "3d_scatter",
     }
     normalized = aliases.get(value, value)
     if normalized not in chart_atlas_routes():

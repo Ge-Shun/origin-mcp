@@ -205,7 +205,13 @@ class _GraphStyleMixin(_OriginClientBase):
         info = self.get_graph_info(graph_name)
         issues: list[dict[str, Any]] = []
         style_actual = self._normalize_style_mode(style) if style else None
-        palette_name_actual = self._normalize_palette_name(palette_name)
+        palette_name_actual, palette_warning = self._diagnostic_palette_name(
+            palette_name,
+            strict=style_actual == "nature",
+        )
+        palette_validation_name = "nature" if palette_warning else palette_name_actual
+        if palette_warning:
+            issues.append(palette_warning)
         layers = info.get("layers", [])
         if not layers:
             issues.append(
@@ -216,7 +222,7 @@ class _GraphStyleMixin(_OriginClientBase):
                 )
             )
 
-        palette = self._named_acceptable_palette(palette_name_actual)
+        palette = self._named_acceptable_palette(palette_validation_name)
         for layer in layers:
             layer_index = layer.get("index")
             if require_plots and layer.get("plots_count", 0) == 0:
@@ -304,7 +310,7 @@ class _GraphStyleMixin(_OriginClientBase):
             expected_roles = self._palette_roles(
                 palette_role,
                 len(layer.get("plots", [])),
-                palette_name_actual,
+                palette_validation_name,
             )
             for plot in layer.get("plots", []):
                 if style_actual == "nature":
@@ -323,7 +329,7 @@ class _GraphStyleMixin(_OriginClientBase):
                     expected_role = (
                         expected_roles[plot_index] if plot_index < len(expected_roles) else ""
                     )
-                    expected_color = self._named_semantic_palette(palette_name_actual).get(
+                    expected_color = self._named_semantic_palette(palette_validation_name).get(
                         expected_role
                     )
                     if color is not None and expected_color is not None and color != expected_color:
@@ -623,3 +629,25 @@ class _GraphStyleMixin(_OriginClientBase):
             if any(marker in text for marker in lower_markers):
                 return True
         return False
+
+    @classmethod
+    def _diagnostic_palette_name(
+        cls,
+        palette_name: str | None,
+        strict: bool,
+    ) -> tuple[str, dict[str, Any] | None]:
+        try:
+            return cls._normalize_palette_name(palette_name), None
+        except OriginOperationError:
+            if strict:
+                raise
+            return (
+                palette_name or "nature",
+                cls._diagnostic_issue(
+                    "external_palette_name",
+                    "info",
+                    "Palette name is not in the built-in origin-mcp palette catalog; "
+                    "diagnostics skipped palette-specific validation.",
+                    palette_name=palette_name,
+                ),
+            )

@@ -11,11 +11,11 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
 
     def _find_or_active_graph(self, graph_name: str | None) -> Any:
         op = self.op
+        alias = self._graph_aliases.get(graph_name or "")
         if hasattr(op, "find_graph"):
             graph = op.find_graph(graph_name or "")
             if graph is not None:
                 return graph
-            alias = self._graph_aliases.get(graph_name or "")
             if alias:
                 graph = op.find_graph(alias)
                 if graph is not None:
@@ -24,6 +24,10 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             graph = self._find_graph_by_long_name(graph_name)
             if graph is not None:
                 return graph
+            if alias:
+                graph = self._find_graph_by_long_name(alias)
+                if graph is not None:
+                    return graph
 
         if graph_name:
             raise OriginOperationError(
@@ -100,6 +104,11 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         graph = self._find_graph_optional(requested_graph_name)
         if graph is not None:
             return self._object_name(graph, default=requested_graph_name)
+        active_graph = self._active_graph_optional()
+        if active_graph is not None:
+            active_name = self._object_name(active_graph, default="")
+            if active_name and (prefer_created or active_name not in existing_graphs):
+                return active_name
         return requested_graph_name
 
     def _find_graph_optional(self, graph_name: str) -> Any | None:
@@ -115,6 +124,29 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             if graph is not None:
                 return graph
         return self._find_graph_by_long_name(graph_name)
+
+    def _active_graph_optional(self) -> Any | None:
+        op = self._op
+        if op is None:
+            return None
+        find_graph = getattr(op, "find_graph", None)
+        if callable(find_graph):
+            try:
+                graph = find_graph("")
+            except Exception:
+                graph = None
+            if graph is not None:
+                return graph
+        for attr_name in ("graph_active", "active_graph"):
+            getter = getattr(op, attr_name, None)
+            if callable(getter):
+                try:
+                    graph = getter()
+                except Exception:
+                    graph = None
+                if graph is not None:
+                    return graph
+        return None
 
     def _graph_display_name(self, graph_name: str, default: str | None = None) -> str | None:
         graph = self._find_graph_optional(graph_name)
@@ -679,8 +711,12 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
     @staticmethod
     def _panel_label_present(labels: list[dict[str, Any]]) -> bool:
         for label in labels:
+            name = str(label.get("name") or "").strip().lower()
             text = str(label.get("text") or "").strip()
-            if len(text) == 1 and text.isalpha():
+            plain = text.strip("()[]{}").strip()
+            if name in {"panellabel", "panel_label"} or name.endswith("_panel_tag"):
+                return True
+            if len(plain) == 1 and plain.isalpha():
                 return True
         return False
 

@@ -241,6 +241,27 @@ def test_origin_execute_figure_spec_runs_grid_multi_panel(
     assert result["data"]["layer_setup"]["added_layers"] == 1
     assert result["data"]["layer_setup"]["arranged"] == {"rows": 1, "columns": 2}
     assert result["data"]["added_plots"][0]["plot_id"] == "plot_b"
+    axis_calls = [kwargs for name, kwargs in fake.calls if name == "set_axis"]
+    assert {
+        "graph_name": "Graph1",
+        "layer_index": 1,
+        "axis": "x",
+        "scale": None,
+        "start": None,
+        "end": None,
+        "step": None,
+        "title": "Time (s)",
+    } in axis_calls
+    assert {
+        "graph_name": "Graph1",
+        "layer_index": 1,
+        "axis": "y",
+        "scale": None,
+        "start": None,
+        "end": None,
+        "step": None,
+        "title": "Other",
+    } in axis_calls
     called = [name for name, _kwargs in fake.calls]
     assert "run_labtalk" in called
     assert "arrange_layers" in called
