@@ -23,41 +23,89 @@ def test_build_origin_app_sources() -> None:
     builder = load_builder_module()
     builder.BUILD_ROOT.mkdir(parents=True, exist_ok=True)
     builder.OPX_PATH.write_text("stale opx", encoding="utf-8")
+    builder.STOP_OPX_PATH.write_text("stale stop opx", encoding="utf-8")
     app_dir = builder.build_app(force=True)
+    stop_app_dir = builder.BUILD_ROOT / builder.STOP_APP_NAME
 
     assert not builder.OPX_PATH.exists()
+    assert not builder.STOP_OPX_PATH.exists()
     assert (app_dir / "addon.py").is_file()
-    assert (app_dir / "toggle_bridge.py").is_file()
+    assert (app_dir / "start_bridge.py").is_file()
+    assert (stop_app_dir / "stop_bridge.py").is_file()
+    assert (stop_app_dir / "stop_bridge.ps1").is_file()
+    assert (stop_app_dir / "stop_bridge.vbs").is_file()
     assert (app_dir / "src" / "origin_mcp" / "bridge.py").is_file()
     assert (app_dir / "launch.ogs").is_file()
+    assert (stop_app_dir / "launch.ogs").is_file()
     assert (app_dir / "AppIcon.png").is_file()
+    assert (stop_app_dir / "AppIcon.png").is_file()
+    assert (app_dir / "AppIcon.png").read_bytes() == (
+        ROOT / "docs" / "assets" / "origin-mcp-start-icon.png"
+    ).read_bytes()
+    assert (stop_app_dir / "AppIcon.png").read_bytes() == (
+        ROOT / "docs" / "assets" / "origin-mcp-stop-icon.png"
+    ).read_bytes()
+    assert (app_dir / "AppIcon.png").read_bytes() != (stop_app_dir / "AppIcon.png").read_bytes()
 
     config = configparser.ConfigParser()
     config.optionxform = str
     config.read(app_dir / "package.ini", encoding="utf-8")
 
-    assert config["Package"]["Name"] == builder.APP_NAME
+    assert config["Package"]["Name"] == builder.START_APP_NAME
     assert config["Package"]["Version"] == "0.1.2"
-    assert config["Package"]["Description"] == "Toggle the origin-mcp Origin GUI bridge."
+    assert config["Package"]["Description"] == "Start the origin-mcp Origin GUI bridge."
     assert config["App"]["LaunchScript"] == "launch.ogs"
     assert config["AppEnable"]["Always"] == "1"
 
     launch = (app_dir / "launch.ogs").read_text(encoding="utf-8")
     assert "run -pyf" in launch
-    assert "toggle_bridge.py" in launch
-    assert "run.section(\"%@AOrigin MCP Bridge\\launch.ogs\", Toggle)" in launch
-    assert "[Status]" not in launch
-    assert "[Start]" not in launch
+    assert "start_bridge.py" in launch
+    assert 'run.section("%@AOrigin MCP Bridge Start\\launch.ogs", Start)' in launch
+    assert "[Start]" in launch
     assert "[Stop]" not in launch
+    assert "[Toggle]" not in launch
 
-    toggler = (app_dir / "toggle_bridge.py").read_text(encoding="utf-8")
-    assert "origin_mcp_bridge_status()" in toggler
-    assert "request_stop_origin_mcp_bridge()" in toggler
-    assert "start_origin_mcp_bridge(background=False)" in toggler
-    assert "Bridge stop requested." in toggler
-    assert 'request_bridge("shutdown"' not in toggler
-    assert "background=True" not in toggler
-    assert "except Exception" not in toggler
+    stop_config = configparser.ConfigParser()
+    stop_config.optionxform = str
+    stop_config.read(stop_app_dir / "package.ini", encoding="utf-8")
+    assert stop_config["Package"]["Name"] == builder.STOP_APP_NAME
+    assert stop_config["Package"]["Description"] == "Stop the origin-mcp Origin GUI bridge."
+
+    stop_launch = (stop_app_dir / "launch.ogs").read_text(encoding="utf-8")
+    assert "stop_bridge.vbs" in stop_launch
+    assert "wscript.exe" in stop_launch
+    assert "powershell.exe" not in stop_launch
+    assert "run -pyf" not in stop_launch
+    assert 'run.section("%@AOrigin MCP Bridge Stop\\launch.ogs", Stop)' in stop_launch
+    assert "[Status]" not in launch
+
+    starter = (app_dir / "start_bridge.py").read_text(encoding="utf-8")
+    assert "origin_mcp_bridge_status()" in starter
+    assert "start_origin_mcp_bridge(background=False)" in starter
+    assert "Bridge is already running." in starter
+    assert "background=True" not in starter
+
+    stopper = (stop_app_dir / "stop_bridge.py").read_text(encoding="utf-8")
+    assert "request_stop_origin_mcp_bridge()" in stopper
+    assert "read_handshake()" in stopper
+    assert 'host = str(handshake["host"])' in stopper
+    assert 'token = str(handshake["token"])' in stopper
+    assert '"method": "shutdown"' in stopper
+    assert '"release_origin": True' in stopper
+    assert "Bridge stop requested." in stopper
+    assert "origin-mcp-stop-notify" in stopper
+    assert "addon.stop_origin_mcp_bridge()" not in stopper
+
+    stop_powershell = (stop_app_dir / "stop_bridge.ps1").read_text(encoding="utf-8")
+    assert "ConvertFrom-Json" in stop_powershell
+    assert "ConvertTo-Json -Compress" in stop_powershell
+    assert "release_origin = $true" in stop_powershell
+    assert "close_origin = $false" in stop_powershell
+
+    stop_vbs = (stop_app_dir / "stop_bridge.vbs").read_text(encoding="utf-8")
+    assert "WScript.Shell" in stop_vbs
+    assert "stop_bridge.ps1" in stop_vbs
+    assert "shell.Run cmd, 0, False" in stop_vbs
 
     # The package-root workaround is gone; mkOPX app:= packs from the Apps folder.
     assert not (builder.BUILD_ROOT / "package-root").exists()
@@ -67,11 +115,13 @@ def test_build_origin_app_sources() -> None:
 
     command_text = builder.COMMAND_PATH.read_text(encoding="utf-8")
     assert "Origin's Command Window" in command_text
-    assert 'mkOPX app:="Origin MCP Bridge"' in command_text
+    assert 'mkOPX app:="Origin MCP Bridge Start"' in command_text
+    assert 'mkOPX app:="Origin MCP Bridge Stop"' in command_text
     assert "ini:=" not in command_text
     assert "package-root" not in command_text
     assert "make-origin-mcp-bridge-opx.ogs" not in command_text
     assert f"Expected OPX output:\n{builder.OPX_PATH}" in command_text
+    assert str(builder.STOP_OPX_PATH) in command_text
 
 
 def test_origin_apps_dir_resolution(monkeypatch) -> None:
@@ -79,8 +129,13 @@ def test_origin_apps_dir_resolution(monkeypatch) -> None:
     monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\tester\AppData\Local")
     dest = builder.origin_apps_dir()
     assert dest is not None
-    assert dest.name == builder.APP_NAME
+    assert dest.name == builder.START_APP_NAME
     assert dest.parent.name == "Apps"
+
+    destinations = builder.origin_app_dirs()
+    assert destinations is not None
+    assert [path.name for path in destinations] == [builder.START_APP_NAME, builder.STOP_APP_NAME]
 
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     assert builder.origin_apps_dir() is None
+    assert builder.origin_app_dirs() is None

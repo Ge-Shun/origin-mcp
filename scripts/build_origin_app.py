@@ -21,19 +21,25 @@ import struct
 import zlib
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
-APP_NAME = "Origin MCP Bridge"
+START_APP_NAME = "Origin MCP Bridge Start"
+STOP_APP_NAME = "Origin MCP Bridge Stop"
+APP_NAMES = (START_APP_NAME, STOP_APP_NAME)
+APP_NAME = START_APP_NAME
+LEGACY_APP_NAME = "Origin MCP Bridge"
 APP_VERSION = "0.1.2"
 BUILD_ROOT = ROOT / "build" / "origin-app"
-APP_DIR = BUILD_ROOT / APP_NAME
-OPX_PATH = BUILD_ROOT / f"{APP_NAME}.opx"
+APP_DIR = BUILD_ROOT / START_APP_NAME
+START_APP_DIR = BUILD_ROOT / START_APP_NAME
+STOP_APP_DIR = BUILD_ROOT / STOP_APP_NAME
+OPX_PATH = BUILD_ROOT / f"{START_APP_NAME}.opx"
+STOP_OPX_PATH = BUILD_ROOT / f"{STOP_APP_NAME}.opx"
 COMMAND_PATH = BUILD_ROOT / "mkopx-command.txt"
 OBSOLETE_OGS_PATH = BUILD_ROOT / "make-origin-mcp-bridge-opx.ogs"
 
 
 def origin_apps_dir() -> Path | None:
-    """Return Origin's per-user Apps folder for this App, when resolvable.
+    """Return Origin's per-user Apps folder for the Start App, when resolvable.
 
     Apps live under ``%LOCALAPPDATA%/OriginLab/Apps`` on Windows. Returns ``None``
     off Windows or when ``LOCALAPPDATA`` is unset so callers can skip the copy.
@@ -42,30 +48,38 @@ def origin_apps_dir() -> Path | None:
     local_appdata = os.environ.get("LOCALAPPDATA")
     if not local_appdata:
         return None
-    return Path(local_appdata) / "OriginLab" / "Apps" / APP_NAME
+    return Path(local_appdata) / "OriginLab" / "Apps" / START_APP_NAME
 
 
-LAUNCH_OGS = r"""[Main]
-run.section("%@AOrigin MCP Bridge\launch.ogs", Toggle);
+def origin_app_dirs() -> list[Path] | None:
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    root = Path(local_appdata) / "OriginLab" / "Apps"
+    return [root / name for name in APP_NAMES]
 
-[Toggle]
-run -pyf "%@AOrigin MCP Bridge\toggle_bridge.py";
+
+START_LAUNCH_OGS = r"""[Main]
+run.section("%@AOrigin MCP Bridge Start\launch.ogs", Start);
+
+[Start]
+run -pyf "%@AOrigin MCP Bridge Start\start_bridge.py";
 """
 
 
-TOGGLE_BRIDGE_PY = r'''"""Toggle the bundled origin-mcp bridge from an Origin App.
+STOP_LAUNCH_OGS = r"""[Main]
+run.section("%@AOrigin MCP Bridge Stop\launch.ogs", Stop);
 
-The button starts the bridge in *foreground* (cooperative) mode, which is the
-most reliable mode across Origin embedded-Python builds -- a background serving
-thread is not scheduled on every install, leaving the socket bound but never
-answering. Starting blocks this click handler inside the cooperative serve
-loop, but that loop pumps Windows messages so Origin stays responsive and a
-later click can stop the bridge.
+[Stop]
+run -e wscript.exe "%@AOrigin MCP Bridge Stop\stop_bridge.vbs";
+"""
 
-Stopping uses the in-process ``request_stop_origin_mcp_bridge`` (it only sets
-the serve loop's shutdown event) instead of a TCP ``shutdown`` request, which
-would deadlock: the second click runs re-entrantly on the serving thread, so
-no one would be left to service the TCP request it is waiting on.
+
+START_BRIDGE_PY = r'''"""Start the bundled origin-mcp bridge from an Origin App.
+
+The Start button uses foreground cooperative serving, which is the reliable
+mode for Origin's embedded Python on this machine. The separate Stop button
+runs as a second App entry point and requests this foreground loop to exit.
 """
 
 from __future__ import annotations
@@ -73,6 +87,7 @@ from __future__ import annotations
 import ctypes
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 
 
@@ -81,7 +96,10 @@ ADDON_PATH = APP_DIR / "addon.py"
 
 
 def _message(text: str) -> None:
-    ctypes.windll.user32.MessageBoxW(None, text, "Origin MCP Bridge", 0x40)
+    def _show() -> None:
+        ctypes.windll.user32.MessageBoxW(None, text, "Origin MCP Bridge Start", 0x40)
+
+    threading.Thread(target=_show, name="origin-mcp-app-notify", daemon=True).start()
 
 
 def _load_addon():
@@ -103,23 +121,189 @@ if str(src) not in sys.path:
     sys.path.insert(0, str(src))
 
 if addon.origin_mcp_bridge_status().get("running"):
-    addon.request_stop_origin_mcp_bridge()
-    _message("Bridge stop requested.")
+    _message("Bridge is already running.")
 else:
-    # Serves cooperatively and blocks here until a later click stops it.
-    # start_origin_mcp_bridge shows its own "Bridge is running" notice first.
     addon.start_origin_mcp_bridge(background=False)
 '''
 
 
-def _write_package_ini(path: Path) -> None:
+STOP_BRIDGE_PY = r'''"""Stop the bundled origin-mcp bridge from an Origin App."""
+
+from __future__ import annotations
+
+import ctypes
+import importlib.util
+import json
+import socket
+import sys
+import threading
+from pathlib import Path
+
+
+APP_DIR = Path(__file__).resolve().parent
+START_APP_DIR = APP_DIR.parent / "Origin MCP Bridge Start"
+ADDON_PATH = START_APP_DIR / "addon.py"
+
+
+def _message(text: str) -> None:
+    def _show() -> None:
+        ctypes.windll.user32.MessageBoxW(None, text, "Origin MCP Bridge Stop", 0x40)
+
+    threading.Thread(target=_show, name="origin-mcp-stop-notify", daemon=True).start()
+
+
+def _load_addon():
+    module = sys.modules.get("origin_mcp_addon")
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location("origin_mcp_addon", ADDON_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {ADDON_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+addon = _load_addon()
+src = START_APP_DIR / "src"
+if str(src) not in sys.path:
+    sys.path.insert(0, str(src))
+
+result = addon.request_stop_origin_mcp_bridge()
+if not result.get("stop_requested"):
+    try:
+        from origin_mcp.bridge_handshake import read_handshake
+
+        handshake = read_handshake()
+        if not handshake:
+            raise RuntimeError("No bridge handshake file found.")
+        host = str(handshake["host"])
+        port = int(handshake["port"])
+        token = str(handshake["token"])
+        with socket.create_connection((host, port), timeout=2) as sock:
+            sock.settimeout(2)
+            request = {
+                "id": "origin-mcp-stop-button",
+                "method": "shutdown",
+                "params": {"release_origin": True, "close_origin": False},
+                "token": token,
+            }
+            sock.sendall((json.dumps(request, separators=(",", ":")) + "\n").encode("utf-8"))
+            raw = sock.recv(4096).decode("utf-8", errors="replace").strip()
+        if raw:
+            response = json.loads(raw)
+            result = {"stop_requested": bool(response.get("ok")), "response": response}
+    except Exception as exc:
+        result = {"stop_requested": False, "reason": str(exc)}
+
+if result.get("stop_requested"):
+    _message("Bridge stop requested.")
+else:
+    _message(f"Bridge stop not requested: {result.get('reason', 'unknown')}")
+'''
+
+
+STOP_BRIDGE_PS1 = r"""$ErrorActionPreference = "Stop"
+
+function Show-BridgeMessage {
+    param([string]$Text)
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            $Text,
+            "Origin MCP Bridge Stop",
+            "OK",
+            "Information"
+        ) | Out-Null
+    } catch {
+    }
+}
+
+$client = $null
+$stream = $null
+$writer = $null
+$reader = $null
+
+try {
+    $handshakePath = Join-Path ([System.IO.Path]::GetTempPath()) "origin-mcp\bridge.json"
+    if (-not (Test-Path -LiteralPath $handshakePath)) {
+        throw "No bridge handshake file found."
+    }
+
+    $handshake = Get-Content -LiteralPath $handshakePath -Raw | ConvertFrom-Json
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $connect = $client.BeginConnect([string]$handshake.host, [int]$handshake.port, $null, $null)
+    if (-not $connect.AsyncWaitHandle.WaitOne(2000)) {
+        $client.Close()
+        throw "Timed out connecting to bridge."
+    }
+    $client.EndConnect($connect)
+    $client.ReceiveTimeout = 2000
+    $client.SendTimeout = 2000
+
+    $stream = $client.GetStream()
+    $utf8 = [System.Text.UTF8Encoding]::new($false)
+    $writer = [System.IO.StreamWriter]::new($stream, $utf8)
+    $writer.NewLine = "`n"
+    $writer.AutoFlush = $true
+    $reader = [System.IO.StreamReader]::new($stream, $utf8)
+
+    $request = @{
+        id = "origin-mcp-stop-button"
+        method = "shutdown"
+        params = @{
+            release_origin = $true
+            close_origin = $false
+        }
+        token = [string]$handshake.token
+    }
+    $writer.WriteLine(($request | ConvertTo-Json -Compress -Depth 5))
+    $raw = $reader.ReadLine()
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        throw "Bridge returned an empty response."
+    }
+
+    $response = $raw | ConvertFrom-Json
+    if (-not $response.ok) {
+        throw "Bridge refused shutdown: $raw"
+    }
+    Show-BridgeMessage "Bridge stop requested."
+} catch {
+    Show-BridgeMessage "Bridge stop not requested: $($_.Exception.Message)"
+    exit 1
+} finally {
+    if ($reader) { $reader.Dispose() }
+    if ($writer) { $writer.Dispose() }
+    if ($stream) { $stream.Dispose() }
+    if ($client) { $client.Dispose() }
+}
+"""
+
+
+STOP_BRIDGE_VBS = r"""Option Explicit
+
+Dim fso, shell, scriptDir, ps1, cmd
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+
+scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+ps1 = fso.BuildPath(scriptDir, "stop_bridge.ps1")
+cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass "
+cmd = cmd & "-WindowStyle Hidden -File " & Chr(34) & ps1 & Chr(34)
+
+shell.Run cmd, 0, False
+"""
+
+
+def _write_package_ini(path: Path, app_name: str, description: str) -> None:
     config = configparser.ConfigParser()
     config.optionxform = str
     config["Package"] = {
         "ID": "0",
         "Type": "1",
-        "Name": APP_NAME,
-        "Description": "Toggle the origin-mcp Origin GUI bridge.",
+        "Name": app_name,
+        "Description": description,
         "Version": APP_VERSION,
         "Author": "origin-mcp contributors",
         "Keywords": "mcp, ai, bridge, python, automation",
@@ -128,7 +312,7 @@ def _write_package_ini(path: Path) -> None:
         "Copyrightyear": "2026",
     }
     config["Log"] = {
-        "v0.1.2": "Toggle starts the bridge in reliable foreground mode.",
+        "v0.1.2": "Split bridge startup and shutdown into two App buttons.",
         "v0.1.1": "Single-button bridge toggle with corrected OPX install root.",
         "v0.1.0": "Initial origin-mcp bridge launcher app.",
     }
@@ -167,7 +351,8 @@ def _copy_tree(src: Path, dst: Path) -> None:
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
     payload = kind + data
-    return struct.pack(">I", len(data)) + payload + struct.pack(">I", zlib.crc32(payload) & 0xFFFFFFFF)
+    checksum = zlib.crc32(payload) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + payload + struct.pack(">I", checksum)
 
 
 def _write_icon(path: Path) -> None:
@@ -195,6 +380,16 @@ def _write_icon(path: Path) -> None:
     path.write_bytes(png)
 
 
+def _copy_app_icon(app_dir: Path, specific_icon: Path) -> None:
+    fallback_icon = ROOT / "docs" / "assets" / "origin-mcp-app-icon.png"
+    if specific_icon.is_file():
+        shutil.copy2(specific_icon, app_dir / "AppIcon.png")
+    elif fallback_icon.is_file():
+        shutil.copy2(fallback_icon, app_dir / "AppIcon.png")
+    else:
+        _write_icon(app_dir / "AppIcon.png")
+
+
 def _labtalk_path(path: Path) -> str:
     # Origin's mkOPX wants Windows-style backslashes. Forward slashes in a quoted
     # path can make mkOPX hang ("Not Responding") in the Command Window, so always
@@ -202,53 +397,95 @@ def _labtalk_path(path: Path) -> str:
     return str(path.resolve()).replace("/", "\\")
 
 
-def _mkopx_command() -> str:
+def _mkopx_command(app_name: str = START_APP_NAME, opx_path: Path | None = None) -> str:
     # app:= packs the App from its Apps-folder location; opx:= names the output.
-    return f'mkOPX app:="{APP_NAME}" opx:="{_labtalk_path(OPX_PATH)}";'
+    return f'mkOPX app:="{app_name}" opx:="{_labtalk_path(opx_path or OPX_PATH)}";'
 
 
 def build_app(force: bool = False) -> Path:
-    if APP_DIR.exists():
-        if not force:
-            raise FileExistsError(f"{APP_DIR} already exists; pass --force to rebuild.")
-        shutil.rmtree(APP_DIR)
+    for app_dir in (START_APP_DIR, STOP_APP_DIR):
+        if app_dir.exists():
+            if not force:
+                raise FileExistsError(f"{app_dir} already exists; pass --force to rebuild.")
+            shutil.rmtree(app_dir)
     if force and OBSOLETE_OGS_PATH.exists():
         OBSOLETE_OGS_PATH.unlink()
-    if force and OPX_PATH.exists():
-        OPX_PATH.unlink()
+    if force:
+        for opx_path in (OPX_PATH, STOP_OPX_PATH):
+            if opx_path.exists():
+                opx_path.unlink()
     # Remove the obsolete package-root workaround folder from older builds.
     legacy_package_root = BUILD_ROOT / "package-root"
     if legacy_package_root.exists():
         shutil.rmtree(legacy_package_root)
-    APP_DIR.mkdir(parents=True)
+    START_APP_DIR.mkdir(parents=True)
+    STOP_APP_DIR.mkdir(parents=True)
 
-    shutil.copy2(ROOT / "addon.py", APP_DIR / "addon.py")
-    _copy_tree(ROOT / "src", APP_DIR / "src")
-    _write_package_ini(APP_DIR / "package.ini")
-    (APP_DIR / "launch.ogs").write_text(LAUNCH_OGS, encoding="utf-8", newline="\n")
-    (APP_DIR / "toggle_bridge.py").write_text(TOGGLE_BRIDGE_PY, encoding="utf-8", newline="\n")
-    icon_source = ROOT / "docs" / "assets" / "origin-mcp-app-icon.png"
-    if icon_source.is_file():
-        shutil.copy2(icon_source, APP_DIR / "AppIcon.png")
-    else:
-        _write_icon(APP_DIR / "AppIcon.png")
+    shutil.copy2(ROOT / "addon.py", START_APP_DIR / "addon.py")
+    _copy_tree(ROOT / "src", START_APP_DIR / "src")
+    _write_package_ini(
+        START_APP_DIR / "package.ini",
+        START_APP_NAME,
+        "Start the origin-mcp Origin GUI bridge.",
+    )
+    _write_package_ini(
+        STOP_APP_DIR / "package.ini",
+        STOP_APP_NAME,
+        "Stop the origin-mcp Origin GUI bridge.",
+    )
+    (START_APP_DIR / "launch.ogs").write_text(
+        START_LAUNCH_OGS,
+        encoding="utf-8",
+        newline="\n",
+    )
+    (STOP_APP_DIR / "launch.ogs").write_text(
+        STOP_LAUNCH_OGS,
+        encoding="utf-8",
+        newline="\n",
+    )
+    (START_APP_DIR / "start_bridge.py").write_text(
+        START_BRIDGE_PY,
+        encoding="utf-8",
+        newline="\n",
+    )
+    (STOP_APP_DIR / "stop_bridge.py").write_text(
+        STOP_BRIDGE_PY,
+        encoding="utf-8",
+        newline="\n",
+    )
+    (STOP_APP_DIR / "stop_bridge.ps1").write_text(
+        STOP_BRIDGE_PS1,
+        encoding="utf-8",
+        newline="\n",
+    )
+    (STOP_APP_DIR / "stop_bridge.vbs").write_text(
+        STOP_BRIDGE_VBS,
+        encoding="utf-8",
+        newline="\n",
+    )
+    asset_dir = ROOT / "docs" / "assets"
+    _copy_app_icon(START_APP_DIR, asset_dir / "origin-mcp-start-icon.png")
+    _copy_app_icon(STOP_APP_DIR, asset_dir / "origin-mcp-stop-icon.png")
 
     COMMAND_PATH.write_text(
         (
-            "1. Copy this App folder into Origin's Apps directory (or run this\n"
+            "1. Copy these App folders into Origin's Apps directory (or run this\n"
             "   builder with --install):\n"
-            f"   {APP_DIR}\n"
-            "   -> %LOCALAPPDATA%\\OriginLab\\Apps\\" + APP_NAME + "\\\n\n"
+            f"   {START_APP_DIR}\n"
+            f"   {STOP_APP_DIR}\n"
+            "   -> %LOCALAPPDATA%\\OriginLab\\Apps\\\n\n"
             "2. Run this command in Origin's Command Window:\n\n"
-            f"{_mkopx_command()}\n\n"
+            f"{_mkopx_command()}\n"
+            f"{_mkopx_command(STOP_APP_NAME, STOP_OPX_PATH)}\n\n"
             "Expected OPX output:\n"
-            f"{OPX_PATH}\n\n"
-            "Next step: drag the OPX above into Origin to install it.\n"
+            f"{OPX_PATH}\n"
+            f"{STOP_OPX_PATH}\n\n"
+            "Next step: drag both OPX files above into Origin to install them.\n"
         ),
         encoding="utf-8",
         newline="\n",
     )
-    return APP_DIR
+    return START_APP_DIR
 
 
 def install_into_apps(*, force: bool = True) -> Path | None:
@@ -258,15 +495,19 @@ def install_into_apps(*, force: bool = True) -> Path | None:
     resolved (e.g. off Windows). Required before ``mkOPX app:=`` can find the App.
     """
 
-    dest = origin_apps_dir()
-    if dest is None:
+    destinations = origin_app_dirs()
+    if destinations is None:
         return None
-    if dest.exists():
-        if not force:
-            raise FileExistsError(f"{dest} already exists; pass force=True to replace.")
-        shutil.rmtree(dest)
-    shutil.copytree(APP_DIR, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    return dest
+    root = destinations[0].parent
+    legacy = root / LEGACY_APP_NAME
+    for dest in [legacy, *destinations]:
+        if dest.exists():
+            if not force:
+                raise FileExistsError(f"{dest} already exists; pass force=True to replace.")
+            shutil.rmtree(dest)
+    for src_dir, dest in zip((START_APP_DIR, STOP_APP_DIR), destinations, strict=True):
+        shutil.copytree(src_dir, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    return destinations[0]
 
 
 def main() -> int:
@@ -285,20 +526,24 @@ def main() -> int:
     if args.install:
         dest = install_into_apps(force=True)
         if dest is None:
-            print("Skipped --install: Origin Apps folder not resolvable (need Windows LOCALAPPDATA).")
+            print(
+                "Skipped --install: Origin Apps folder not resolvable (need Windows LOCALAPPDATA)."
+            )
         else:
-            print(f"Installed App into Origin Apps folder: {dest}")
-            print("Restart Origin to pick up the updated App; the button works from here.")
+            print(f"Installed Apps into Origin Apps folder: {dest.parent}")
+            print("Restart Origin to pick up the Start/Stop buttons.")
     else:
         print("To pack a distributable OPX, first copy this folder into:")
-        print(f"  {origin_apps_dir() or '%LOCALAPPDATA%/OriginLab/Apps/' + APP_NAME}")
+        print(f"  {origin_app_dirs() or '%LOCALAPPDATA%/OriginLab/Apps/<Start and Stop>'}")
         print("  (or re-run this builder with --install)")
 
     print()
     print("Then, in Origin's Command Window, run:")
     print(_mkopx_command())
+    print(_mkopx_command(STOP_APP_NAME, STOP_OPX_PATH))
     print()
     print(f"Expected OPX output: {OPX_PATH}")
+    print(f"Expected OPX output: {STOP_OPX_PATH}")
     print(f"Command copy saved to: {COMMAND_PATH}")
     return 0
 
