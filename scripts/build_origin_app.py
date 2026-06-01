@@ -127,83 +127,10 @@ else:
 '''
 
 
-STOP_BRIDGE_PY = r'''"""Stop the bundled origin-mcp bridge from an Origin App."""
-
-from __future__ import annotations
-
-import ctypes
-import importlib.util
-import json
-import socket
-import sys
-import threading
-from pathlib import Path
-
-
-APP_DIR = Path(__file__).resolve().parent
-START_APP_DIR = APP_DIR.parent / "Origin MCP Bridge Start"
-ADDON_PATH = START_APP_DIR / "addon.py"
-
-
-def _message(text: str) -> None:
-    def _show() -> None:
-        ctypes.windll.user32.MessageBoxW(None, text, "Origin MCP Bridge Stop", 0x40)
-
-    threading.Thread(target=_show, name="origin-mcp-stop-notify", daemon=True).start()
-
-
-def _load_addon():
-    module = sys.modules.get("origin_mcp_addon")
-    if module is not None:
-        return module
-    spec = importlib.util.spec_from_file_location("origin_mcp_addon", ADDON_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {ADDON_PATH}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-addon = _load_addon()
-src = START_APP_DIR / "src"
-if str(src) not in sys.path:
-    sys.path.insert(0, str(src))
-
-result = addon.request_stop_origin_mcp_bridge()
-if not result.get("stop_requested"):
-    try:
-        from origin_mcp.bridge_handshake import read_handshake
-
-        handshake = read_handshake()
-        if not handshake:
-            raise RuntimeError("No bridge handshake file found.")
-        host = str(handshake["host"])
-        port = int(handshake["port"])
-        token = str(handshake["token"])
-        with socket.create_connection((host, port), timeout=2) as sock:
-            sock.settimeout(2)
-            request = {
-                "id": "origin-mcp-stop-button",
-                "method": "shutdown",
-                "params": {"release_origin": True, "close_origin": False},
-                "token": token,
-            }
-            sock.sendall((json.dumps(request, separators=(",", ":")) + "\n").encode("utf-8"))
-            raw = sock.recv(4096).decode("utf-8", errors="replace").strip()
-        if raw:
-            response = json.loads(raw)
-            result = {"stop_requested": bool(response.get("ok")), "response": response}
-    except Exception as exc:
-        result = {"stop_requested": False, "reason": str(exc)}
-
-if result.get("stop_requested"):
-    _message("Bridge stop requested.")
-else:
-    _message(f"Bridge stop not requested: {result.get('reason', 'unknown')}")
-'''
-
-
+# The Stop button launches stop_bridge.vbs (hidden) -> stop_bridge.ps1, which
+# connects to the bridge over TCP and requests shutdown. An external process is
+# used on purpose: while the Start button serves in the foreground, Origin's
+# script engine is busy, so a re-entrant in-process stop is not reliable.
 STOP_BRIDGE_PS1 = r"""$ErrorActionPreference = "Stop"
 
 function Show-BridgeMessage {
@@ -448,11 +375,6 @@ def build_app(force: bool = False) -> Path:
         encoding="utf-8",
         newline="\n",
     )
-    (STOP_APP_DIR / "stop_bridge.py").write_text(
-        STOP_BRIDGE_PY,
-        encoding="utf-8",
-        newline="\n",
-    )
     (STOP_APP_DIR / "stop_bridge.ps1").write_text(
         STOP_BRIDGE_PS1,
         encoding="utf-8",
@@ -530,8 +452,9 @@ def main() -> int:
                 "Skipped --install: Origin Apps folder not resolvable (need Windows LOCALAPPDATA)."
             )
         else:
-            print(f"Installed Apps into Origin Apps folder: {dest.parent}")
-            print("Restart Origin to pick up the Start/Stop buttons.")
+            print(f"Copied App folders into Origin Apps folder: {dest.parent}")
+            print("This only lets mkOPX app:= find them; a bare folder is NOT registered.")
+            print("Pack both OPX (below), then drag them into Origin to install/register.")
     else:
         print("To pack a distributable OPX, first copy this folder into:")
         print(f"  {origin_app_dirs() or '%LOCALAPPDATA%/OriginLab/Apps/<Start and Stop>'}")

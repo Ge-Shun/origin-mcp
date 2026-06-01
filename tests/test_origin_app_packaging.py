@@ -31,9 +31,10 @@ def test_build_origin_app_sources() -> None:
     assert not builder.STOP_OPX_PATH.exists()
     assert (app_dir / "addon.py").is_file()
     assert (app_dir / "start_bridge.py").is_file()
-    assert (stop_app_dir / "stop_bridge.py").is_file()
     assert (stop_app_dir / "stop_bridge.ps1").is_file()
     assert (stop_app_dir / "stop_bridge.vbs").is_file()
+    # Stop runs via vbs -> ps1 only; there is no Python stop entry point.
+    assert not (stop_app_dir / "stop_bridge.py").exists()
     assert (app_dir / "src" / "origin_mcp" / "bridge.py").is_file()
     assert (app_dir / "launch.ogs").is_file()
     assert (stop_app_dir / "launch.ogs").is_file()
@@ -85,22 +86,14 @@ def test_build_origin_app_sources() -> None:
     assert "Bridge is already running." in starter
     assert "background=True" not in starter
 
-    stopper = (stop_app_dir / "stop_bridge.py").read_text(encoding="utf-8")
-    assert "request_stop_origin_mcp_bridge()" in stopper
-    assert "read_handshake()" in stopper
-    assert 'host = str(handshake["host"])' in stopper
-    assert 'token = str(handshake["token"])' in stopper
-    assert '"method": "shutdown"' in stopper
-    assert '"release_origin": True' in stopper
-    assert "Bridge stop requested." in stopper
-    assert "origin-mcp-stop-notify" in stopper
-    assert "addon.stop_origin_mcp_bridge()" not in stopper
-
     stop_powershell = (stop_app_dir / "stop_bridge.ps1").read_text(encoding="utf-8")
     assert "ConvertFrom-Json" in stop_powershell
     assert "ConvertTo-Json -Compress" in stop_powershell
+    assert '"method"' not in stop_powershell  # request is built as a PS hashtable
+    assert "method = " in stop_powershell
     assert "release_origin = $true" in stop_powershell
     assert "close_origin = $false" in stop_powershell
+    assert "Bridge stop requested." in stop_powershell
 
     stop_vbs = (stop_app_dir / "stop_bridge.vbs").read_text(encoding="utf-8")
     assert "WScript.Shell" in stop_vbs
