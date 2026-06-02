@@ -2905,7 +2905,7 @@ def test_concat_worksheets_stacks_rows(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert primary.df["k"].tolist() == [1, 2]
     assert result["result_rows"] == 2
-    assert result["sources"] == 2
+    assert result["combined_sheets"] == 2
 
 
 def test_concat_worksheets_columns_dedupes_headers(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -692,7 +692,7 @@ class _WorksheetMixin(_OriginClientBase):
             result,
             output_book,
             output_sheet,
-            extra={"axis": axis, "result_rows": len(result), "sources": len(frames)},
+            extra={"axis": axis, "result_rows": len(result), "combined_sheets": len(frames)},
         )
 
     def pivot_worksheet(
