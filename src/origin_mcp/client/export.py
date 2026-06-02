@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import tempfile
 import uuid
 from pathlib import Path
@@ -110,6 +111,58 @@ class _ExportMixin(_OriginClientBase):
         return {
             **exported,
             "preview": self.inspect_export(Path(exported["path"])),
+        }
+
+    def render_graph_png(
+        self,
+        graph_name: str | None = None,
+        max_width: int = 1600,
+    ) -> dict[str, Any]:
+        """Render a graph to an in-memory PNG and return it base64-encoded.
+
+        Unlike :meth:`export_graph` this leaves no file behind: the graph is
+        written to a temporary path, read into memory, and the temp file is
+        deleted before returning. ``max_width`` bounds the pixel width Origin
+        renders at so the returned image stays small enough to hand back as an
+        MCP image content block. The graph is rendered as-is (its title is not
+        suppressed) so the preview faithfully reflects the current figure.
+        """
+
+        width = max(0, int(max_width))
+        target = self._find_or_active_graph(graph_name)
+        if not hasattr(target, "save_fig"):
+            raise OriginOperationError(
+                "This graph object does not support save_fig(); cannot render a preview image.",
+                error_code="graph_render_unavailable",
+            )
+        tmp_dir = Path(tempfile.gettempdir()) / "origin-mcp-view"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = tmp_dir / f"view_{uuid.uuid4().hex[:8]}.png"
+        try:
+            try:
+                target.save_fig(str(tmp_path), type="png", replace=True, width=width)
+            except TypeError:
+                # Older originpro save_fig signatures may not accept these
+                # keywords; fall back to the minimal call (loses width bounding).
+                target.save_fig(str(tmp_path))
+            if not tmp_path.exists():
+                raise OriginOperationError(
+                    "Origin did not produce a preview image for the graph.",
+                    error_code="graph_render_failed",
+                )
+            dimensions = image_dimensions(tmp_path) or {}
+            data = tmp_path.read_bytes()
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        return {
+            "graph_name": self._object_name(target, default=graph_name or "active_graph"),
+            "format": "png",
+            "size_bytes": len(data),
+            "image_base64": base64.b64encode(data).decode("ascii"),
+            **dimensions,
         }
 
     def _export_plot_command_graph(self, path: Path, graph_name: str) -> dict[str, Any]:

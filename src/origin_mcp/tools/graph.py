@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from typing import Any
+
+from mcp.server.fastmcp import Image
 
 from origin_mcp.chart_palette import palette_catalog
 from origin_mcp.client.graph_style import (
@@ -23,6 +26,7 @@ from origin_mcp.plot_style_registry import (
 )
 
 from ._shared import (
+    _error,
     _mcp_tool,
     _ok,
     _wrap,
@@ -227,6 +231,33 @@ def origin_inspect_export(path: str) -> dict[str, Any]:
             **client.inspect_export(Path(path)),
         )
     )
+
+
+@_mcp_tool(structured_output=False)
+def origin_view_graph(graph_name: str | None = None, max_width: int = 1600) -> list[Any]:
+    """Render an Origin graph and return it as an image the model can see.
+
+    Unlike ``origin_export_graph`` this leaves no file behind: the graph is
+    rendered to a temporary PNG, returned as an image content block alongside a
+    small text summary, and the temp file is deleted. Use it to visually verify
+    a plot and iterate on it. ``max_width`` bounds the rendered pixel width to
+    keep the returned image (and its token cost) small. Requires a
+    vision-capable client to be useful.
+    """
+
+    try:
+        result = client.render_graph_png(graph_name=graph_name, max_width=max_width)
+    except Exception as exc:  # noqa: BLE001 - classified and reported below
+        return [_error(exc)]
+    image_b64 = result.pop("image_base64", None)
+    if not isinstance(image_b64, str) or not image_b64:
+        return [_error(RuntimeError("Origin returned no preview image."))]
+    try:
+        png = base64.b64decode(image_b64)
+    except (ValueError, TypeError) as exc:
+        return [_error(exc)]
+    summary = _ok("Rendered Origin graph preview.", **result)
+    return [summary, Image(data=png, format="png")]
 
 
 @_mcp_tool()

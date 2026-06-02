@@ -1,9 +1,12 @@
 import asyncio
+import base64
 import math
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+from mcp.server.fastmcp import Image
 
 import origin_mcp.server as server
 import origin_mcp.tools.analysis as analysis_tools
@@ -561,3 +564,56 @@ def test_xyz_3d_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path)
         (242, "glmesh"),
     ]
     assert all(call["selected_cols"] == ["x", "y", "z"] for call in calls)
+
+
+# 1x1 transparent PNG, used to exercise origin_view_graph without real Origin.
+_TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+def test_origin_view_graph_returns_text_and_image_content(monkeypatch) -> None:
+    class FakeClient:
+        def render_graph_png(self, graph_name=None, max_width=1600):
+            self.max_width = max_width
+            return {
+                "graph_name": graph_name or "active_graph",
+                "format": "png",
+                "size_bytes": len(_TINY_PNG),
+                "width": 1,
+                "height": 1,
+                "image_base64": base64.b64encode(_TINY_PNG).decode("ascii"),
+            }
+
+    monkeypatch.setattr(graph_tools, "client", FakeClient())
+
+    result = server.origin_view_graph(graph_name="G1", max_width=900)
+
+    assert isinstance(result, list) and len(result) == 2
+    summary, image = result
+    assert summary["ok"] is True
+    assert summary["data"]["graph_name"] == "G1"
+    assert "image_base64" not in summary["data"]
+    assert isinstance(image, Image)
+    assert image.data == _TINY_PNG
+    assert image._mime_type == "image/png"
+
+
+def test_origin_view_graph_reports_error_as_content(monkeypatch) -> None:
+    class FakeClient:
+        def render_graph_png(self, **_kwargs):
+            raise OriginOperationError("Graph not found: G9", error_code="graph_not_found")
+
+    monkeypatch.setattr(graph_tools, "client", FakeClient())
+
+    result = server.origin_view_graph(graph_name="G9")
+
+    assert isinstance(result, list) and len(result) == 1
+    assert result[0]["ok"] is False
+    assert result[0]["error_code"] == "graph_not_found"
+
+
+def test_origin_view_graph_is_in_compact_profile() -> None:
+    from origin_mcp.tools._shared import COMPACT_TOOL_NAMES
+
+    assert "origin_view_graph" in COMPACT_TOOL_NAMES

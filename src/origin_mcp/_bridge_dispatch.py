@@ -88,6 +88,7 @@ ALLOWED_CLIENT_METHODS = {
     "format_graph",
     "export_graph",
     "export_preview",
+    "render_graph_png",
     "inspect_export",
 }
 TASKABLE_METHODS = {

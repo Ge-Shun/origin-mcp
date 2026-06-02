@@ -62,6 +62,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_set_plot_property",
         "origin_format_graph",
         "origin_export_graph",
+        "origin_view_graph",
         "origin_run_analysis",
         "origin_linear_fit",
         "origin_polynomial_fit",
@@ -93,10 +94,10 @@ def _should_register_tool(name: str) -> bool:
     return profile in FULL_TOOL_PROFILE_VALUES or name in COMPACT_TOOL_NAMES
 
 
-def _mcp_tool() -> Any:
+def _mcp_tool(**tool_kwargs: Any) -> Any:
     def decorate(func: Any) -> Any:
         if _should_register_tool(func.__name__):
-            return mcp.tool()(func)
+            return mcp.tool(**tool_kwargs)(func)
         return func
 
     return decorate

@@ -88,6 +88,7 @@ from .tools.graph import (
     origin_set_graph_page,
     origin_set_plot_property,
     origin_set_plot_style,
+    origin_view_graph,
 )
 from .tools.knowledge import (
     origin_browse_knowledge,

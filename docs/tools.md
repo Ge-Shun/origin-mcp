@@ -65,6 +65,19 @@ described above.
 {"path": "data/processed/sales.csv", "kind": "bar", "graph_name": "Sales"}
 ```
 
+### Visual verification with `origin_view_graph`
+
+`origin_view_graph(graph_name=None, max_width=1600)` renders a graph and returns
+it as an image content block the model can actually see, so a vision-capable
+client can visually verify a plot and iterate on it. Unlike
+`origin_export_graph` and `origin_export_preview`, it leaves no file behind: the
+graph is rendered to a temporary PNG, returned inline alongside a short text
+summary (graph name, pixel dimensions, byte size), and the temp file is deleted.
+`max_width` bounds the rendered pixel width to keep the image — and its token
+cost — small. Pass a `graph_name` to target a specific page, or omit it to
+render the active graph. Use `origin_export_graph` instead when you need a
+persistent file on disk.
+
 ## FigureSpec Tools
 
 `origin-mcp` includes a first-pass declarative FigureSpec workflow for

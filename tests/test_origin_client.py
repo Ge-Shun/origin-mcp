@@ -1028,6 +1028,97 @@ def test_format_legend_rejects_invalid_position(
         client.format_legend("Graph1", position="outside")
 
 
+def _one_by_one_png() -> bytes:
+    import base64
+
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    )
+
+
+class _FakeRenderGraph:
+    def __init__(self, png: bytes, name: str = "G1", accept_kwargs: bool = True) -> None:
+        self._png = png
+        self.name = name
+        self._accept_kwargs = accept_kwargs
+        self.saved_path: str | None = None
+        self.saved_width: int | None = None
+
+    def save_fig(self, path: str, type: str = "png", replace: bool = True, width: int = 0) -> None:
+        if not self._accept_kwargs:
+            raise TypeError("save_fig() takes 1 positional argument")
+        self.saved_path = path
+        self.saved_width = width
+        Path(path).write_bytes(self._png)
+
+    def _save_fig_minimal(self, path: str) -> None:
+        self.saved_path = path
+        Path(path).write_bytes(self._png)
+
+
+def test_render_graph_png_returns_base64_and_deletes_temp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import base64
+
+    png = _one_by_one_png()
+    client = OriginClient()
+    graph = _FakeRenderGraph(png, name="G1")
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.render_graph_png(graph_name="G1", max_width=800)
+
+    assert result["format"] == "png"
+    assert result["graph_name"] == "G1"
+    assert result["size_bytes"] == len(png)
+    assert result["width"] == 1 and result["height"] == 1
+    assert base64.b64decode(result["image_base64"]) == png
+    assert graph.saved_width == 800
+    # The temp render file must not be left behind.
+    assert graph.saved_path is not None
+    assert not Path(graph.saved_path).exists()
+
+
+def test_render_graph_png_falls_back_when_save_fig_rejects_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import base64
+
+    png = _one_by_one_png()
+    client = OriginClient()
+
+    class MinimalGraph:
+        name = "G2"
+
+        def __init__(self) -> None:
+            self.saved_path: str | None = None
+
+        def save_fig(self, path: str) -> None:
+            self.saved_path = path
+            Path(path).write_bytes(png)
+
+    graph = MinimalGraph()
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.render_graph_png(graph_name="G2")
+
+    assert base64.b64decode(result["image_base64"]) == png
+    assert not Path(graph.saved_path).exists()
+
+
+def test_render_graph_png_requires_save_fig(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+
+    class NoSaveFig:
+        name = "G3"
+
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: NoSaveFig())
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        client.render_graph_png(graph_name="G3")
+    assert excinfo.value.error_code == "graph_render_unavailable"
+
+
 def test_export_graph_prefers_labtalk_when_graph_name_provided(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
