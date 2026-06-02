@@ -59,6 +59,7 @@ ALLOWED_CLIENT_METHODS = {
     "pivot_worksheet",
     "melt_worksheet",
     "plot_table",
+    "plot_dual_y",
     "plot_table_by_id",
     "plot_matrix_by_id",
     "list_project",

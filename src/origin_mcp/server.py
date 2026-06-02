@@ -146,6 +146,7 @@ from .tools.plotting import (
     origin_plot_column_stack,
     origin_plot_contour,
     origin_plot_dendrogram,
+    origin_plot_dual_y,
     origin_plot_errorbar,
     origin_plot_fill_area,
     origin_plot_floating_bar,

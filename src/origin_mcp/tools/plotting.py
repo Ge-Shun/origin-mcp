@@ -7,6 +7,7 @@ from .plotting_basic import (
     origin_plot_box,
     origin_plot_column,
     origin_plot_contour,
+    origin_plot_dual_y,
     origin_plot_errorbar,
     origin_plot_heatmap,
     origin_plot_histogram,

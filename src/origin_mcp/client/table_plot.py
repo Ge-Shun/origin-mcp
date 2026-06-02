@@ -169,6 +169,100 @@ class _TablePlotMixin(_OriginClientBase):
             display_name=self._object_long_name(graph, default=graph_name),
         )
 
+    def plot_dual_y(
+        self,
+        path: Path,
+        x_col: str | int | None = None,
+        y1_cols: list[str | int] | None = None,
+        y2_cols: list[str | int] | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        excel_sheet: str | int | None = 0,
+        delimiter: str | None = None,
+        encoding: str | None = None,
+        header: int | None = 0,
+        skiprows: int | list[int] | None = None,
+        nrows: int | None = None,
+        na_values: str | list[str] | None = None,
+        graph_name: str | None = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y1_label: str | None = None,
+        y2_label: str | None = None,
+        plot_type: str = "line",
+        export_path: Path | None = None,
+    ) -> tuple[WorksheetRef, GraphRef]:
+        if not y1_cols or not y2_cols:
+            raise OriginOperationError(
+                "Both y1_cols (left axis) and y2_cols (right axis) are required.",
+                error_code="invalid_request",
+            )
+        path = self._normalize_user_path(path)
+        self._validate_file(path)
+        df = self._read_table(
+            path,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+        )
+        if df.empty:
+            raise OriginOperationError(f"Data file contains no rows: {path}")
+
+        columns = [str(col) for col in df.columns]
+        x_name = self._resolve_column(columns, x_col, default_index=0)
+        y1_names = [self._resolve_column(columns, col, default_index=1) for col in y1_cols]
+        y2_names = [self._resolve_column(columns, col, default_index=1) for col in y2_cols]
+
+        actual_book_name = book_name or (
+            self._safe_filename(f"{graph_name}_Data") if graph_name else None
+        )
+        wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
+        wks.from_df(df)
+
+        # The built-in "doubleY" template makes layer 2 share layer 1's X axis
+        # and draw its own Y axis on the right, so we just add each side's plots
+        # to the matching layer.
+        graph = self._new_graph(kind="line", graph_name=graph_name, template="doubleY")
+        layer_left = self._graph_layer(graph, 0)
+        layer_right = self._graph_layer(graph, 1)
+        for y_name in y1_names:
+            self._add_plot(layer_left, wks, x_name=x_name, y_name=y_name, kind=plot_type)
+        for y_name in y2_names:
+            self._add_plot(layer_right, wks, x_name=x_name, y_name=y_name, kind=plot_type)
+
+        actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
+        if len(y1_names) > 1:
+            self._group_layer_plots(layer_left, graph_name=actual_graph_name, layer_index=0)
+        if len(y2_names) > 1:
+            self._group_layer_plots(layer_right, graph_name=actual_graph_name, layer_index=1)
+
+        layer_left.axis("x").title = self._label_text(x_label or x_name)
+        layer_left.axis("y").title = self._label_text(y1_label or ", ".join(y1_names))
+        layer_right.axis("y").title = self._label_text(y2_label or ", ".join(y2_names))
+        if title:
+            self._set_page_long_name(graph, title, force_labtalk=graph_name is not None)
+        self._rescale(layer_left)
+        self._rescale(layer_right)
+        self._remember_graph_alias(graph_name, actual_graph_name)
+
+        exported: str | None = None
+        if export_path is not None:
+            exported = self._export_plot_command_graph(export_path, actual_graph_name)["path"]
+
+        worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
+        return worksheet, GraphRef(
+            graph_name=actual_graph_name,
+            export_path=exported,
+            template="doubleY",
+            style_mode="origin_default",
+            requested_graph_name=graph_name,
+            display_name=self._object_long_name(graph, default=graph_name),
+        )
+
     def plot_table_by_id(
         self,
         path: Path,

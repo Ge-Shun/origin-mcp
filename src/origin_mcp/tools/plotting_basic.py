@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from origin_mcp.models import PlotKind
 
-from ._shared import _mcp_tool, client
+from ._shared import _export_inspection, _mcp_tool, _ok, _wrap, client
 from .plotting_shared import _plot_csv, _plot_table_id
 
 
@@ -687,3 +688,66 @@ def origin_plot_table_id(
         style_mode=style_mode,
         export_path=export_path,
     )
+
+
+@_mcp_tool()
+def origin_plot_dual_y(
+    path: str,
+    x_col: str | int | None = None,
+    y1_cols: list[str | int] | None = None,
+    y2_cols: list[str | int] | None = None,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    excel_sheet: str | int | None = 0,
+    delimiter: str | None = None,
+    encoding: str | None = None,
+    header: int | None = 0,
+    skiprows: int | list[int] | None = None,
+    nrows: int | None = None,
+    na_values: str | list[str] | None = None,
+    graph_name: str | None = None,
+    title: str | None = None,
+    x_label: str | None = None,
+    y1_label: str | None = None,
+    y2_label: str | None = None,
+    plot_type: str = "line",
+    export_path: str | None = None,
+) -> dict[str, Any]:
+    """Import table data and create a double-Y (two Y axes) graph.
+
+    y1_cols are plotted against the left Y axis (layer 1) and y2_cols against
+    the right Y axis (layer 2), sharing one X axis. Both lists are required.
+    plot_type is "line", "scatter", "line_symbol", or "column".
+    """
+
+    def run() -> dict[str, Any]:
+        worksheet, graph = client.plot_dual_y(
+            path=Path(path),
+            x_col=x_col,
+            y1_cols=y1_cols,
+            y2_cols=y2_cols,
+            book_name=book_name,
+            sheet_name=sheet_name,
+            excel_sheet=excel_sheet,
+            delimiter=delimiter,
+            encoding=encoding,
+            header=header,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+            graph_name=graph_name,
+            title=title,
+            x_label=x_label,
+            y1_label=y1_label,
+            y2_label=y2_label,
+            plot_type=plot_type,
+            export_path=Path(export_path) if export_path else None,
+        )
+        return _ok(
+            "Created double-Y plot from table data.",
+            worksheet=worksheet.as_dict(),
+            graph=graph.as_dict(),
+            export_inspection=_export_inspection(graph.as_dict()),
+        )
+
+    return _wrap(run)

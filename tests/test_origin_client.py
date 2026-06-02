@@ -2920,3 +2920,13 @@ def test_concat_worksheets_rejects_bad_axis(monkeypatch: pytest.MonkeyPatch) -> 
 
     with pytest.raises(OriginOperationError, match="concat axis"):
         client.concat_worksheets(others=[{"book": "X"}], axis="diagonal")
+
+
+def test_plot_dual_y_requires_both_axis_column_lists() -> None:
+    client = OriginClient()
+
+    with pytest.raises(OriginOperationError, match="y1_cols .* and y2_cols .* are required"):
+        client.plot_dual_y(path=Path("data.csv"), x_col="time", y1_cols=["a"], y2_cols=None)
+
+    with pytest.raises(OriginOperationError, match="y1_cols .* and y2_cols .* are required"):
+        client.plot_dual_y(path=Path("data.csv"), x_col="time", y1_cols=None, y2_cols=["b"])

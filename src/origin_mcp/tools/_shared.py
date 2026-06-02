@@ -52,6 +52,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_plot_scatter",
         "origin_plot_line_symbol",
         "origin_plot_column",
+        "origin_plot_dual_y",
         "origin_plot_histogram",
         "origin_plot_box",
         "origin_plot_from_range",
