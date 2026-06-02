@@ -193,6 +193,11 @@ class _WorksheetMixin(_OriginClientBase):
             from_df(df, c1=start_col)
         except TypeError:
             from_df(df)
+        # When writing from the first column, drop any leftover columns (such as
+        # a freshly created sheet's default empty "B") so the book holds exactly
+        # what was written. A non-zero start_col is an append, so leave it.
+        if start_col in (0, "0"):
+            self._trim_worksheet_columns(wks, len(df.columns))
         worksheet = self._worksheet_ref(wks, columns=[str(col) for col in df.columns]).as_dict()
         return {"worksheet": worksheet}
 
@@ -967,8 +972,8 @@ class _WorksheetMixin(_OriginClientBase):
                     continue
         raise OriginOperationError("The worksheet object does not support to_df().")
 
-    @staticmethod
     def _write_dataframe_to_worksheet(
+        self,
         wks: Any,
         df: pd.DataFrame,
         allow_empty: bool = False,
@@ -984,6 +989,31 @@ class _WorksheetMixin(_OriginClientBase):
             if not allow_empty:
                 raise
             from_df(pd.DataFrame(columns=df.columns))
+        # from_df overwrites cell data but leaves any columns the sheet had
+        # beyond the new frame's width (e.g. the default empty "B" column, or
+        # stale columns when a transform narrows the sheet). Trim them so the
+        # worksheet holds exactly the result columns.
+        self._trim_worksheet_columns(wks, len(df.columns))
+
+    def _trim_worksheet_columns(self, wks: Any, target_cols: int) -> None:
+        """Best-effort removal of worksheet columns beyond ``target_cols``.
+
+        Never raises: trimming is a cleanup step, so any originpro/LabTalk
+        incompatibility leaves the (functionally correct) data in place.
+        """
+
+        if target_cols < 1:
+            return
+        try:
+            current = int(getattr(wks, "cols", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if current <= target_cols:
+            return
+        try:
+            self._execute_on_worksheet(wks, f"wks.ncols={target_cols};")
+        except Exception:
+            pass
 
     @staticmethod
     def _rows_to_dataframe(
