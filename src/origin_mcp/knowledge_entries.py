@@ -374,19 +374,25 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="reference",
         path="analysis/workflow",
         title="Analysis workflow",
-        summary="Analysis tools run Origin X-Functions and can read structured outputs back.",
+        summary="Run named Origin analyses through origin_run_analysis, with results read back.",
         body=(
-            "Use specific wrappers like origin_linear_fit, origin_polynomial_fit, origin_smooth, "
-            "origin_peak_find, origin_interpolate, or origin_normalize when available. For "
-            "hypothesis testing use origin_ttest_one_sample, origin_ttest_two_sample, or "
-            "origin_ttest_paired; their Statistic, PValue, DF, and confidence-limit results come "
-            "back in the response metrics without an output worksheet. For signal processing use "
-            "origin_fft and origin_ifft, and for correlation use origin_correlation (OriginPro "
-            "only); these write a multi-column result worksheet, so set output_sheet and "
-            "include_output=true to read it back. Use origin_run_analysis for a normalized adapter "
-            "name. For tools that produce output worksheets, set output_sheet and "
-            "include_output=true so the response can include rows, parameters, metrics, and "
-            "warnings."
+            "origin_run_analysis(analysis=..., worksheet=, x_col=, y_col=, options=...) is the "
+            "single entry point for every named analysis and is the compact-profile tool; the "
+            "specialized wrappers below also exist in the full profile (origin_query_knowledge "
+            "finds them) but are not needed. Supported analysis names and their key options: "
+            "polynomial_fit (order); smooth (method, points); descriptive_stats; differentiate; "
+            "integrate; peak_find (smooth_points, direction, threshold); interpolate (method "
+            "0=line 1=spline, num_points); normalize (method 1=range[0,1] 2=z-score 3=max, value); "
+            "ttest_one_sample (mean, tail two|upper|lower, alpha); ttest_two_sample (mdiff, tail, "
+            "alpha, equal 1|0); ttest_paired (mdiff, tail, alpha); fft and ifft (win, interval); "
+            "correlation (pearson|spearman|kendall as 1/0, OriginPro only). The t-tests return "
+            "Statistic/PValue/DF/confidence limits in the response metrics with no output sheet; "
+            "fft/ifft/correlation write a multi-column result worksheet, so pass output_sheet and "
+            "include_output=true to read it back. Two structured fits keep dedicated compact tools "
+            "because their typed arguments are awkward as options: origin_linear_fit and "
+            "origin_nonlinear_fit_structured (function, initial_params, fixed_params; see "
+            "origin_list_fit_functions). For any analysis that produces an output worksheet, set "
+            "output_sheet and include_output=true to get rows, parameters, metrics, and warnings."
         ),
         keywords=(
             "analysis",

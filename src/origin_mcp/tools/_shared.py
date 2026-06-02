@@ -74,23 +74,16 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_format_graph",
         "origin_export_graph",
         "origin_view_graph",
+        # Analysis: the compact profile exposes the generic dispatcher plus the
+        # two structured fits whose typed signatures are awkward to express
+        # through run_analysis options. Every other named analysis
+        # (polynomial_fit, smooth, descriptive_stats, differentiate, integrate,
+        # peak_find, interpolate, normalize, the t-tests, fft/ifft, correlation,
+        # plain nonlinear_fit) is reachable via
+        # origin_run_analysis(analysis=..., options=...) and stays in the full
+        # profile; see the analysis/workflow knowledge entry.
         "origin_run_analysis",
         "origin_linear_fit",
-        "origin_polynomial_fit",
-        "origin_smooth",
-        "origin_descriptive_stats",
-        "origin_differentiate",
-        "origin_integrate",
-        "origin_peak_find",
-        "origin_interpolate",
-        "origin_normalize",
-        "origin_ttest_one_sample",
-        "origin_ttest_two_sample",
-        "origin_ttest_paired",
-        "origin_fft",
-        "origin_ifft",
-        "origin_correlation",
-        "origin_nonlinear_fit",
         "origin_nonlinear_fit_structured",
         "origin_list_fit_functions",
         "origin_run_labtalk",

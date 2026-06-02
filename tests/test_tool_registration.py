@@ -123,20 +123,40 @@ def test_compact_profile_registers_exactly_the_compact_allow_list() -> None:
 
 
 def test_compact_profile_includes_analysis_wrappers() -> None:
-    """Compact mode should expose the user-facing analysis tools, not only the generic runner."""
+    """Compact mode exposes the generic analysis dispatcher plus the structured fits.
+
+    The other named analyses (polynomial_fit, smooth, the t-tests, fft, ...) are
+    reachable via origin_run_analysis(analysis=...) and live in the full profile
+    only, so the compact surface stays small.
+    """
 
     names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
 
     assert {
         "origin_run_analysis",
         "origin_linear_fit",
-        "origin_polynomial_fit",
-        "origin_smooth",
-        "origin_descriptive_stats",
-        "origin_differentiate",
-        "origin_integrate",
-        "origin_peak_find",
-        "origin_nonlinear_fit",
         "origin_nonlinear_fit_structured",
         "origin_list_fit_functions",
     } <= names
+
+    # These specialized wrappers are intentionally full-profile only now.
+    assert not (
+        {
+            "origin_polynomial_fit",
+            "origin_smooth",
+            "origin_descriptive_stats",
+            "origin_differentiate",
+            "origin_integrate",
+            "origin_peak_find",
+            "origin_interpolate",
+            "origin_normalize",
+            "origin_ttest_one_sample",
+            "origin_ttest_two_sample",
+            "origin_ttest_paired",
+            "origin_fft",
+            "origin_ifft",
+            "origin_correlation",
+            "origin_nonlinear_fit",
+        }
+        & names
+    )
