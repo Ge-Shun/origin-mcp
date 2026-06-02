@@ -434,6 +434,18 @@ def test_origin_name_matches_truncated_short_name() -> None:
     assert not OriginClient._origin_name_matches("OtherBook", {"Book1"})
 
 
+def test_origin_name_matches_rejects_short_prefix_collisions() -> None:
+    # Short, unrelated short names must not collide via prefix matching: this is
+    # the "Tr"/"Trans" vs existing "T" workbook-reuse bug.
+    assert not OriginClient._origin_name_matches("Trans", {"T"})
+    assert not OriginClient._origin_name_matches("Tr", {"T"})
+    assert not OriginClient._origin_name_matches("T", {"Trans"})
+    assert not OriginClient._origin_name_matches("Spectrum2", {"Spectrum"})
+    assert not OriginClient._origin_name_matches("Data2", {"Data"})
+    # Exact matches (case-insensitive) still resolve, even alongside a prefix book.
+    assert OriginClient._origin_name_matches("trans", {"T", "Trans"})
+
+
 def test_find_sheet_from_ref_falls_back_to_output_book_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

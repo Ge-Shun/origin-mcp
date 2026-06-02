@@ -51,6 +51,12 @@ TABLE_WORKSHEET_PLOT_IDS = {
 }
 MATRIX_PLOTM_IDS = {101, 103, 105, 220, 226, 242}
 ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth", "interpolate", "normalize"}
+# Minimum prefix length for treating a stored short name as an Origin-truncated
+# form of a longer requested name. Origin only truncates names that exceed its
+# short-name cap (well above this), so genuine truncations are long; requiring a
+# substantial prefix stops unrelated short names (e.g. "T") from matching longer
+# requests (e.g. "Trans").
+_MIN_TRUNCATION_PREFIX_LEN = 12
 
 
 class _OriginClientBase:
@@ -236,13 +242,23 @@ class _OriginClientBase:
     @staticmethod
     def _origin_name_matches(requested: str, labels: set[str]) -> bool:
         requested_lower = requested.lower()
+        # Exact (case-insensitive) match always wins, and is checked across all
+        # labels first so an exact candidate is never shadowed by a prefix one.
+        for label in labels:
+            if label and requested_lower == label.lower():
+                return True
+        # Otherwise only accept a stored label that is a long, strict prefix of
+        # the requested name -- Origin truncates over-long short names, leaving
+        # the stored short name as a prefix of the original. The length floor
+        # keeps unrelated short names ("T") from matching longer requests
+        # ("Trans"), which previously caused the wrong workbook to be reused.
         for label in labels:
             label_lower = label.lower()
-            if not label_lower:
-                continue
-            if requested_lower == label_lower:
-                return True
-            if requested_lower.startswith(label_lower) or label_lower.startswith(requested_lower):
+            if (
+                len(label_lower) >= _MIN_TRUNCATION_PREFIX_LEN
+                and len(label_lower) < len(requested_lower)
+                and requested_lower.startswith(label_lower)
+            ):
                 return True
         return False
 
