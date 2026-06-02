@@ -169,6 +169,11 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         if not callable(add_plot):
             raise OriginOperationError("Graph layer does not support add_plot().")
 
+        # originpro.GLayer.add_plot only accepts these plot-type codes; multi-char
+        # names outside {line,scatter,linesymbol,column,contour} raise KeyError
+        # inside originpro. Kinds with no basic add_plot code (polar and the 3D
+        # families) use "?" so the layer's own template drives the rendering —
+        # e.g. a polar template produces a polar plot from an auto-type plot.
         plot_types = {
             "scatter": "s",
             "s": "s",
@@ -180,14 +185,9 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             "column": "c",
             "c": "c",
             "contour": "contour",
-            "histogram": "histogram",
-            "box": "box",
-            "heatmap": "heatmap",
-            "scatter3d": "3dscatter",
-            "surface3d": "surface",
-            "polar": "polar",
+            "polar": "?",
         }
-        plot_type = plot_types.get(kind, "l")
+        plot_type = plot_types.get(kind, "?")
         attempts = [
             {
                 "coly": y_name,
@@ -203,7 +203,10 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             try:
                 add_plot(wks, **kwargs)
                 return
-            except TypeError:
+            except (TypeError, KeyError):
+                # TypeError: originpro signature mismatch across versions.
+                # KeyError: unsupported plot-type code — retry without a type
+                # so the layer template decides.
                 continue
 
         add_plot(wks, y_name, x_name)

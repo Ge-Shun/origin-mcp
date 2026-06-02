@@ -15,7 +15,11 @@ from .refs import GraphRef, WorksheetRef
 
 DEFAULT_BRIDGE_HOST = "127.0.0.1"
 DEFAULT_BRIDGE_PORT = 47631
-DEFAULT_BRIDGE_TIMEOUT = 10.0
+# Origin runs every request on its single UI thread, and a heavy plot + export +
+# style pass can take well over 10s — especially once a project accumulates many
+# windows. A short timeout makes the client give up on requests the bridge is
+# still executing; see request() for why those must not be retried.
+DEFAULT_BRIDGE_TIMEOUT = 30.0
 
 
 @dataclass(frozen=True)
@@ -110,11 +114,13 @@ class OriginBridgeClient:
             line: bytes | None = None
             last_error: OSError | None = None
             for attempt in (1, 2):
+                wrote = False
                 try:
                     self._ensure_connection_locked()
                     assert self._stream is not None
                     self._stream.write(encoded)
                     self._stream.flush()
+                    wrote = True
                     line = self._stream.readline()
                     if not line:
                         # Server closed the socket. Retry once with a fresh connection.
@@ -125,6 +131,32 @@ class OriginBridgeClient:
                             "Origin bridge closed the connection without a response.",
                         )
                     break
+                except TimeoutError as exc:
+                    # A read timeout after the request was sent is ambiguous: the
+                    # bridge may still be executing it on Origin's single UI
+                    # thread. Retrying would re-run non-idempotent work (e.g.
+                    # duplicate a plot) and pile more load on an already-slow
+                    # bridge, snowballing into a backlog. Fail fast instead.
+                    self._close_locked()
+                    if wrote:
+                        raise OriginBridgeError(
+                            (
+                                "Origin bridge did not respond within "
+                                f"{self.config.timeout:g}s; it may still be busy "
+                                "processing the request or blocked on a dialog."
+                            ),
+                            "origin_bridge_timeout",
+                        ) from exc
+                    last_error = exc
+                    if attempt == 1:
+                        continue
+                    raise OriginBridgeError(
+                        (
+                            "Origin bridge is unavailable at "
+                            f"{self.config.host}:{self.config.port}: {exc}"
+                        ),
+                        "origin_bridge_unavailable",
+                    ) from exc
                 except OSError as exc:
                     last_error = exc
                     self._close_locked()

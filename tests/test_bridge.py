@@ -195,6 +195,46 @@ def test_bridge_client_pings_bridge() -> None:
     assert result["max_tasks"] == 200
 
 
+def test_request_does_not_retry_after_read_timeout() -> None:
+    # A timeout while waiting for the response means the bridge may still be
+    # executing the (non-idempotent) request, so the client must fail fast with
+    # origin_bridge_timeout instead of re-sending and duplicating the work.
+    class _FakeStream:
+        def __init__(self) -> None:
+            self.writes = 0
+
+        def write(self, _data: bytes) -> None:
+            self.writes += 1
+
+        def flush(self) -> None:
+            pass
+
+        def readline(self) -> bytes:
+            raise TimeoutError("timed out")
+
+        def close(self) -> None:
+            pass
+
+    class _FakeSock:
+        def close(self) -> None:
+            pass
+
+    client = OriginBridgeClient(OriginBridgeConfig(token=None, timeout=0.1))
+    stream = _FakeStream()
+
+    def fake_ensure() -> None:
+        client._socket = _FakeSock()  # type: ignore[assignment]
+        client._stream = stream
+
+    client._ensure_connection_locked = fake_ensure  # type: ignore[method-assign]
+
+    with pytest.raises(OriginBridgeError) as excinfo:
+        client.request("ping")
+
+    assert excinfo.value.error_code == "origin_bridge_timeout"
+    assert stream.writes == 1  # no retry
+
+
 def test_embedded_bridge_server_handles_request_without_handler_threads() -> None:
     server = OriginEmbeddedBridgeServer(
         ("127.0.0.1", 0),

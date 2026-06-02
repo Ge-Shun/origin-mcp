@@ -356,6 +356,15 @@ class _TablePlotMixin(_OriginClientBase):
             range_option=range_option,
             script=script,
         )
+        self._assert_plot_created(
+            plot_type_id=plot_type_id,
+            template=template,
+            selected=selected,
+            existing_graphs=existing_graphs,
+            reuse_existing=reuse_existing_graph,
+            result=result,
+            script=script,
+        )
         graph_name_actual = self._created_graph_name(
             requested_graph_name=graph_name_actual,
             existing_graphs=existing_graphs,
@@ -620,6 +629,61 @@ class _TablePlotMixin(_OriginClientBase):
         return (
             f"Origin did not create or expose the requested graph {requested_graph_name!r}; "
             f"using actual graph {actual_graph_name!r}."
+        )
+
+    def _assert_plot_created(
+        self,
+        plot_type_id: int,
+        template: str,
+        selected: list[str],
+        existing_graphs: set[str],
+        reuse_existing: bool,
+        result: dict[str, Any],
+        script: str,
+    ) -> None:
+        """Fail loudly when Origin rejected the plot command instead of silently
+        returning a graph that was never created.
+
+        Origin's ``worksheet -p`` route runs through the worksheet object's
+        ``lt_exec``, whose boolean result does not survive the bridge (it comes
+        back as ``None`` on both success and failure), so the only reliable
+        success signal is that a new graph page actually appeared. The
+        ``plotxy``/``plotxyz`` route does return a usable boolean, so an explicit
+        ``False`` is treated as a rejection directly."""
+
+        if reuse_existing:
+            return
+        status = result.get("result")
+        if status is False:
+            # plotxy/plotxyz return an authoritative boolean; False is a rejection.
+            raise OriginOperationError(
+                self._plot_rejected_message(plot_type_id, template, selected, script)
+            )
+        if status is True:
+            return
+        # status is None: the worksheet route's lt_exec boolean did not survive the
+        # bridge, so the only reliable success signal is a newly created graph
+        # page. Skip the check when page enumeration is unavailable so we never
+        # raise on a false negative.
+        if not callable(getattr(self._op, "pages", None)):
+            return
+        if self._graph_page_names() - existing_graphs:
+            return
+        raise OriginOperationError(
+            self._plot_rejected_message(plot_type_id, template, selected, script)
+        )
+
+    @staticmethod
+    def _plot_rejected_message(
+        plot_type_id: int,
+        template: str,
+        selected: list[str],
+        script: str,
+    ) -> str:
+        return (
+            f"Origin created no graph for plot type {plot_type_id} ({template}); "
+            "the plot command was rejected. Check that the selected columns match "
+            f"the plot type's required input (got {selected}). Script: {script}"
         )
 
     def _assert_plot_type_command(

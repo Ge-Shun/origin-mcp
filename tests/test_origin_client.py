@@ -2176,14 +2176,32 @@ def test_line_symbol_uses_compatible_line_template(monkeypatch: pytest.MonkeyPat
     assert created["template"] == "line"
 
 
-def test_add_plot_supports_extended_plot_types() -> None:
+def test_add_plot_maps_basic_kinds_to_origin_codes() -> None:
     client = OriginClient()
     wks = FakeWorksheet(pd.DataFrame({"x": [0], "y": [1], "z": [2]}))
-    layer = FakeLayer()
 
-    client._add_plot(layer, wks, x_name="x", y_name="y", z_name="z", kind="surface3d")
+    for kind, expected in (
+        ("scatter", "s"),
+        ("line", "l"),
+        ("column", "c"),
+        ("contour", "contour"),
+    ):
+        layer = FakeLayer()
+        client._add_plot(layer, wks, x_name="x", y_name="y", z_name="z", kind=kind)
+        assert layer.added[0][1]["type"] == expected
 
-    assert layer.added[0][1]["type"] == "surface"
+
+def test_add_plot_uses_auto_type_for_template_driven_kinds() -> None:
+    # polar and the 3D families have no basic add_plot code; originpro.add_plot
+    # would raise KeyError on the multi-char name, so they must fall back to "?"
+    # and let the layer's template drive the rendering.
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [0], "y": [1], "z": [2]}))
+
+    for kind in ("polar", "surface3d", "scatter3d", "unknown_kind"):
+        layer = FakeLayer()
+        client._add_plot(layer, wks, x_name="x", y_name="y", z_name="z", kind=kind)
+        assert layer.added[0][1]["type"] == "?"
 
 
 def test_plot_table_by_id_builds_labtalk_command(
@@ -2623,6 +2641,86 @@ def test_plot_table_by_id_uses_active_graph_when_pages_do_not_report_new_graph(
 
     assert graph_ref.graph_name == "Graph12"
     assert client._find_or_active_graph("Requested3D") is graph
+
+
+def test_assert_plot_created_raises_when_worksheet_route_creates_no_graph() -> None:
+    # The worksheet route's lt_exec boolean comes back as None over the bridge,
+    # so a rejected command (no new graph page) must be detected and raised
+    # instead of silently returning a non-existent graph.
+    client = OriginClient()
+
+    class FakeOrigin:
+        def pages(self) -> list[object]:
+            return []
+
+    client._op = FakeOrigin()  # type: ignore[assignment]
+
+    with pytest.raises(OriginOperationError, match="created no graph"):
+        client._assert_plot_created(
+            plot_type_id=225,
+            template="pie",
+            selected=["share"],
+            existing_graphs=set(),
+            reuse_existing=False,
+            result={"result": None},
+            script="worksheet -s 1 0 1 0; worksheet -p 225 pie;",
+        )
+
+
+def test_assert_plot_created_passes_when_new_graph_page_appears() -> None:
+    client = OriginClient()
+    created = GPage(FakeLayer())
+    created.name = "Graph7"
+
+    class FakeOrigin:
+        def pages(self) -> list[GPage]:
+            return [created]
+
+    client._op = FakeOrigin()  # type: ignore[assignment]
+
+    # No exception: a new page appeared even though the worksheet result is None.
+    client._assert_plot_created(
+        plot_type_id=225,
+        template="pie",
+        selected=["label", "share"],
+        existing_graphs=set(),
+        reuse_existing=False,
+        result={"result": None},
+        script="worksheet -s 1 0 2 0; worksheet -p 225 pie;",
+    )
+
+
+def test_assert_plot_created_trusts_plotxyz_boolean_result() -> None:
+    # plotxy/plotxyz return an authoritative boolean; an explicit True is a
+    # success even if page enumeration reports no new page (a known quirk).
+    client = OriginClient()
+
+    class FakeOrigin:
+        def pages(self) -> list[object]:
+            return []
+
+    client._op = FakeOrigin()  # type: ignore[assignment]
+
+    client._assert_plot_created(
+        plot_type_id=240,
+        template="3d",
+        selected=["x", "y", "z"],
+        existing_graphs=set(),
+        reuse_existing=False,
+        result={"result": True},
+        script="plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240 ...;",
+    )
+
+    with pytest.raises(OriginOperationError, match="created no graph"):
+        client._assert_plot_created(
+            plot_type_id=240,
+            template="3d",
+            selected=["x", "y", "z"],
+            existing_graphs=set(),
+            reuse_existing=False,
+            result={"result": False},
+            script="plotxyz iz:=[Book1]Sheet1!(1,2,3) plot:=240 ...;",
+        )
 
 
 def test_plot_matrix_by_id_builds_plotm_command(monkeypatch: pytest.MonkeyPatch) -> None:
