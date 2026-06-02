@@ -440,6 +440,36 @@ def origin_clear_worksheet(
 
 
 @_mcp_tool()
+def origin_diagnose_worksheet(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    columns: list[str | int] | None = None,
+    high_missing_threshold: float = 0.5,
+) -> dict[str, Any]:
+    """Check worksheet data quality before plotting or analysis.
+
+    Reports per-column dtype, missing count/fraction, and unique count, plus
+    structured issues: empty_worksheet and all_null_column (error), high_missing
+    and duplicate_columns (warning), non_numeric_column and constant_column
+    (info). high_missing_threshold is the missing fraction (0-1) that triggers a
+    high_missing warning. "passed" is false when any error-severity issue is
+    found.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Diagnosed Origin worksheet data quality.",
+            **client.diagnose_worksheet(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                columns=columns,
+                high_missing_threshold=high_missing_threshold,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_export_worksheet_csv(
     path: str,
     book_name: str | None = None,

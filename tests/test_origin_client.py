@@ -2953,3 +2953,41 @@ def test_set_axis_break_validates_axis_and_range() -> None:
 
     with pytest.raises(OriginOperationError, match="break_from must be less than break_to"):
         client.set_axis_break(break_from=5, break_to=3, axis="x")
+
+
+def test_diagnose_worksheet_flags_quality_issues(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    df = pd.DataFrame(
+        {
+            "good": [1.0, 2.0, 3.0, 4.0],
+            "empty": [None, None, None, None],
+            "sparse": [1.0, None, None, None],
+            "const": [5.0, 5.0, 5.0, 5.0],
+            "label": ["a", "b", "c", "d"],
+        }
+    )
+    wks = FakeWorksheet(df)
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.diagnose_worksheet()
+    codes = {(i["code"], i.get("column")) for i in result["issues"]}
+
+    assert result["rows"] == 4
+    assert result["columns_count"] == 5
+    assert ("all_null_column", "empty") in codes
+    assert ("high_missing", "sparse") in codes
+    assert ("constant_column", "const") in codes
+    assert ("non_numeric_column", "label") in codes
+    # all_null_column is error severity -> overall not passed
+    assert result["passed"] is False
+
+
+def test_diagnose_worksheet_clean_data_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [0.0, 1.0, 2.0], "y": [1.5, 2.5, 9.0]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.diagnose_worksheet()
+
+    assert result["passed"] is True
+    assert result["issues"] == []

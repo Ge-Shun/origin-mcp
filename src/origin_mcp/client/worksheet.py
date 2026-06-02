@@ -362,6 +362,114 @@ class _WorksheetMixin(_OriginClientBase):
             "kept_columns": keep_columns,
         }
 
+    def diagnose_worksheet(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        columns: list[str | int] | None = None,
+        high_missing_threshold: float = 0.5,
+    ) -> dict[str, Any]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        df = self._worksheet_to_df(wks)
+        available = [str(col) for col in df.columns]
+        if columns:
+            selected = [self._resolve_column(available, col, 0) for col in columns]
+            df = df.loc[:, selected]
+
+        issues: list[dict[str, Any]] = []
+        total_rows = len(df)
+        if total_rows == 0:
+            issues.append(
+                self._worksheet_issue("empty_worksheet", "error", "Worksheet has no rows.")
+            )
+
+        names = [str(col) for col in df.columns]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            issues.append(
+                self._worksheet_issue(
+                    "duplicate_columns",
+                    "warning",
+                    f"Duplicate column names: {duplicates}.",
+                )
+            )
+
+        column_reports: list[dict[str, Any]] = []
+        for index in range(df.shape[1]):
+            series = df.iloc[:, index]
+            name = names[index]
+            missing = int(series.isna().sum())
+            missing_pct = (missing / total_rows) if total_rows else 0.0
+            numeric = bool(pd.api.types.is_numeric_dtype(series))
+            non_null = series.dropna()
+            n_unique = int(non_null.nunique())
+            column_reports.append(
+                {
+                    "name": name,
+                    "index": index,
+                    "dtype": str(series.dtype),
+                    "numeric": numeric,
+                    "missing": missing,
+                    "missing_pct": round(missing_pct, 4),
+                    "n_unique": n_unique,
+                }
+            )
+            if total_rows and missing == total_rows:
+                issues.append(
+                    self._worksheet_issue(
+                        "all_null_column",
+                        "error",
+                        f"Column {name!r} is entirely empty.",
+                        column=name,
+                    )
+                )
+            elif missing_pct >= high_missing_threshold and total_rows:
+                issues.append(
+                    self._worksheet_issue(
+                        "high_missing",
+                        "warning",
+                        f"Column {name!r} is {missing_pct:.0%} missing.",
+                        column=name,
+                    )
+                )
+            if not numeric and len(non_null) > 0:
+                issues.append(
+                    self._worksheet_issue(
+                        "non_numeric_column",
+                        "info",
+                        f"Column {name!r} is non-numeric ({series.dtype}); "
+                        "plotting and analysis expect numeric data.",
+                        column=name,
+                    )
+                )
+            if numeric and n_unique == 1 and len(non_null) > 1:
+                issues.append(
+                    self._worksheet_issue(
+                        "constant_column",
+                        "info",
+                        f"Column {name!r} is constant; fits and correlations may be undefined.",
+                        column=name,
+                    )
+                )
+
+        return {
+            "worksheet": self._worksheet_ref(wks, columns=names, rows=total_rows).as_dict(),
+            "rows": total_rows,
+            "columns_count": df.shape[1],
+            "column_reports": column_reports,
+            "issues": issues,
+            "passed": not any(issue["severity"] == "error" for issue in issues),
+        }
+
+    @staticmethod
+    def _worksheet_issue(
+        code: str, severity: str, message: str, column: str | None = None
+    ) -> dict[str, Any]:
+        issue: dict[str, Any] = {"code": code, "severity": severity, "message": message}
+        if column is not None:
+            issue["column"] = column
+        return issue
+
     def export_worksheet_csv(
         self,
         path: Path,

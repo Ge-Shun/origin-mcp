@@ -49,6 +49,7 @@ ALLOWED_CLIENT_METHODS = {
     "set_cell_value",
     "delete_columns",
     "clear_worksheet",
+    "diagnose_worksheet",
     "export_worksheet_csv",
     "filter_rows",
     "drop_duplicates",

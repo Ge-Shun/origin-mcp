@@ -195,6 +195,7 @@ from .tools.worksheet import (
     origin_append_table,
     origin_clear_worksheet,
     origin_delete_columns,
+    origin_diagnose_worksheet,
     origin_export_worksheet_csv,
     origin_get_cell_value,
     origin_get_default_plot_config,

@@ -226,6 +226,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_set_cell_value",
         "origin_delete_columns",
         "origin_clear_worksheet",
+        "origin_diagnose_worksheet",
         "origin_filter_rows",
         "origin_drop_duplicates",
         "origin_fill_missing",

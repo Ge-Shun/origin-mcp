@@ -37,6 +37,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_import_table",
         "origin_read_worksheet",
         "origin_write_worksheet",
+        "origin_diagnose_worksheet",
         "origin_add_calculated_columns",
         "origin_filter_rows",
         "origin_drop_duplicates",
