@@ -2991,3 +2991,25 @@ def test_diagnose_worksheet_clean_data_passes(monkeypatch: pytest.MonkeyPatch) -
 
     assert result["passed"] is True
     assert result["issues"] == []
+
+
+def test_axis_range_issues_detects_silent_clipping() -> None:
+    client = OriginClient()
+
+    log_zero = client._axis_range_issues(0, "y", {"scale_name": "log10", "limits": [0, 100, 1]})
+    assert [i["code"] for i in log_zero] == ["nonpositive_log_axis"]
+    assert log_zero[0]["severity"] == "error"
+
+    rev = client._axis_range_issues(1, "x", {"scale_name": "linear", "limits": [10, 2, 1]})
+    assert [i["code"] for i in rev] == ["reversed_axis_limits"]
+    assert rev[0]["severity"] == "info"
+
+    degenerate = client._axis_range_issues(0, "x", {"scale_name": "linear", "limits": [5, 5, 1]})
+    assert [i["code"] for i in degenerate] == ["degenerate_axis_limits"]
+
+    ok_axis = {"scale_name": "linear", "limits": [-0.1, 6.1, 1.0]}
+    assert client._axis_range_issues(0, "x", ok_axis) == []
+
+    # z axis with no limits (common) must not be flagged
+    empty_z = client._axis_range_issues(0, "z", {"scale_name": None, "limits": [None, None]})
+    assert empty_z == []

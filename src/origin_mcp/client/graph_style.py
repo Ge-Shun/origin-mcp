@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -249,6 +250,10 @@ class _GraphStyleMixin(_OriginClientBase):
                                 axis=axis_name,
                             )
                         )
+            for axis_name in ("x", "y", "z"):
+                axis = layer.get("axes", {}).get(axis_name)
+                if axis:
+                    issues.extend(self._axis_range_issues(layer_index, axis_name, axis))
             if require_legend and not layer.get("legend_present"):
                 issues.append(
                     self._diagnostic_issue(
@@ -585,6 +590,71 @@ class _GraphStyleMixin(_OriginClientBase):
         issue = {"code": code, "severity": severity, "message": message}
         issue.update({key: value for key, value in context.items() if value is not None})
         return issue
+
+    def _axis_range_issues(
+        self,
+        layer_index: int | None,
+        axis_name: str,
+        axis: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Flag axis limits that silently hide data (log <=0, degenerate, reversed)."""
+
+        limits = axis.get("limits")
+        if not isinstance(limits, (list, tuple)) or len(limits) < 2:
+            return []
+        start, end = limits[0], limits[1]
+        if isinstance(start, bool) or isinstance(end, bool):
+            return []
+        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+            return []
+
+        label = axis_name.upper()
+        if not (math.isfinite(start) and math.isfinite(end)):
+            return [
+                self._diagnostic_issue(
+                    "degenerate_axis_limits",
+                    "warning",
+                    f"Layer {layer_index} {label} axis has non-finite limits.",
+                    layer_index=layer_index,
+                    axis=axis_name,
+                )
+            ]
+
+        out: list[dict[str, Any]] = []
+        scale_name = str(axis.get("scale_name") or "").lower()
+        is_log = "log" in scale_name or scale_name == "ln"
+        if is_log and (start <= 0 or end <= 0):
+            out.append(
+                self._diagnostic_issue(
+                    "nonpositive_log_axis",
+                    "error",
+                    f"Layer {layer_index} {label} axis uses {scale_name} scale but its range "
+                    f"{start}..{end} includes non-positive values; data will not render.",
+                    layer_index=layer_index,
+                    axis=axis_name,
+                )
+            )
+        if start == end:
+            out.append(
+                self._diagnostic_issue(
+                    "degenerate_axis_limits",
+                    "warning",
+                    f"Layer {layer_index} {label} axis has a zero-width range at {start}.",
+                    layer_index=layer_index,
+                    axis=axis_name,
+                )
+            )
+        elif start > end:
+            out.append(
+                self._diagnostic_issue(
+                    "reversed_axis_limits",
+                    "info",
+                    f"Layer {layer_index} {label} axis range is reversed ({start} > {end}).",
+                    layer_index=layer_index,
+                    axis=axis_name,
+                )
+            )
+        return out
 
     @staticmethod
     def _diagnostic_penalty(issue: dict[str, Any]) -> int:
