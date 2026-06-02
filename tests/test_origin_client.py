@@ -2417,7 +2417,7 @@ def test_plot_table_by_id_worksheet_command_prefers_new_graph_over_existing_name
 def test_all_documented_table_plot_ids_use_expected_labtalk_routes() -> None:
     matrix_only_ids = {item["id"] for item in PLOT_TYPE_CATALOG if item["input"] == "Matrix Object"}
     expected_plotxyz_ids = {103, 185, 240, 242, 243, 245}
-    expected_worksheet_ids = {183, 184, 206, 214, 215, 216, 225, 249}
+    expected_worksheet_ids = {183, 184, 206, 210, 211, 212, 214, 215, 216, 225, 249}
 
     for item in PLOT_TYPE_CATALOG:
         plot_type_id = item["id"]

@@ -308,6 +308,23 @@ class _TablePlotMixin(_OriginClientBase):
         )
         wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
         wks.from_df(df)
+        if plot_type_id == 242:
+            # Plot type 242 (3D Colormap Surface) consumes a matrix, not scattered
+            # XYZ worksheet columns: plotxyz against XYZ produces an empty graph.
+            # Grid the XYZ data into a matrix and plot it as a matrix surface (103).
+            return self._plot_surface_from_xyz_table(
+                df=df,
+                wks=wks,
+                columns=columns,
+                selected=selected,
+                graph_name=graph_name,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                style_mode=style_mode,
+                palette_name=palette_name,
+                export_path=export_path,
+            )
         command, range_option = self._table_plot_command_options(plot_type_id)
         if command == "plotxyz" or plot_type_id in {183, 184}:
             self._set_plotxyz_designations(wks, columns, selected, plot_type_id)
@@ -398,6 +415,151 @@ class _TablePlotMixin(_OriginClientBase):
                 "warning": output_warning,
             },
         )
+
+    def _plot_surface_from_xyz_table(
+        self,
+        *,
+        df: Any,
+        wks: Any,
+        columns: list[str],
+        selected: list[str],
+        graph_name: str | None,
+        title: str | None,
+        x_label: str | None,
+        y_label: str | None,
+        style_mode: str,
+        palette_name: str | None,
+        export_path: Path | None,
+    ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
+        """Grid scattered XYZ worksheet data into a matrix and plot a 3D
+        colormap surface (matrix plot type 103), mirroring the return shape of
+        :meth:`plot_table_by_id`."""
+
+        data_range = self._build_surface_matrix_from_xyz(df, selected)
+        existing_graphs = self._graph_page_names()
+        graph_name_actual = graph_name or self._safe_filename("glmesh_242")
+        self._activate_range_window(data_range)
+        script = self._plot_command(
+            command="plotm",
+            range_option="im",
+            data_range=data_range,
+            plot_type_id=103,
+            template="glmesh",
+            graph_name=graph_name_actual,
+        )
+        result = self.run_labtalk(script)
+        if not result.get("result"):
+            raise OriginOperationError(f"Origin rejected surface plot command: {script}")
+        graph_name_actual = self._created_graph_name(
+            requested_graph_name=graph_name_actual,
+            existing_graphs=existing_graphs,
+        )
+        output_warning = self._plot_command_output_warning(
+            requested_graph_name=graph_name or graph_name_actual,
+            actual_graph_name=graph_name_actual,
+        )
+        self._remember_graph_alias(graph_name, graph_name_actual)
+        if title or x_label or y_label:
+            try:
+                self.format_graph(
+                    graph_name=graph_name_actual,
+                    title=title,
+                    x_label=x_label,
+                    y_label=y_label,
+                    rescale=True,
+                )
+            except OriginOperationError:
+                pass
+        self._suppress_graph_title_text(graph_name=graph_name_actual, title=title)
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        if style_mode_actual == "nature":
+            style_kwargs: dict[str, Any] = {
+                "graph_name": graph_name_actual,
+                "chart_type": self._nature_chart_type_for_plot_id(242, "glmesh"),
+            }
+            if palette_name is not None:
+                style_kwargs["palette_name"] = palette_name
+            self.apply_nature_style(**style_kwargs)
+        exported = None
+        if export_path is not None:
+            exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
+        worksheet = self._worksheet_ref(wks, columns=columns, rows=len(df))
+        return (
+            worksheet,
+            GraphRef(
+                graph_name=graph_name_actual,
+                export_path=exported,
+                template="glmesh",
+                style_mode=style_mode_actual,
+                requested_graph_name=graph_name,
+                display_name=self._graph_display_name(
+                    graph_name_actual,
+                    default=title or graph_name,
+                ),
+            ),
+            {
+                "script": script,
+                "result": result.get("result"),
+                "plot_type_id": 242,
+                "template": "glmesh",
+                "selected_columns": selected,
+                "command": "plotm",
+                "range_option": "im",
+                "data_range": data_range,
+                "warning": output_warning,
+            },
+        )
+
+    def _build_surface_matrix_from_xyz(self, df: Any, selected: list[str]) -> str:
+        """Build a regularly-gridded Origin matrix from XYZ worksheet columns and
+        return its data range (e.g. ``[MBook1]MSheet1!1``). Expects data that
+        lies on a rectangular X/Y grid; missing grid cells become gaps."""
+
+        try:
+            import numpy as np
+        except ImportError as exc:  # pragma: no cover - numpy ships with originpro
+            raise OriginOperationError("numpy is required to build a 3D surface matrix.") from exc
+
+        if len(selected) < 3:
+            raise OriginOperationError(
+                "A 3D surface needs three columns (X, Y, Z); "
+                f"got {len(selected)} selected column(s)."
+            )
+        x_name, y_name, z_name = selected[0], selected[1], selected[2]
+        x = np.round(df[x_name].to_numpy(dtype=float), 9)
+        y = np.round(df[y_name].to_numpy(dtype=float), 9)
+        z = df[z_name].to_numpy(dtype=float)
+
+        xs = np.unique(x)
+        ys = np.unique(y)
+        if len(xs) < 2 or len(ys) < 2:
+            raise OriginOperationError(
+                "A 3D surface needs at least a 2x2 grid of distinct X and Y values."
+            )
+        x_index = {value: idx for idx, value in enumerate(xs)}
+        y_index = {value: idx for idx, value in enumerate(ys)}
+        grid = np.full((len(ys), len(xs)), np.nan, dtype=float)
+        for xv, yv, zv in zip(x, y, z, strict=True):
+            grid[y_index[yv], x_index[xv]] = zv
+
+        op = self.op
+        new_sheet = getattr(op, "new_sheet", None)
+        if not callable(new_sheet):
+            raise OriginOperationError("originpro.new_sheet is not available.")
+        msheet = new_sheet("m")
+        from_np = getattr(msheet, "from_np", None)
+        if not callable(from_np):
+            raise OriginOperationError("Matrix sheet does not support from_np().")
+        from_np(grid)
+
+        range_base = msheet.lt_range(False)
+        book_name = range_base[1:].split("]", 1)[0] if range_base.startswith("[") else range_base
+        self.run_labtalk(
+            f'win -a "{self._escape_labtalk(book_name)}"; '
+            f"mdim cols:={len(xs)} rows:={len(ys)} "
+            f"x1:={xs[0]} x2:={xs[-1]} y1:={ys[0]} y2:={ys[-1]};"
+        )
+        return f"{range_base}!1"
 
     def plot_matrix_by_id(
         self,

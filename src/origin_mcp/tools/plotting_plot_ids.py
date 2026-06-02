@@ -249,10 +249,11 @@ def origin_plot_3d_vector(
     graph_name: str | None = None,
     title: str | None = None,
     export_path: str | None = None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     """Create a 3D vector plot from table data."""
 
-    return _pti(path, "vector_3d", selected_cols, graph_name, title, export_path)
+    return _pti(path, "vector_3d", selected_cols, graph_name, title, export_path, style_mode)
 
 
 @_mcp_tool()
@@ -288,10 +289,11 @@ def origin_plot_waterfall(
     graph_name: str | None = None,
     title: str | None = None,
     export_path: str | None = None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     """Create a 3D waterfall/walls plot from table data."""
 
-    return _pti(path, "waterfall", selected_cols, graph_name, title, export_path)
+    return _pti(path, "waterfall", selected_cols, graph_name, title, export_path, style_mode)
 
 
 @_mcp_tool()
@@ -301,10 +303,11 @@ def origin_plot_3d_ribbon(
     graph_name: str | None = None,
     title: str | None = None,
     export_path: str | None = None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     """Create a 3D ribbon plot from table data."""
 
-    return _pti(path, "ribbon_3d", selected_cols, graph_name, title, export_path)
+    return _pti(path, "ribbon_3d", selected_cols, graph_name, title, export_path, style_mode)
 
 
 @_mcp_tool()
@@ -314,10 +317,11 @@ def origin_plot_3d_bars(
     graph_name: str | None = None,
     title: str | None = None,
     export_path: str | None = None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     """Create a 3D bar plot from table data."""
 
-    return _pti(path, "bars_3d", selected_cols, graph_name, title, export_path)
+    return _pti(path, "bars_3d", selected_cols, graph_name, title, export_path, style_mode)
 
 
 @_mcp_tool()
@@ -327,10 +331,11 @@ def origin_plot_3d_errorbar(
     graph_name: str | None = None,
     title: str | None = None,
     export_path: str | None = None,
+    style_mode: str = "origin_default",
 ) -> dict[str, Any]:
     """Create a 3D scatter plot with error bars from table data."""
 
-    return _pti(path, "errorbar_3d", selected_cols, graph_name, title, export_path)
+    return _pti(path, "errorbar_3d", selected_cols, graph_name, title, export_path, style_mode)
 
 
 @_mcp_tool()
