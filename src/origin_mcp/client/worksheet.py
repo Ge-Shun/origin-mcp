@@ -244,12 +244,8 @@ class _WorksheetMixin(_OriginClientBase):
             if callable(add_col):
                 add_col(name)
             else:
-                self._execute_on_worksheet(
-                    wks, f'wks.addcol("{self._escape_labtalk(name)}");'
-                )
-            self._execute_on_worksheet(
-                wks, f'col("{self._escape_labtalk(name)}")={formula};'
-            )
+                self._execute_on_worksheet(wks, f'wks.addcol("{self._escape_labtalk(name)}");')
+            self._execute_on_worksheet(wks, f'col("{self._escape_labtalk(name)}")={formula};')
             applied.append({"column_name": name, "formula": formula})
         return {"worksheet": self._worksheet_ref(wks).as_dict(), "columns": applied}
 
@@ -524,9 +520,7 @@ class _WorksheetMixin(_OriginClientBase):
     ) -> dict[str, Any]:
         wks, df = self._transform_source(book_name, sheet_name)
         available = [str(col) for col in df.columns]
-        cols = (
-            [self._resolve_column(available, column, 0) for column in subset] if subset else None
-        )
+        cols = [self._resolve_column(available, column, 0) for column in subset] if subset else None
         keep_arg: Any = keep
         if str(keep).lower() in {"none", "false", "drop_all"}:
             keep_arg = False
@@ -743,13 +737,9 @@ class _WorksheetMixin(_OriginClientBase):
         available = [str(col) for col in df.columns]
         ids = [self._resolve_column(available, col, 0) for col in id_vars] if id_vars else None
         vals = (
-            [self._resolve_column(available, col, 0) for col in value_vars]
-            if value_vars
-            else None
+            [self._resolve_column(available, col, 0) for col in value_vars] if value_vars else None
         )
-        melted = df.melt(
-            id_vars=ids, value_vars=vals, var_name=var_name, value_name=value_name
-        )
+        melted = df.melt(id_vars=ids, value_vars=vals, var_name=var_name, value_name=value_name)
         return self._write_transform_result(wks, melted, output_book, output_sheet)
 
     def _transform_source(

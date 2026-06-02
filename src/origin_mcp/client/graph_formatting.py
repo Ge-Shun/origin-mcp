@@ -122,9 +122,7 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
     ) -> dict[str, Any]:
         axis_l = axis.lower()
         if axis_l not in {"x", "y"}:
-            raise OriginOperationError(
-                "axis must be 'x' or 'y'.", error_code="invalid_request"
-            )
+            raise OriginOperationError("axis must be 'x' or 'y'.", error_code="invalid_request")
         if enabled:
             if break_from is None or break_to is None:
                 raise OriginOperationError(
