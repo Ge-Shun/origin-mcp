@@ -223,6 +223,36 @@ class _WorksheetMixin(_OriginClientBase):
             "formula": formula,
         }
 
+    def add_calculated_columns(
+        self,
+        columns: list[dict[str, str]],
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        if not columns:
+            raise OriginOperationError("No columns were provided.", error_code="invalid_request")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        add_col = getattr(wks, "add_col", None)
+        applied: list[dict[str, str]] = []
+        for spec in columns:
+            name = str(spec.get("name") or spec.get("column_name") or "").strip()
+            formula = str(spec.get("formula") or "").strip()
+            if not name:
+                raise OriginOperationError("A column spec is missing 'name'.")
+            if not formula:
+                raise OriginOperationError(f"Column {name!r} is missing 'formula'.")
+            if callable(add_col):
+                add_col(name)
+            else:
+                self._execute_on_worksheet(
+                    wks, f'wks.addcol("{self._escape_labtalk(name)}");'
+                )
+            self._execute_on_worksheet(
+                wks, f'col("{self._escape_labtalk(name)}")={formula};'
+            )
+            applied.append({"column_name": name, "formula": formula})
+        return {"worksheet": self._worksheet_ref(wks).as_dict(), "columns": applied}
+
     def sort_worksheet(
         self,
         by: str | int,
@@ -518,6 +548,44 @@ class _WorksheetMixin(_OriginClientBase):
             output_book,
             output_sheet,
             extra={"how": how, "result_rows": len(merged)},
+        )
+
+    def concat_worksheets(
+        self,
+        others: list[dict[str, str]],
+        axis: str = "rows",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        if axis not in {"rows", "columns"}:
+            raise OriginOperationError(
+                f"Unsupported concat axis: {axis}.", error_code="invalid_request"
+            )
+        if not others:
+            raise OriginOperationError(
+                "No other worksheets were provided to concatenate.", error_code="invalid_request"
+            )
+        primary_wks, primary_df = self._transform_source(book_name, sheet_name)
+        frames = [primary_df]
+        for source in others:
+            other_wks = self._find_sheet(
+                book_name=source.get("book") or source.get("book_name"),
+                sheet_name=source.get("sheet") or source.get("sheet_name"),
+            )
+            frames.append(self._worksheet_to_df(other_wks))
+        if axis == "rows":
+            result = pd.concat(frames, axis=0, ignore_index=True)
+        else:
+            result = pd.concat(frames, axis=1)
+            result.columns = self._dedupe_headers([str(col) for col in result.columns])
+        return self._write_transform_result(
+            primary_wks,
+            result,
+            output_book,
+            output_sheet,
+            extra={"axis": axis, "result_rows": len(result), "sources": len(frames)},
         )
 
     def pivot_worksheet(

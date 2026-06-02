@@ -2844,3 +2844,79 @@ def test_merge_worksheets_inner_join(monkeypatch: pytest.MonkeyPatch) -> None:
     assert left.df["k"].tolist() == [2]
     assert left.df["y"].tolist() == [200]
     assert result["result_rows"] == 1
+
+
+def test_add_calculated_columns_applies_each(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [1, 2]}))
+    scripts: list[str] = []
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "_execute_on_worksheet",
+        lambda _wks, script: scripts.append(script) or {"result": 1},
+    )
+
+    result = client.add_calculated_columns(
+        columns=[
+            {"name": "double", "formula": "col(x)*2"},
+            {"name": "ref", "formula": "[Other]Sheet1!col(B)"},
+        ]
+    )
+
+    assert [c["column_name"] for c in result["columns"]] == ["double", "ref"]
+    assert any("col(x)*2" in script for script in scripts)
+    assert any("[Other]Sheet1!col(B)" in script for script in scripts)
+
+
+def test_add_calculated_columns_requires_formula(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [1]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "_execute_on_worksheet", lambda *_a: {"result": 1})
+
+    with pytest.raises(OriginOperationError, match="missing 'formula'"):
+        client.add_calculated_columns(columns=[{"name": "bad"}])
+
+
+def test_concat_worksheets_stacks_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    primary = FakeWorksheet(pd.DataFrame({"k": [1], "v": [10]}))
+    other = FakeWorksheet(pd.DataFrame({"k": [2], "v": [20]}))
+
+    def fake_find(book_name: str | None = None, sheet_name: str | None = None) -> FakeWorksheet:
+        return other if book_name == "Other" else primary
+
+    monkeypatch.setattr(client, "_find_sheet", fake_find)
+
+    result = client.concat_worksheets(others=[{"book": "Other", "sheet": "Data"}], axis="rows")
+
+    assert primary.df["k"].tolist() == [1, 2]
+    assert result["result_rows"] == 2
+    assert result["sources"] == 2
+
+
+def test_concat_worksheets_columns_dedupes_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    primary = FakeWorksheet(pd.DataFrame({"v": [1, 2]}))
+    other = FakeWorksheet(pd.DataFrame({"v": [3, 4]}))
+
+    def fake_find(book_name: str | None = None, sheet_name: str | None = None) -> FakeWorksheet:
+        return other if book_name == "Other" else primary
+
+    monkeypatch.setattr(client, "_find_sheet", fake_find)
+
+    client.concat_worksheets(others=[{"book": "Other", "sheet": "Data"}], axis="columns")
+
+    assert list(primary.df.columns) == ["v", "v_1"]
+    assert primary.df["v"].tolist() == [1, 2]
+    assert primary.df["v_1"].tolist() == [3, 4]
+
+
+def test_concat_worksheets_rejects_bad_axis(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"v": [1]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    with pytest.raises(OriginOperationError, match="concat axis"):
+        client.concat_worksheets(others=[{"book": "X"}], axis="diagonal")

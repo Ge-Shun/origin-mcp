@@ -220,6 +220,7 @@ def _tool_group_for_name(name: str) -> str:
         return "worksheet"
     if name in {
         "origin_add_calculated_column",
+        "origin_add_calculated_columns",
         "origin_sort_worksheet",
         "origin_get_cell_value",
         "origin_set_cell_value",
@@ -230,6 +231,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_fill_missing",
         "origin_transpose_worksheet",
         "origin_merge_worksheets",
+        "origin_concat_worksheets",
         "origin_pivot_worksheet",
         "origin_melt_worksheet",
     }:

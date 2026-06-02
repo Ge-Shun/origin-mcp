@@ -180,6 +180,39 @@ def origin_merge_worksheets(
 
 
 @_mcp_tool()
+def origin_concat_worksheets(
+    others: list[dict[str, str]],
+    axis: str = "rows",
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    output_book: str | None = None,
+    output_sheet: str | None = None,
+) -> dict[str, Any]:
+    """Concatenate the primary worksheet with one or more others.
+
+    The primary worksheet is book_name/sheet_name; others is a list of
+    {"book": ..., "sheet": ...}. axis="rows" stacks rows (a SQL UNION ALL,
+    aligning by column name); axis="columns" places sheets side by side.
+    Provide output_book/output_sheet to write to a new sheet instead of
+    overwriting the primary worksheet.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Concatenated Origin worksheets.",
+            **client.concat_worksheets(
+                others=others,
+                axis=axis,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                output_book=output_book,
+                output_sheet=output_sheet,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_pivot_worksheet(
     index: str | list[str],
     columns: str | list[str],

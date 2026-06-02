@@ -342,10 +342,16 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "value, ffill, bfill, mean, median). Reshape with origin_transpose_worksheet, "
             "origin_pivot_worksheet (long to wide with an aggregate), and "
             "origin_melt_worksheet (wide to long). Combine sheets with "
-            "origin_merge_worksheets (database-style join on key columns). Every transform "
-            "writes in place by default; pass output_book or output_sheet to send the result "
-            "to a new worksheet instead. Prefer these over origin_run_labtalk for routine "
-            "data preparation."
+            "origin_merge_worksheets (database-style join on key columns) or "
+            "origin_concat_worksheets (stack rows as a UNION, or place sheets side by side). "
+            "Compute several new columns at once with origin_add_calculated_columns; its "
+            "LabTalk formulas can reference other sheets with the [Book]Sheet!index form (for "
+            "example '[Book2]Sheet1!2 * 2'), which covers cross-sheet column references; note "
+            "that col(...) resolves against the active sheet, so use the column-index form to "
+            "reach another sheet. Every "
+            "transform writes in place by default; pass output_book or output_sheet to send "
+            "the result to a new worksheet instead. Prefer these over origin_run_labtalk for "
+            "routine data preparation."
         ),
         keywords=(
             "worksheet",
@@ -357,7 +363,11 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "melt",
             "merge",
             "join",
+            "concat",
+            "union",
             "reshape",
+            "calculated column",
+            "cross-sheet",
         ),
     ),
     KnowledgeEntry(

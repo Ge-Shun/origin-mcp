@@ -177,6 +177,7 @@ from .tools.plotting import (
     origin_recommend_chart,
 )
 from .tools.transform import (
+    origin_concat_worksheets,
     origin_drop_duplicates,
     origin_fill_missing,
     origin_filter_rows,
@@ -187,6 +188,7 @@ from .tools.transform import (
 )
 from .tools.worksheet import (
     origin_add_calculated_column,
+    origin_add_calculated_columns,
     origin_append_table,
     origin_clear_worksheet,
     origin_delete_columns,

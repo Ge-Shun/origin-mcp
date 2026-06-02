@@ -305,6 +305,33 @@ def origin_add_calculated_column(
 
 
 @_mcp_tool()
+def origin_add_calculated_columns(
+    columns: list[dict[str, str]],
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Add several worksheet columns from LabTalk formulas in one call.
+
+    columns is a list of {"name": ..., "formula": ...}. Formulas use LabTalk
+    column syntax. To reference another sheet, use the [Book]Sheet!index form,
+    e.g. "[Book2]Sheet1!2 * 2" (col(...) resolves against the active sheet and
+    ignores the [Book]Sheet! prefix, so use the column-index form for
+    cross-sheet references).
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Added calculated Origin worksheet columns.",
+            **client.add_calculated_columns(
+                columns=columns,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_sort_worksheet(
     by: str | int,
     ascending: bool = True,
