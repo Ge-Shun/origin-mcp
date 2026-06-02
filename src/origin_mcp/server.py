@@ -92,6 +92,7 @@ from .tools.graph import (
     origin_remove_plot_from_graph,
     origin_rename_object,
     origin_set_axis,
+    origin_set_axis_break,
     origin_set_column_designations,
     origin_set_column_labels,
     origin_set_graph_page,

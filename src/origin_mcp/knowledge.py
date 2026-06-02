@@ -255,6 +255,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_get_layer_info",
         "origin_format_graph",
         "origin_set_axis",
+        "origin_set_axis_break",
         "origin_set_plot_style",
         "origin_set_plot_property",
         "origin_apply_nature_style",

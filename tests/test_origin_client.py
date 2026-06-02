@@ -2940,3 +2940,16 @@ def test_add_inset_layer_requires_x_and_y_cols() -> None:
 
     with pytest.raises(OriginOperationError, match="x_col and y_cols are required"):
         client.add_inset_layer(worksheet="[Book1]Sheet1", x_col="time", y_cols=None)
+
+
+def test_set_axis_break_validates_axis_and_range() -> None:
+    client = OriginClient()
+
+    with pytest.raises(OriginOperationError, match="axis must be"):
+        client.set_axis_break(break_from=1, break_to=2, axis="z")
+
+    with pytest.raises(OriginOperationError, match="break_from and break_to are required"):
+        client.set_axis_break(break_from=None, break_to=None, axis="x")
+
+    with pytest.raises(OriginOperationError, match="break_from must be less than break_to"):
+        client.set_axis_break(break_from=5, break_to=3, axis="x")

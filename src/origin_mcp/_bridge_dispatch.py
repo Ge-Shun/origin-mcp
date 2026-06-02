@@ -66,6 +66,7 @@ ALLOWED_CLIENT_METHODS = {
     "rename_object",
     "delete_object",
     "set_axis",
+    "set_axis_break",
     "set_plot_style",
     "apply_nature_style",
     "diagnose_graph",

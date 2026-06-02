@@ -109,6 +109,65 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             "verified": self._axis_settings_verified(requested, axis_info),
         }
 
+    def set_axis_break(
+        self,
+        break_from: float | None = None,
+        break_to: float | None = None,
+        axis: str = "x",
+        graph_name: str | None = None,
+        layer_index: int = 0,
+        position: float | None = None,
+        post_break_increment: float | None = None,
+        enabled: bool = True,
+    ) -> dict[str, Any]:
+        axis_l = axis.lower()
+        if axis_l not in {"x", "y"}:
+            raise OriginOperationError(
+                "axis must be 'x' or 'y'.", error_code="invalid_request"
+            )
+        if enabled:
+            if break_from is None or break_to is None:
+                raise OriginOperationError(
+                    "break_from and break_to are required when enabled.",
+                    error_code="invalid_request",
+                )
+            if break_from >= break_to:
+                raise OriginOperationError(
+                    "break_from must be less than break_to.", error_code="invalid_request"
+                )
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        self._activate_graph(graph, graph_name_actual)
+
+        prefix = f"layer.{axis_l}"
+        if not enabled:
+            script = f"layer -s {layer_index + 1}; {prefix}.breaks.enable=0;"
+        else:
+            parts = [
+                f"layer -s {layer_index + 1};",
+                f"{prefix}.breaks.enable=1;",
+                f"{prefix}.breaks.count=1;",
+                f"{prefix}.break1.from={break_from};",
+                f"{prefix}.break1.to={break_to};",
+            ]
+            if position is not None:
+                parts.append(f"{prefix}.break1.pos={position};")
+            if post_break_increment is not None:
+                parts.append(f"{prefix}.break1.inc={post_break_increment};")
+            script = " ".join(parts)
+        result = self.run_labtalk(script)
+        return {
+            "graph_name": graph_name_actual,
+            "layer_index": layer_index,
+            "axis": axis_l,
+            "enabled": enabled,
+            "break_from": break_from if enabled else None,
+            "break_to": break_to if enabled else None,
+            "position": position,
+            "script": script,
+            **result,
+        }
+
     def set_plot_style(
         self,
         graph_name: str | None = None,

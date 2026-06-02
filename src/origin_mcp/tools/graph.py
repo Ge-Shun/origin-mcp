@@ -325,6 +325,42 @@ def origin_set_axis(
 
 
 @_mcp_tool()
+def origin_set_axis_break(
+    break_from: float | None = None,
+    break_to: float | None = None,
+    axis: str = "x",
+    graph_name: str | None = None,
+    layer_index: int = 0,
+    position: float | None = None,
+    post_break_increment: float | None = None,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    """Add or remove an axis break on a graph axis.
+
+    Hides the range between break_from and break_to on the chosen axis ("x" or
+    "y"), so data on either side is shown closer together. position is the
+    break location as a percent of the axis length; post_break_increment sets
+    the tick spacing after the break. Pass enabled=false to remove the break.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin axis break.",
+            **client.set_axis_break(
+                break_from=break_from,
+                break_to=break_to,
+                axis=axis,
+                graph_name=graph_name,
+                layer_index=layer_index,
+                position=position,
+                post_break_increment=post_break_increment,
+                enabled=enabled,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_set_plot_style(
     graph_name: str | None = None,
     layer_index: int = 0,
