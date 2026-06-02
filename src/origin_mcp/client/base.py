@@ -50,7 +50,7 @@ TABLE_WORKSHEET_PLOT_IDS = {
     249,
 }
 MATRIX_PLOTM_IDS = {101, 103, 105, 220, 226, 242}
-ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth"}
+ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth", "interpolate", "normalize"}
 
 
 class _OriginClientBase:

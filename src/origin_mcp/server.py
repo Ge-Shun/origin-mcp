@@ -15,17 +15,25 @@ from .tools._shared import (
     mcp,
 )
 from .tools.analysis import (
+    origin_correlation,
     origin_descriptive_stats,
     origin_differentiate,
+    origin_fft,
+    origin_ifft,
     origin_integrate,
+    origin_interpolate,
     origin_linear_fit,
     origin_list_fit_functions,
     origin_nonlinear_fit,
     origin_nonlinear_fit_structured,
+    origin_normalize,
     origin_peak_find,
     origin_polynomial_fit,
     origin_run_analysis,
     origin_smooth,
+    origin_ttest_one_sample,
+    origin_ttest_paired,
+    origin_ttest_two_sample,
 )
 from .tools.bridge import (
     origin_bridge_cancel_task,

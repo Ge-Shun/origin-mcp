@@ -19,8 +19,9 @@ welcome.
 - Import CSV, TSV, TXT, DAT, XLS, and Excel data into Origin worksheets.
 - Read, write, sort, clear, and export worksheet data.
 - Create and refine common 2D, 3D, contour, statistical, and specialized plots.
-- Run Origin analyses such as fitting, smoothing, integration, peak finding, and
-  descriptive statistics.
+- Run Origin analyses such as fitting, smoothing, integration, peak finding,
+  descriptive statistics, interpolation, normalization, t-tests, FFT/IFFT, and
+  correlation.
 - Export figures and projects through a local Origin GUI bridge.
 
 ## Requirements

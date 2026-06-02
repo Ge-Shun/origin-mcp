@@ -18,6 +18,8 @@ class AnalysisAdapter:
     output_option: str | None = "oy"
     option_aliases: dict[str, str] = field(default_factory=dict)
     symbol_options: tuple[str, ...] = ()
+    scalar_outputs: tuple[str, ...] = ()
+    report_output_option: str | None = None
     note: str = ""
 
     def supports(self, origin_version: float | int | None) -> bool:
@@ -149,6 +151,115 @@ ANALYSIS_ADAPTERS = {
         input_option="ix",
         output_option=None,
         symbol_options=("mean", "sd", "se", "n", "sum", "skewness", "kurtosis", "cv"),
+    ),
+    "interpolate": AnalysisAdapter(
+        name="interpolate",
+        x_function="interp1xy",
+        aliases=("interp1xy", "interpolation", "interp"),
+        range_required=True,
+        option_aliases={
+            "num_points": "npts",
+            "points": "npts",
+            "x_min": "xmin",
+            "x_max": "xmax",
+            "increment": "inc",
+            "smoothing_factor": "sf",
+        },
+    ),
+    "normalize": AnalysisAdapter(
+        name="normalize",
+        x_function="normalize",
+        aliases=("normalization", "norm"),
+        range_required=True,
+        option_aliases={
+            "value": "val",
+            "divisor": "val",
+            "reference_column": "refcol",
+        },
+    ),
+    "ttest_one_sample": AnalysisAdapter(
+        name="ttest_one_sample",
+        x_function="ttest1",
+        aliases=("ttest1", "one_sample_ttest", "one-sample-t-test", "t_test_one_sample"),
+        range_required=True,
+        input_option="irng",
+        output_option=None,
+        scalar_outputs=("stat", "prob", "df", "lcl", "ucl"),
+        option_aliases={
+            "hypothesized_mean": "mean",
+            "significance": "alpha",
+        },
+        symbol_options=("tail", "stat", "prob", "df", "lcl", "ucl"),
+    ),
+    "ttest_two_sample": AnalysisAdapter(
+        name="ttest_two_sample",
+        x_function="ttest2",
+        aliases=("ttest2", "two_sample_ttest", "two-sample-t-test", "independent_ttest"),
+        range_required=True,
+        input_option="irng",
+        output_option=None,
+        scalar_outputs=("stat", "prob", "df", "lcl", "ucl"),
+        option_aliases={
+            "mean_difference": "mdiff",
+            "significance": "alpha",
+            "equal_variance": "equal",
+        },
+        symbol_options=("tail", "stat", "prob", "df", "lcl", "ucl"),
+    ),
+    "ttest_paired": AnalysisAdapter(
+        name="ttest_paired",
+        x_function="ttestpair",
+        aliases=("ttestpair", "paired_ttest", "paired-t-test"),
+        range_required=True,
+        input_option="irng",
+        output_option=None,
+        scalar_outputs=("stat", "prob", "df", "lcl", "ucl"),
+        option_aliases={
+            "mean_difference": "mdiff",
+            "significance": "alpha",
+        },
+        symbol_options=("tail", "stat", "prob", "df", "lcl", "ucl"),
+    ),
+    "fft": AnalysisAdapter(
+        name="fft",
+        x_function="fft1",
+        aliases=("fft1", "fourier", "fourier_transform"),
+        range_required=True,
+        input_option="ix",
+        output_option=None,
+        report_output_option="rd",
+        option_aliases={
+            "sampling_interval": "interval",
+            "window": "win",
+        },
+        symbol_options=("win", "correct", "factor", "st", "norm", "pre", "rd"),
+    ),
+    "ifft": AnalysisAdapter(
+        name="ifft",
+        x_function="ifft1",
+        aliases=("ifft1", "inverse_fft", "inverse_fourier"),
+        range_required=True,
+        input_option="ix",
+        output_option=None,
+        report_output_option="rd",
+        option_aliases={
+            "sampling_interval": "interval",
+            "window": "win",
+        },
+        symbol_options=("win", "correct", "factor", "plot", "rd"),
+    ),
+    "correlation": AnalysisAdapter(
+        name="correlation",
+        x_function="corrcoef",
+        aliases=("corrcoef", "correlation_coefficient", "corr"),
+        range_required=True,
+        input_option="irng",
+        output_option=None,
+        report_output_option="pwks",
+        option_aliases={
+            "confidence_level": "conflevel",
+        },
+        symbol_options=("pwks", "swks", "kwks"),
     ),
 }
 

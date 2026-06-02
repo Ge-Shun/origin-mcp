@@ -337,12 +337,35 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         summary="Analysis tools run Origin X-Functions and can read structured outputs back.",
         body=(
             "Use specific wrappers like origin_linear_fit, origin_polynomial_fit, origin_smooth, "
-            "or origin_peak_find when available. Use origin_run_analysis for a normalized adapter "
+            "origin_peak_find, origin_interpolate, or origin_normalize when available. For "
+            "hypothesis testing use origin_ttest_one_sample, origin_ttest_two_sample, or "
+            "origin_ttest_paired; their Statistic, PValue, DF, and confidence-limit results come "
+            "back in the response metrics without an output worksheet. For signal processing use "
+            "origin_fft and origin_ifft, and for correlation use origin_correlation (OriginPro "
+            "only); these write a multi-column result worksheet, so set output_sheet and "
+            "include_output=true to read it back. Use origin_run_analysis for a normalized adapter "
             "name. For tools that produce output worksheets, set output_sheet and "
             "include_output=true so the response can include rows, parameters, metrics, and "
             "warnings."
         ),
-        keywords=("analysis", "fit", "smooth", "peak", "output", "metrics"),
+        keywords=(
+            "analysis",
+            "fit",
+            "smooth",
+            "peak",
+            "output",
+            "metrics",
+            "ttest",
+            "t-test",
+            "interpolate",
+            "normalize",
+            "statistics",
+            "fft",
+            "ifft",
+            "fourier",
+            "correlation",
+            "corrcoef",
+        ),
     ),
     KnowledgeEntry(
         collection="reference",

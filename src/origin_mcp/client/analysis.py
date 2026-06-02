@@ -138,6 +138,8 @@ class _AnalysisMixin(_OriginClientBase):
         polynomial_outputs: dict[str, str] = {}
         moments_outputs: dict[str, str] = {}
         peak_find_outputs: dict[str, str] = {}
+        scalar_outputs: dict[str, str] = {}
+        report_outputs: dict[str, str] = {}
         if output_sheet and analysis_name in ANALYSIS_XY_OUTPUTS | {"differentiate", "integrate"}:
             output_target = self._prepare_analysis_xy_output(output_sheet)
         if analysis_name == "polynomial_fit":
@@ -155,6 +157,28 @@ class _AnalysisMixin(_OriginClientBase):
             for key, value in peak_find_outputs.items():
                 if key != "worksheet":
                     options_for_script.setdefault(key, value)
+        if adapter.scalar_outputs:
+            # Statistical tests (t-tests) report their results as scalar LabTalk
+            # variables rather than an output worksheet, mirroring the moments
+            # path. Bind each output to a temp variable so we can read it back.
+            output_target = None
+            scalar_outputs = self._prepare_scalar_outputs(adapter.scalar_outputs)
+            for key, value in scalar_outputs.items():
+                options_for_script.setdefault(key, value)
+        if adapter.report_output_option and output_sheet:
+            # FFT/IFFT/correlation write a multi-column result into a report data
+            # worksheet (rd, or the per-method coefficient sheet for corrcoef)
+            # rather than an oy XY range. Bind it to a fresh sheet we can read
+            # back. corrcoef exposes the requested method's table specifically.
+            output_target = None
+            report_option = adapter.report_output_option
+            if analysis_name == "correlation":
+                if options_for_script.get("spearman"):
+                    report_option = "swks"
+                elif options_for_script.get("kendall"):
+                    report_option = "kwks"
+            report_outputs = self._prepare_report_output(output_sheet)
+            options_for_script.setdefault(report_option, report_outputs["ref"])
         script = self._analysis_script(
             analysis=analysis,
             worksheet=worksheet,
@@ -186,8 +210,19 @@ class _AnalysisMixin(_OriginClientBase):
             response["sections"].update(moments["sections"])
         if peak_find_outputs:
             response["output_target"] = peak_find_outputs["worksheet"]
+        if scalar_outputs:
+            structured = self._structure_scalar_outputs(scalar_outputs)
+            response["metrics"].update(structured["metrics"])
+            response["sections"].update(structured["sections"])
+        if report_outputs:
+            response["output_target"] = report_outputs["worksheet"]
         if include_output:
-            if not output_sheet:
+            if report_outputs:
+                output = self._analysis_output(report_outputs["worksheet"], output_max_rows)
+                response["output"] = output
+                if not output.get("found", True) and output.get("error"):
+                    response["warnings"].append(str(output["error"]))
+            elif not output_sheet:
                 output_warning = "include_output requires output_sheet."
                 response["output_warning"] = output_warning
                 response["warnings"].append(output_warning)
@@ -266,6 +301,41 @@ class _AnalysisMixin(_OriginClientBase):
             "kurtosis": f"{prefix}ku",
             "cv": f"{prefix}cv",
         }
+
+    def _prepare_report_output(
+        self,
+        output_sheet: str,
+        default_sheet: str = "Result",
+    ) -> dict[str, str]:
+        wks = self._new_sheet(book_name=output_sheet, sheet_name=default_sheet)
+        ref = self._worksheet_ref(wks)
+        worksheet = f"[{ref.book_name}]{ref.sheet_name}"
+        return {
+            "worksheet": worksheet,
+            "book": ref.book_name,
+            "sheet": ref.sheet_name,
+            "ref": f"{worksheet}!",
+        }
+
+    @staticmethod
+    def _prepare_scalar_outputs(names: tuple[str, ...]) -> dict[str, str]:
+        prefix = f"os{uuid.uuid4().hex[:6]}"
+        return {name: f"{prefix}{name}" for name in names}
+
+    def _structure_scalar_outputs(self, variables: dict[str, str]) -> dict[str, Any]:
+        names = {
+            "stat": "Statistic",
+            "prob": "PValue",
+            "df": "DF",
+            "lcl": "LowerCL",
+            "ucl": "UpperCL",
+        }
+        metrics: dict[str, Any] = {}
+        for key, variable in variables.items():
+            value = self._safe_eval(variable)
+            if is_analysis_number(value):
+                metrics[names.get(key, key)] = value
+        return {"metrics": metrics, "sections": {"scalar_variables": variables}}
 
     def _prepare_peak_find_outputs(self, output_sheet: str) -> dict[str, str]:
         wks = self._new_sheet(book_name=output_sheet, sheet_name="Peaks")

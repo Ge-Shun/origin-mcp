@@ -15,7 +15,7 @@ pull request。
 - 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
 - 读取、写入、排序、清空和导出工作表数据。
 - 创建并调整常见 2D、3D、等高线、统计和专用图形。
-- 运行拟合、平滑、积分、寻峰和描述统计等 Origin 分析。
+- 运行拟合、平滑、积分、寻峰、描述统计、插值、归一化、t 检验、FFT/IFFT 和相关分析等 Origin 分析。
 - 通过本地 Origin GUI bridge 导出图形和项目。
 
 ## 环境要求

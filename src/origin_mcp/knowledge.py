@@ -274,6 +274,14 @@ def _tool_group_for_name(name: str) -> str:
         "origin_nonlinear_fit",
         "origin_list_fit_functions",
         "origin_nonlinear_fit_structured",
+        "origin_interpolate",
+        "origin_normalize",
+        "origin_ttest_one_sample",
+        "origin_ttest_two_sample",
+        "origin_ttest_paired",
+        "origin_fft",
+        "origin_ifft",
+        "origin_correlation",
     }:
         return "analysis"
     return "core"

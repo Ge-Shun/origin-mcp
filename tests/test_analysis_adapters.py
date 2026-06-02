@@ -118,3 +118,114 @@ def test_xy_math_adapters_accept_output_ranges() -> None:
     assert "order:=1" in diff
     assert "integ1 iy:=[Book1]1!(time,signal)" in integ
     assert "oy:=[IntegOut]Result!(1,2)" in integ
+
+
+def test_interpolate_adapter_maps_common_names() -> None:
+    adapter = resolve_analysis_adapter("interpolation", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[InterpOut]Result!(1,2)",
+        options={"method": 1, "num_points": 200, "x_min": 0, "x_max": 10},
+    )
+
+    assert command.startswith("interp1xy iy:=[Book1]1!(time,signal)")
+    assert "oy:=[InterpOut]Result!(1,2)" in command
+    assert "method:=1" in command
+    assert "npts:=200" in command
+    assert "xmin:=0" in command
+    assert "xmax:=10" in command
+
+
+def test_normalize_adapter_maps_value_alias() -> None:
+    adapter = resolve_analysis_adapter("normalize", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(signal)",
+        output_sheet="[NormOut]Result!(1,2)",
+        options={"method": 0, "value": 2.5},
+    )
+
+    assert command.startswith("normalize iy:=[Book1]1!(signal)")
+    assert "oy:=[NormOut]Result!(1,2)" in command
+    assert "method:=0" in command
+    assert "val:=2.5" in command
+
+
+def test_ttest_one_sample_adapter_uses_irng_and_scalar_outputs() -> None:
+    adapter = resolve_analysis_adapter("one_sample_ttest", 10.3)
+    assert adapter.scalar_outputs == ("stat", "prob", "df", "lcl", "ucl")
+    command = adapter.command(
+        range_expr="[Book1]1!(signal)",
+        output_sheet=None,
+        options={"hypothesized_mean": 10, "tail": "two", "prob": "osprob"},
+    )
+
+    assert command.startswith("ttest1 irng:=[Book1]1!(signal)")
+    assert "oy:=" not in command
+    assert "mean:=10" in command
+    assert "tail:=two" in command
+    assert "prob:=osprob" in command
+
+
+def test_ttest_two_sample_adapter_maps_equal_variance_and_diff() -> None:
+    adapter = resolve_analysis_adapter("ttest2", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(a,b)",
+        output_sheet=None,
+        options={"mean_difference": 0.5, "equal_variance": 0, "tail": "upper"},
+    )
+
+    assert command.startswith("ttest2 irng:=[Book1]1!(a,b)")
+    assert "mdiff:=0.5" in command
+    assert "equal:=0" in command
+    assert "tail:=upper" in command
+
+
+def test_ttest_paired_adapter_resolves_alias() -> None:
+    adapter = resolve_analysis_adapter("paired-t-test", 10.3)
+
+    assert adapter.name == "ttest_paired"
+    assert adapter.x_function == "ttestpair"
+
+
+def test_fft_adapter_uses_ix_and_binds_report_sheet() -> None:
+    adapter = resolve_analysis_adapter("fourier", 10.3)
+    assert adapter.report_output_option == "rd"
+    command = adapter.command(
+        range_expr="[Book1]1!(signal)",
+        output_sheet=None,
+        options={"window": "hanning", "sampling_interval": 0.01, "rd": "[FFTOut]Result!"},
+    )
+
+    assert command.startswith("fft1 ix:=[Book1]1!(signal)")
+    assert "oy:=" not in command
+    assert "win:=hanning" in command
+    assert "interval:=0.01" in command
+    # The report worksheet reference must stay unquoted.
+    assert "rd:=[FFTOut]Result!" in command
+
+
+def test_ifft_adapter_accepts_complex_input() -> None:
+    adapter = resolve_analysis_adapter("ifft1", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(re,im)",
+        output_sheet=None,
+        options={"rd": "[IFFTOut]Result!"},
+    )
+
+    assert command.startswith("ifft1 ix:=[Book1]1!(re,im)")
+    assert "rd:=[IFFTOut]Result!" in command
+
+
+def test_correlation_adapter_uses_irng_and_coefficient_sheet() -> None:
+    adapter = resolve_analysis_adapter("corrcoef", 10.3)
+    assert adapter.report_output_option == "pwks"
+    command = adapter.command(
+        range_expr="[Book1]1!(a,b)",
+        output_sheet=None,
+        options={"pearson": 1, "confidence_level": 95, "pwks": "[CorrOut]Result!"},
+    )
+
+    assert command.startswith("corrcoef irng:=[Book1]1!(a,b)")
+    assert "pearson:=1" in command
+    assert "conflevel:=95" in command
+    assert "pwks:=[CorrOut]Result!" in command
