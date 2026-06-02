@@ -348,6 +348,335 @@ class _WorksheetMixin(_OriginClientBase):
         df.to_csv(path, index=False)
         return {"path": str(path), "rows": len(df), "columns": [str(col) for col in df.columns]}
 
+    # -- Data transforms (pandas round trip) -------------------------------
+
+    def filter_rows(
+        self,
+        conditions: list[dict[str, Any]],
+        combine: str = "and",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        if not conditions:
+            raise OriginOperationError(
+                "No filter conditions provided.", error_code="invalid_request"
+            )
+        wks, df = self._transform_source(book_name, sheet_name)
+        masks = [self._row_mask(df, condition) for condition in conditions]
+        mask = self._combine_masks(masks, combine)
+        result = df[mask].reset_index(drop=True)
+        return self._write_transform_result(
+            wks,
+            result,
+            output_book,
+            output_sheet,
+            extra={"matched_rows": len(result), "total_rows": len(df)},
+        )
+
+    def drop_duplicates(
+        self,
+        subset: list[str | int] | None = None,
+        keep: str = "first",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        wks, df = self._transform_source(book_name, sheet_name)
+        available = [str(col) for col in df.columns]
+        cols = (
+            [self._resolve_column(available, column, 0) for column in subset] if subset else None
+        )
+        keep_arg: Any = keep
+        if str(keep).lower() in {"none", "false", "drop_all"}:
+            keep_arg = False
+        result = df.drop_duplicates(subset=cols, keep=keep_arg).reset_index(drop=True)
+        return self._write_transform_result(
+            wks,
+            result,
+            output_book,
+            output_sheet,
+            extra={"removed_rows": len(df) - len(result), "total_rows": len(df)},
+        )
+
+    def fill_missing(
+        self,
+        strategy: str = "value",
+        value: Any = None,
+        columns: list[str | int] | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        wks, df = self._transform_source(book_name, sheet_name)
+        available = [str(col) for col in df.columns]
+        cols = (
+            [self._resolve_column(available, column, 0) for column in columns]
+            if columns
+            else available
+        )
+        mode = strategy.strip().lower()
+        result = df.copy()
+        if mode in {"drop_rows", "dropna_rows", "drop"}:
+            result = df.dropna(subset=cols).reset_index(drop=True)
+        elif mode in {"drop_columns", "dropna_cols"}:
+            result = df.dropna(axis=1)
+        elif mode == "value":
+            if value is None:
+                raise OriginOperationError(
+                    "strategy='value' requires a value.", error_code="invalid_request"
+                )
+            result[cols] = result[cols].fillna(value)
+        elif mode in {"ffill", "forward"}:
+            result[cols] = result[cols].ffill()
+        elif mode in {"bfill", "backward"}:
+            result[cols] = result[cols].bfill()
+        elif mode in {"mean", "median"}:
+            for column in cols:
+                if pd.api.types.is_numeric_dtype(result[column]):
+                    fill_value = (
+                        result[column].mean() if mode == "mean" else result[column].median()
+                    )
+                    result[column] = result[column].fillna(fill_value)
+        else:
+            raise OriginOperationError(
+                f"Unsupported missing-value strategy: {strategy}.", error_code="invalid_request"
+            )
+        return self._write_transform_result(
+            wks,
+            result,
+            output_book,
+            output_sheet,
+            extra={"strategy": mode, "total_rows": len(result)},
+        )
+
+    def transpose_worksheet(
+        self,
+        label_column: str | int | None = None,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        wks, df = self._transform_source(book_name, sheet_name)
+        available = [str(col) for col in df.columns]
+        if label_column is not None:
+            key = self._resolve_column(available, label_column, 0)
+            headers = [str(value) for value in df[key].tolist()]
+            body = df.drop(columns=[key])
+        else:
+            headers = [f"R{index + 1}" for index in range(len(df))]
+            body = df
+        transposed = body.T
+        transposed.columns = self._dedupe_headers(headers)
+        transposed.insert(0, "Field", [str(col) for col in body.columns])
+        result = transposed.reset_index(drop=True)
+        return self._write_transform_result(wks, result, output_book, output_sheet)
+
+    def merge_worksheets(
+        self,
+        right_book: str | None = None,
+        right_sheet: str | None = None,
+        on: str | list[str] | None = None,
+        left_on: str | list[str] | None = None,
+        right_on: str | list[str] | None = None,
+        how: str = "inner",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        if how not in {"inner", "left", "right", "outer", "cross"}:
+            raise OriginOperationError(
+                f"Unsupported join type: {how}.", error_code="invalid_request"
+            )
+        left_wks, left_df = self._transform_source(book_name, sheet_name)
+        right_wks = self._find_sheet(book_name=right_book, sheet_name=right_sheet)
+        right_df = self._worksheet_to_df(right_wks)
+        kwargs: dict[str, Any] = {"how": how, "suffixes": ("", "_right")}
+        if how != "cross":
+            if on is not None:
+                kwargs["on"] = [on] if isinstance(on, str) else list(on)
+            elif left_on is not None and right_on is not None:
+                kwargs["left_on"] = [left_on] if isinstance(left_on, str) else list(left_on)
+                kwargs["right_on"] = [right_on] if isinstance(right_on, str) else list(right_on)
+            else:
+                common = [col for col in left_df.columns if col in set(right_df.columns)]
+                if not common:
+                    raise OriginOperationError(
+                        "No shared key columns; provide on, or left_on and right_on.",
+                        error_code="invalid_request",
+                    )
+                kwargs["on"] = common
+        merged = left_df.merge(right_df, **kwargs)
+        return self._write_transform_result(
+            left_wks,
+            merged.reset_index(drop=True),
+            output_book,
+            output_sheet,
+            extra={"how": how, "result_rows": len(merged)},
+        )
+
+    def pivot_worksheet(
+        self,
+        index: str | list[str],
+        columns: str | list[str],
+        values: str | list[str] | None = None,
+        aggfunc: str = "mean",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        wks, df = self._transform_source(book_name, sheet_name)
+        available = [str(col) for col in df.columns]
+        idx = self._resolve_column_list(available, index)
+        cols = self._resolve_column_list(available, columns)
+        if values is None:
+            vals: Any = None
+        elif isinstance(values, list):
+            vals = self._resolve_column_list(available, values)
+        else:
+            vals = self._resolve_column(available, values, 0)
+        table = pd.pivot_table(df, index=idx, columns=cols, values=vals, aggfunc=aggfunc)
+        table = table.reset_index()
+        table.columns = self._flatten_columns(table.columns)
+        return self._write_transform_result(
+            wks,
+            table,
+            output_book,
+            output_sheet,
+            extra={"aggfunc": aggfunc},
+        )
+
+    def melt_worksheet(
+        self,
+        id_vars: list[str | int] | None = None,
+        value_vars: list[str | int] | None = None,
+        var_name: str = "variable",
+        value_name: str = "value",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        output_book: str | None = None,
+        output_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        wks, df = self._transform_source(book_name, sheet_name)
+        available = [str(col) for col in df.columns]
+        ids = [self._resolve_column(available, col, 0) for col in id_vars] if id_vars else None
+        vals = (
+            [self._resolve_column(available, col, 0) for col in value_vars]
+            if value_vars
+            else None
+        )
+        melted = df.melt(
+            id_vars=ids, value_vars=vals, var_name=var_name, value_name=value_name
+        )
+        return self._write_transform_result(wks, melted, output_book, output_sheet)
+
+    def _transform_source(
+        self, book_name: str | None, sheet_name: str | None
+    ) -> tuple[Any, pd.DataFrame]:
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        return wks, self._worksheet_to_df(wks)
+
+    def _write_transform_result(
+        self,
+        source_wks: Any,
+        df: pd.DataFrame,
+        output_book: str | None,
+        output_sheet: str | None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dest = (
+            self._new_sheet(book_name=output_book, sheet_name=output_sheet)
+            if (output_book or output_sheet)
+            else source_wks
+        )
+        self._write_dataframe_to_worksheet(dest, df, allow_empty=True)
+        result: dict[str, Any] = {
+            "worksheet": self._worksheet_ref(
+                dest,
+                columns=[str(col) for col in df.columns],
+                rows=len(df),
+            ).as_dict()
+        }
+        if extra:
+            result.update(extra)
+        return result
+
+    def _row_mask(self, df: pd.DataFrame, condition: dict[str, Any]) -> pd.Series[bool]:
+        available = [str(col) for col in df.columns]
+        column = self._resolve_column(available, condition.get("column"), 0)
+        op = str(condition.get("op", "eq")).strip().lower()
+        value = condition.get("value")
+        series = df[column]
+        if op in {"eq", "=="}:
+            return series == value
+        if op in {"ne", "!="}:
+            return series != value
+        if op in {"gt", ">"}:
+            return series > value
+        if op in {"ge", ">="}:
+            return series >= value
+        if op in {"lt", "<"}:
+            return series < value
+        if op in {"le", "<="}:
+            return series <= value
+        if op == "in":
+            return series.isin(value if isinstance(value, list) else [value])
+        if op == "not_in":
+            return ~series.isin(value if isinstance(value, list) else [value])
+        if op == "contains":
+            return series.astype(str).str.contains(str(value), na=False)
+        if op == "startswith":
+            return series.astype(str).str.startswith(str(value))
+        if op == "isna":
+            return series.isna()
+        if op == "notna":
+            return series.notna()
+        raise OriginOperationError(f"Unsupported filter op: {op}.", error_code="invalid_request")
+
+    @staticmethod
+    def _combine_masks(masks: list[pd.Series[bool]], combine: str) -> pd.Series[bool]:
+        mode = combine.strip().lower()
+        mask = masks[0]
+        for other in masks[1:]:
+            mask = (mask & other) if mode == "and" else (mask | other)
+        return mask
+
+    def _resolve_column_list(
+        self, available: list[str], value: str | list[str] | int | list[int]
+    ) -> list[str]:
+        items = value if isinstance(value, list) else [value]
+        return [self._resolve_column(available, item, 0) for item in items]
+
+    @staticmethod
+    def _dedupe_headers(headers: list[str]) -> list[str]:
+        seen: dict[str, int] = {}
+        result: list[str] = []
+        for header in headers:
+            if header in seen:
+                seen[header] += 1
+                result.append(f"{header}_{seen[header]}")
+            else:
+                seen[header] = 0
+                result.append(header)
+        return result
+
+    @staticmethod
+    def _flatten_columns(columns: Any) -> list[str]:
+        flattened: list[str] = []
+        for column in columns:
+            if isinstance(column, tuple):
+                parts = [str(part) for part in column if str(part) != ""]
+                flattened.append("_".join(parts) if parts else "value")
+            else:
+                flattened.append(str(column))
+        return flattened
+
     def create_sample_matrix_range(
         self,
         book_name: str = "OriginMcpMatrix",

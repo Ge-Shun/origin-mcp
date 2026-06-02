@@ -332,6 +332,36 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
     ),
     KnowledgeEntry(
         collection="reference",
+        path="worksheet/transforms",
+        title="Worksheet data transforms",
+        summary="Reshape and clean worksheet data without hand-written LabTalk.",
+        body=(
+            "Use origin_filter_rows for structured row filters (column/op/value, combined "
+            "with and/or), origin_drop_duplicates to remove duplicate rows, and "
+            "origin_fill_missing to drop or fill missing values (drop_rows, drop_columns, "
+            "value, ffill, bfill, mean, median). Reshape with origin_transpose_worksheet, "
+            "origin_pivot_worksheet (long to wide with an aggregate), and "
+            "origin_melt_worksheet (wide to long). Combine sheets with "
+            "origin_merge_worksheets (database-style join on key columns). Every transform "
+            "writes in place by default; pass output_book or output_sheet to send the result "
+            "to a new worksheet instead. Prefer these over origin_run_labtalk for routine "
+            "data preparation."
+        ),
+        keywords=(
+            "worksheet",
+            "filter",
+            "duplicates",
+            "missing",
+            "transpose",
+            "pivot",
+            "melt",
+            "merge",
+            "join",
+            "reshape",
+        ),
+    ),
+    KnowledgeEntry(
+        collection="reference",
         path="analysis/workflow",
         title="Analysis workflow",
         summary="Analysis tools run Origin X-Functions and can read structured outputs back.",

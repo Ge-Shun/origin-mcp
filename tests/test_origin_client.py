@@ -2729,3 +2729,118 @@ def _write_png(path: Path, width: int, height: int, pixels: list[tuple[int, int,
 def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
     checksum = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
     return struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", checksum)
+
+
+def test_filter_rows_keeps_matching_rows_in_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"name": ["a", "b", "c"], "val": [1, 5, 9]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.filter_rows(conditions=[{"column": "val", "op": "ge", "value": 5}])
+
+    assert result["matched_rows"] == 2
+    assert result["total_rows"] == 3
+    assert wks.df["name"].tolist() == ["b", "c"]
+
+
+def test_filter_rows_combines_with_or(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"val": [1, 5, 9]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.filter_rows(
+        conditions=[
+            {"column": "val", "op": "lt", "value": 2},
+            {"column": "val", "op": "gt", "value": 8},
+        ],
+        combine="or",
+    )
+
+    assert wks.df["val"].tolist() == [1, 9]
+    assert result["matched_rows"] == 2
+
+
+def test_drop_duplicates_on_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"k": [1, 1, 2], "v": [10, 11, 12]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    result = client.drop_duplicates(subset=["k"], keep="first")
+
+    assert wks.df["k"].tolist() == [1, 2]
+    assert result["removed_rows"] == 1
+
+
+def test_fill_missing_with_mean(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [1.0, None, 3.0]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.fill_missing(strategy="mean")
+
+    assert wks.df["x"].tolist() == [1.0, 2.0, 3.0]
+
+
+def test_fill_missing_drop_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"x": [1.0, None, 3.0], "y": [4, 5, 6]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.fill_missing(strategy="drop_rows", columns=["x"])
+
+    assert wks.df["x"].tolist() == [1.0, 3.0]
+
+
+def test_transpose_worksheet_uses_label_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"metric": ["a", "b"], "m1": [1, 2], "m2": [3, 4]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.transpose_worksheet(label_column="metric")
+
+    assert wks.df["Field"].tolist() == ["m1", "m2"]
+    assert wks.df["a"].tolist() == [1, 3]
+    assert wks.df["b"].tolist() == [2, 4]
+
+
+def test_pivot_worksheet_long_to_wide(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(
+        pd.DataFrame({"day": [1, 1, 2, 2], "grp": ["a", "b", "a", "b"], "val": [10, 20, 30, 40]})
+    )
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.pivot_worksheet(index="day", columns="grp", values="val", aggfunc="sum")
+
+    assert wks.df["day"].tolist() == [1, 2]
+    assert wks.df["a"].tolist() == [10, 30]
+    assert wks.df["b"].tolist() == [20, 40]
+
+
+def test_melt_worksheet_wide_to_long(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    wks = FakeWorksheet(pd.DataFrame({"id": [1, 2], "a": [10, 30], "b": [20, 40]}))
+    monkeypatch.setattr(client, "_find_sheet", lambda **_kwargs: wks)
+
+    client.melt_worksheet(id_vars=["id"], var_name="grp", value_name="val")
+
+    assert set(wks.df.columns) == {"id", "grp", "val"}
+    assert len(wks.df) == 4
+    assert sorted(wks.df["val"].tolist()) == [10, 20, 30, 40]
+
+
+def test_merge_worksheets_inner_join(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OriginClient()
+    left = FakeWorksheet(pd.DataFrame({"k": [1, 2], "x": [10, 20]}))
+    right = FakeWorksheet(pd.DataFrame({"k": [2, 3], "y": [200, 300]}))
+
+    def fake_find(book_name: str | None = None, sheet_name: str | None = None) -> FakeWorksheet:
+        return right if book_name == "Right" else left
+
+    monkeypatch.setattr(client, "_find_sheet", fake_find)
+
+    result = client.merge_worksheets(right_book="Right", on="k", how="inner")
+
+    assert left.df["k"].tolist() == [2]
+    assert left.df["y"].tolist() == [200]
+    assert result["result_rows"] == 1

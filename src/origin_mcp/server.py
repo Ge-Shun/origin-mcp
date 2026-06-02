@@ -176,6 +176,15 @@ from .tools.plotting import (
     origin_plot_waterfall,
     origin_recommend_chart,
 )
+from .tools.transform import (
+    origin_drop_duplicates,
+    origin_fill_missing,
+    origin_filter_rows,
+    origin_melt_worksheet,
+    origin_merge_worksheets,
+    origin_pivot_worksheet,
+    origin_transpose_worksheet,
+)
 from .tools.worksheet import (
     origin_add_calculated_column,
     origin_append_table,
