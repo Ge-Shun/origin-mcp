@@ -1,3 +1,4 @@
+import os
 import struct
 import zlib
 from pathlib import Path
@@ -1117,6 +1118,76 @@ def test_render_graph_png_requires_save_fig(monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(OriginOperationError) as excinfo:
         client.render_graph_png(graph_name="G3")
     assert excinfo.value.error_code == "graph_render_unavailable"
+
+
+def test_prune_preview_dir_keeps_most_recent(tmp_path: Path) -> None:
+    from origin_mcp.client.export import _ExportMixin
+
+    for i in range(25):
+        entry = tmp_path / f"p{i}.png"
+        entry.write_bytes(b"x")
+        os.utime(entry, (i, i))  # increasing mtime: p24 is newest
+
+    _ExportMixin._prune_preview_dir(tmp_path, keep=20)
+
+    remaining = {p.name for p in tmp_path.iterdir()}
+    assert len(remaining) == 20
+    assert "p24.png" in remaining  # newest kept
+    assert "p0.png" not in remaining  # oldest pruned
+
+
+def test_export_preview_prunes_default_temp_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import origin_mcp.client.export as export_mod
+
+    client = OriginClient()
+    monkeypatch.setattr(export_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    preview_dir = tmp_path / "origin-mcp-previews"
+    preview_dir.mkdir()
+    for i in range(25):
+        entry = preview_dir / f"old{i}.png"
+        entry.write_bytes(b"x")
+        os.utime(entry, (i, i))
+
+    def fake_export_graph(path: Any, graph_name: Any = None, overwrite: bool = True) -> dict:
+        Path(path).write_bytes(b"PNG")
+        os.utime(path, (10_000, 10_000))  # newest, must survive pruning
+        return {"path": str(path)}
+
+    monkeypatch.setattr(client, "export_graph", fake_export_graph)
+    monkeypatch.setattr(client, "inspect_export", lambda _p: {"looks_nonempty": True})
+
+    result = client.export_preview(graph_name="G")
+
+    remaining = {p.name for p in preview_dir.iterdir()}
+    assert len(remaining) == 20
+    assert Path(result["path"]).name in remaining
+
+
+def test_export_preview_does_not_prune_caller_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    client = OriginClient()
+    out = tmp_path / "my-exports"
+    out.mkdir()
+    for i in range(25):
+        (out / f"keep{i}.png").write_bytes(b"x")
+
+    def fake_export_graph(path: Any, graph_name: Any = None, overwrite: bool = True) -> dict:
+        Path(path).write_bytes(b"PNG")
+        return {"path": str(path)}
+
+    monkeypatch.setattr(client, "export_graph", fake_export_graph)
+    monkeypatch.setattr(client, "inspect_export", lambda _p: {"looks_nonempty": True})
+
+    client.export_preview(graph_name="G", output_dir=out)
+
+    # A caller-supplied directory is never pruned: all 25 pre-existing files plus
+    # the new preview remain.
+    assert len([p for p in out.iterdir() if p.is_file()]) == 26
 
 
 def test_export_graph_prefers_labtalk_when_graph_name_provided(

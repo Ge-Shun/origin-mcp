@@ -617,3 +617,57 @@ def test_origin_view_graph_is_in_compact_profile() -> None:
     from origin_mcp.tools._shared import COMPACT_TOOL_NAMES
 
     assert "origin_view_graph" in COMPACT_TOOL_NAMES
+
+
+def test_resolved_server_log_path_is_bridge_sibling(monkeypatch, tmp_path) -> None:
+    import origin_mcp.logging_config as lc
+
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(tmp_path / "bridge.log"))
+    assert lc.resolved_server_log_path() == tmp_path / "server.log"
+
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", "-")
+    assert lc.resolved_server_log_path() is None
+
+
+def test_wrap_logs_unexpected_error_traceback_to_server_log(monkeypatch, tmp_path) -> None:
+    import logging
+
+    import origin_mcp.logging_config as lc
+    from origin_mcp.tools._shared import _wrap
+
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", str(tmp_path / "bridge.log"))
+    lc.reset_for_tests()
+    try:
+
+        def boom() -> dict:
+            raise RuntimeError("kaboom-unexpected")
+
+        result = _wrap(boom)
+        for handler in logging.getLogger(lc.TOOLS_LOGGER_NAME).handlers:
+            handler.flush()
+
+        server_log = tmp_path / "server.log"
+        assert result["ok"] is False
+        assert result["error_code"] == "unexpected_error"
+        assert server_log.exists()
+        text = server_log.read_text(encoding="utf-8")
+        assert "kaboom-unexpected" in text
+        assert "Traceback (most recent call last)" in text
+    finally:
+        lc.reset_for_tests()
+
+
+def test_wrap_does_not_create_server_log_when_disabled(monkeypatch, tmp_path) -> None:
+    import origin_mcp.logging_config as lc
+    from origin_mcp.errors import OriginOperationError
+    from origin_mcp.tools._shared import _wrap
+
+    monkeypatch.setenv("ORIGIN_MCP_LOG_FILE", "-")
+    lc.reset_for_tests()
+    try:
+        # Expected, classified errors never reach the unexpected-error log path.
+        result = _wrap(lambda: (_ for _ in ()).throw(OriginOperationError("expected")))
+        assert result["ok"] is False
+        assert not (tmp_path / "server.log").exists()
+    finally:
+        lc.reset_for_tests()

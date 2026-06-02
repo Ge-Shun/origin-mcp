@@ -10,6 +10,11 @@ Set ``ORIGIN_MCP_DEBUG=1`` to also record the Python traceback of failed bridge
 dispatches in the log file (under an ``error_traceback`` field). It stays in the
 local log only and is never returned to the MCP client, so it is safe to enable
 when diagnosing opaque originpro/Origin failures.
+
+Unexpected errors raised inside MCP tool handlers run in the separate MCP server
+process, so they are logged to a sibling ``server.log`` (next to ``bridge.log``)
+with full Python tracebacks. Using a separate file avoids two processes
+rotating the same log. ``ORIGIN_MCP_LOG_FILE=-``/``off`` disables both.
 """
 
 from __future__ import annotations
@@ -25,7 +30,9 @@ from pathlib import Path
 from typing import Any
 
 LOGGER_NAME = "origin_mcp.bridge"
+TOOLS_LOGGER_NAME = "origin_mcp.tools"
 _DEFAULT_BASENAME = "bridge.log"
+_SERVER_BASENAME = "server.log"
 _DEFAULT_DIRNAME = "origin-mcp"
 _MAX_BYTES = 1_048_576  # 1 MiB per file
 _BACKUP_COUNT = 3
@@ -35,6 +42,8 @@ _DEBUG_TRUE_VALUES = {"1", "true", "yes", "on"}
 _lock = threading.Lock()
 _configured = False
 _active_log_path: Path | None = None
+_server_configured = False
+_server_log_path: Path | None = None
 
 
 def resolved_log_path() -> Path | None:
@@ -56,11 +65,38 @@ def debug_logging_enabled() -> bool:
     return value is not None and value.strip().lower() in _DEBUG_TRUE_VALUES
 
 
+def resolved_server_log_path() -> Path | None:
+    """Return the path the MCP-server tools logger writes to, or None if disabled.
+
+    It is a sibling of the bridge log (same directory, ``server.log`` basename),
+    so disabling logging via ``ORIGIN_MCP_LOG_FILE`` disables both and a custom
+    log path relocates both to the same directory.
+    """
+
+    bridge_path = resolved_log_path()
+    if bridge_path is None:
+        return None
+    return bridge_path.with_name(_SERVER_BASENAME)
+
+
 def get_bridge_logger() -> logging.Logger:
     """Return a configured logger for bridge handler events."""
 
     logger = logging.getLogger(LOGGER_NAME)
     _ensure_configured(logger)
+    return logger
+
+
+def get_tools_logger() -> logging.Logger:
+    """Return a configured logger for MCP-server-side tool handler errors.
+
+    Unlike the bridge logger this writes human-readable records (with rendered
+    tracebacks) to ``server.log`` so unexpected failures inside tool handlers
+    are persisted locally instead of relying on the host capturing stderr.
+    """
+
+    logger = logging.getLogger(TOOLS_LOGGER_NAME)
+    _ensure_server_configured(logger)
     return logger
 
 
@@ -166,17 +202,59 @@ def _ensure_configured(logger: logging.Logger) -> None:
         _configured = True
 
 
+def _ensure_server_configured(logger: logging.Logger) -> None:
+    global _server_configured, _server_log_path
+    if _server_configured:
+        return
+    with _lock:
+        if _server_configured:
+            return
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        path = resolved_server_log_path()
+        if path is None:
+            logger.addHandler(logging.NullHandler())
+            _server_log_path = None
+            _server_configured = True
+            return
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            handler: logging.Handler = RotatingFileHandler(
+                str(path),
+                maxBytes=_MAX_BYTES,
+                backupCount=_BACKUP_COUNT,
+                encoding="utf-8",
+                delay=True,
+            )
+        except OSError:
+            logger.addHandler(logging.NullHandler())
+            _server_log_path = None
+            _server_configured = True
+            return
+        # A standard formatter renders ``exc_info`` (the traceback) automatically
+        # when callers use ``logger.exception(...)``.
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        logger.addHandler(handler)
+        _server_log_path = path
+        _server_configured = True
+
+
 def reset_for_tests() -> None:
     """Reset cached state so tests can monkeypatch ORIGIN_MCP_LOG_FILE."""
 
-    global _configured, _active_log_path
+    global _configured, _active_log_path, _server_configured, _server_log_path
     with _lock:
-        logger = logging.getLogger(LOGGER_NAME)
-        for handler in list(logger.handlers):
-            logger.removeHandler(handler)
-            try:
-                handler.close()
-            except Exception:
-                pass
+        for name in (LOGGER_NAME, TOOLS_LOGGER_NAME):
+            logger = logging.getLogger(name)
+            for handler in list(logger.handlers):
+                logger.removeHandler(handler)
+                try:
+                    handler.close()
+                except Exception:
+                    pass
         _configured = False
         _active_log_path = None
+        _server_configured = False
+        _server_log_path = None

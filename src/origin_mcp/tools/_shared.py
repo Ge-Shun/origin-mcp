@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import math
 import os
 from pathlib import Path
@@ -13,9 +12,8 @@ from origin_mcp.bridge_client import OriginBridgeConfig, OriginBridgeProxy
 from origin_mcp.errors import (
     OriginMcpError,
 )
+from origin_mcp.logging_config import get_tools_logger
 from origin_mcp.models import ToolResult
-
-_logger = logging.getLogger("origin_mcp.tools")
 
 mcp = FastMCP(
     "origin-mcp",
@@ -174,9 +172,10 @@ def _wrap(func: Any) -> dict[str, Any]:
         return _error(exc)
     except Exception as exc:
         # Unexpected failures lose their traceback once converted to a result
-        # dict, which makes production issues hard to diagnose. Log it (the
-        # message stays out of the tool response unless logging is configured).
-        _logger.exception("Unexpected error in MCP tool call: %s", exc)
+        # dict, which makes production issues hard to diagnose. Log it with the
+        # full stack to server.log (the message/stack stays out of the tool
+        # response). get_tools_logger() is cheap and idempotent.
+        get_tools_logger().exception("Unexpected error in MCP tool call: %s", exc)
         return _error(exc)
 
 

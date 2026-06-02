@@ -16,6 +16,9 @@ from ..image_quality import (
 )
 from .base import _OriginClientBase
 
+# Most-recent preview files kept in the shared temp preview directory.
+DEFAULT_PREVIEW_RETENTION = 20
+
 
 class _ExportMixin(_OriginClientBase):
     """Graph export and exported image inspection methods."""
@@ -101,6 +104,9 @@ class _ExportMixin(_OriginClientBase):
         overwrite: bool = True,
     ) -> dict[str, Any]:
         suffix = file_type.lower().lstrip(".") or "png"
+        # Track whether we are using the shared temp preview directory: only the
+        # default directory is pruned, never a directory the caller chose.
+        use_default_dir = output_dir is None
         if output_dir is None:
             output_dir = Path(tempfile.gettempdir()) / "origin-mcp-previews"
         output_dir = self._normalize_user_path(output_dir)
@@ -108,10 +114,32 @@ class _ExportMixin(_OriginClientBase):
         safe_name = self._safe_filename(graph_name or "active_graph")
         path = output_dir / f"{safe_name}_{uuid.uuid4().hex[:8]}.{suffix}"
         exported = self.export_graph(path, graph_name=graph_name, overwrite=overwrite)
+        if use_default_dir:
+            # export_preview returns a file path callers may still read, so keep
+            # the most recent previews and only prune older ones to bound the
+            # temp directory over a long session.
+            self._prune_preview_dir(output_dir, keep=DEFAULT_PREVIEW_RETENTION)
         return {
             **exported,
             "preview": self.inspect_export(Path(exported["path"])),
         }
+
+    @staticmethod
+    def _prune_preview_dir(directory: Path, keep: int = DEFAULT_PREVIEW_RETENTION) -> None:
+        """Delete all but the ``keep`` most recently modified files in a directory."""
+
+        try:
+            entries = [entry for entry in directory.iterdir() if entry.is_file()]
+        except OSError:
+            return
+        if len(entries) <= keep:
+            return
+        entries.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
+        for stale in entries[keep:]:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
 
     def render_graph_png(
         self,
