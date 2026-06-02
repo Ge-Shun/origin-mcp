@@ -984,6 +984,7 @@ def origin_format_legend(
     graph_name: str | None = None,
     text: str | None = None,
     font_size: int | None = None,
+    font_family: str | None = None,
     show_frame: bool | None = None,
     left: int | None = None,
     top: int | None = None,
@@ -991,7 +992,7 @@ def origin_format_legend(
     margin_percent: float = 2.0,
     coordinate_mode: str = "auto",
 ) -> dict[str, Any]:
-    """Format the graph legend text, font size, frame, and optional position."""
+    """Format the graph legend text, font, font size, frame, and optional position."""
 
     return _wrap(
         lambda: _ok(
@@ -1000,6 +1001,7 @@ def origin_format_legend(
                 graph_name=graph_name,
                 text=text,
                 font_size=font_size,
+                font_family=font_family,
                 show_frame=show_frame,
                 left=left,
                 top=top,

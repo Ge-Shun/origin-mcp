@@ -133,6 +133,7 @@ class _GraphStyleMixin(_OriginClientBase):
                 self.format_legend(
                     graph_name_actual,
                     font_size=legend_font_size,
+                    font_family=font_family,
                     show_frame=False,
                 )
             except OriginOperationError:

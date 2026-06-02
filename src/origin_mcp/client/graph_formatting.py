@@ -570,6 +570,7 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
         graph_name: str | None = None,
         text: str | None = None,
         font_size: int | None = None,
+        font_family: str | None = None,
         show_frame: bool | None = None,
         left: int | None = None,
         top: int | None = None,
@@ -590,6 +591,12 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             legend.text = text
         if font_size is not None:
             legend.set_int("fsize", font_size)
+        # Re-assert the legend font here, after any legend (re)creation above. The
+        # legend object is rebuilt by ``legend -r`` (losing its font), while axis
+        # fonts are sticky, so the font must be applied as a final step to avoid the
+        # legend reverting to the template default while the rest stays styled.
+        if font_family is not None:
+            self._set_legend_font(graph_name_actual, font_family)
         if show_frame is not None:
             legend.set_int("showframe", int(show_frame))
         position_result = self._position_legend(

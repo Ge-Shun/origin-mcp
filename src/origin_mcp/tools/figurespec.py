@@ -468,6 +468,20 @@ def _style_mode(spec: FigureSpec) -> str:
     return spec.style.theme
 
 
+def _legend_font(spec: FigureSpec) -> str | None:
+    """Font to assert on the legend so it matches the styled axes.
+
+    An explicit ``font_family`` always wins. Otherwise the Nature theme forces
+    Arial (matching ``apply_nature_style``); other themes return None to preserve
+    the Origin template defaults rather than overriding the legend font.
+    """
+    if spec.style.font_family:
+        return spec.style.font_family
+    if spec.style.theme == "nature":
+        return "Arial"
+    return None
+
+
 def _show_legend(spec: FigureSpec) -> bool:
     for item in spec.annotations:
         if item.type.strip().lower() == "legend":
@@ -597,6 +611,7 @@ def _apply_annotations(
             results.append(
                 client.format_legend(
                     graph_name=graph_name,
+                    font_family=_legend_font(spec),
                     show_frame=annotation.frame,
                     position=annotation.location,
                 )

@@ -265,6 +265,19 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             if callable(remove):
                 remove()
 
+    def _set_legend_font(self, graph_name: str, font_family: str) -> dict[str, Any]:
+        """Set the active layer's legend font via LabTalk.
+
+        Applied after legend creation/refresh so the font survives ``legend -r``,
+        which otherwise resets the legend object to the template default font.
+        """
+        safe_font = self._escape_labtalk(font_family)
+        parts = []
+        if graph_name:
+            parts.append(f'win -a "{self._escape_labtalk(graph_name)}";')
+        parts.append(f"legend.font=font({safe_font});")
+        return self.run_labtalk(" ".join(parts))
+
     def _position_legend(
         self,
         graph_name: str,

@@ -924,6 +924,27 @@ def test_format_legend_does_not_move_by_default(
     assert scripts == []
 
 
+def test_format_legend_reasserts_font_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    client.format_legend("Graph1", font_family="Arial")
+
+    assert any("legend.font=font(Arial);" in script for script in scripts)
+
+
 def test_format_legend_positions_inside_layer_anchor_when_requested(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
