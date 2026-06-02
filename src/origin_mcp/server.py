@@ -66,6 +66,7 @@ from .tools.figurespec import (
 )
 from .tools.graph import (
     origin_add_graph_label,
+    origin_add_inset,
     origin_add_plot_to_graph,
     origin_add_reference_line,
     origin_apply_image_panel_style,

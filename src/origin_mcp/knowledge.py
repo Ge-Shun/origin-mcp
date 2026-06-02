@@ -261,6 +261,7 @@ def _tool_group_for_name(name: str) -> str:
         "origin_diagnose_graph",
         "origin_apply_image_panel_style",
         "origin_add_plot_to_graph",
+        "origin_add_inset",
         "origin_remove_plot_from_graph",
         "origin_change_plot_type",
         "origin_change_plot_data",

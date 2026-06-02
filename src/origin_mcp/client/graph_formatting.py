@@ -201,6 +201,75 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             "plot_type": plot_type,
         }
 
+    def add_inset_layer(
+        self,
+        worksheet: str | None = None,
+        x_col: str | int | None = None,
+        y_cols: list[str | int] | None = None,
+        graph_name: str | None = None,
+        left: float = 55.0,
+        top: float = 12.0,
+        width: float = 35.0,
+        height: float = 35.0,
+        plot_type: str = "line",
+        x_start: float | None = None,
+        x_end: float | None = None,
+        y_start: float | None = None,
+        y_end: float | None = None,
+    ) -> dict[str, Any]:
+        if x_col is None or not y_cols:
+            raise OriginOperationError(
+                "x_col and y_cols are required.", error_code="invalid_request"
+            )
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        self._activate_graph(graph, graph_name_actual)
+
+        # A new layer added with layadd is appended at the end; size and position
+        # it inside the existing layer(s) so it reads as an inset. left/top/width/
+        # height are percentages of the page.
+        before = len(graph) if hasattr(graph, "__len__") else 1
+        self.run_labtalk("layadd;")
+        inset_index = before
+        inset_layer = self._graph_layer(graph, inset_index)
+        self.run_labtalk(
+            f"layer -s {inset_index + 1}; "
+            f"layer.left={float(left)}; layer.top={float(top)}; "
+            f"layer.width={float(width)}; layer.height={float(height)};"
+        )
+
+        wks = self._find_sheet_from_ref(worksheet)
+        ref = self._worksheet_ref(wks)
+        columns = ref.columns
+        x_name = self._resolve_column(columns, x_col, default_index=0)
+        y_names = [self._resolve_column(columns, col, default_index=1) for col in y_cols]
+        for y_name in y_names:
+            self._add_plot(inset_layer, wks, x_name=x_name, y_name=y_name, kind=plot_type)
+        if len(y_names) > 1:
+            self._group_layer_plots(
+                inset_layer, graph_name=graph_name_actual, layer_index=inset_index
+            )
+
+        zoomed = False
+        if x_start is not None and x_end is not None:
+            inset_layer.axis("x").limits = (x_start, x_end, None)
+            zoomed = True
+        if y_start is not None and y_end is not None:
+            inset_layer.axis("y").limits = (y_start, y_end, None)
+            zoomed = True
+        if not zoomed:
+            self._rescale(inset_layer)
+
+        return {
+            "graph_name": graph_name_actual,
+            "inset_layer_index": inset_index,
+            "geometry": {"left": left, "top": top, "width": width, "height": height},
+            "worksheet": ref.as_dict(),
+            "x_col": x_name,
+            "y_cols": y_names,
+            "plot_type": plot_type,
+        }
+
     def remove_plot_from_graph(
         self,
         plot_index: int,

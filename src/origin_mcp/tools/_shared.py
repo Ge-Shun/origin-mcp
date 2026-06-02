@@ -60,6 +60,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_plot_chart_atlas",
         "origin_plot_table_id",
         "origin_add_plot_to_graph",
+        "origin_add_inset",
         "origin_set_plot_style",
         "origin_set_axis",
         "origin_get_graph_info",

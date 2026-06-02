@@ -678,6 +678,52 @@ def origin_add_plot_to_graph(
 
 
 @_mcp_tool()
+def origin_add_inset(
+    worksheet: str | None = None,
+    x_col: str | int | None = None,
+    y_cols: list[str | int] | None = None,
+    graph_name: str | None = None,
+    left: float = 55.0,
+    top: float = 12.0,
+    width: float = 35.0,
+    height: float = 35.0,
+    plot_type: str = "line",
+    x_start: float | None = None,
+    x_end: float | None = None,
+    y_start: float | None = None,
+    y_end: float | None = None,
+) -> dict[str, Any]:
+    """Add an inset (small embedded layer) to an existing graph.
+
+    A new layer is placed inside the graph at left/top with width/height (all
+    percentages of the page) and the worksheet x_col/y_cols are plotted into it.
+    Give x_start/x_end and/or y_start/y_end to zoom the inset to a sub-range
+    (useful for a magnified detail view); otherwise the inset auto-scales.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Added inset layer to Origin graph.",
+            **client.add_inset_layer(
+                worksheet=worksheet,
+                x_col=x_col,
+                y_cols=y_cols,
+                graph_name=graph_name,
+                left=left,
+                top=top,
+                width=width,
+                height=height,
+                plot_type=plot_type,
+                x_start=x_start,
+                x_end=x_end,
+                y_start=y_start,
+                y_end=y_end,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_remove_plot_from_graph(
     plot_index: int,
     graph_name: str | None = None,

@@ -2930,3 +2930,13 @@ def test_plot_dual_y_requires_both_axis_column_lists() -> None:
 
     with pytest.raises(OriginOperationError, match="y1_cols .* and y2_cols .* are required"):
         client.plot_dual_y(path=Path("data.csv"), x_col="time", y1_cols=None, y2_cols=["b"])
+
+
+def test_add_inset_layer_requires_x_and_y_cols() -> None:
+    client = OriginClient()
+
+    with pytest.raises(OriginOperationError, match="x_col and y_cols are required"):
+        client.add_inset_layer(worksheet="[Book1]Sheet1", x_col=None, y_cols=["a"])
+
+    with pytest.raises(OriginOperationError, match="x_col and y_cols are required"):
+        client.add_inset_layer(worksheet="[Book1]Sheet1", x_col="time", y_cols=None)
