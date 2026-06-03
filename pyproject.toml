@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "origin-mcp"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Local MCP server that lets AI assistants automate Origin/OriginPro for data import, worksheet editing, plotting, analysis, and export on Windows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,6 +46,12 @@ dev = [
 
 [project.scripts]
 origin-mcp = "origin_mcp.server:main"
+
+[tool.hatch.version]
+# Single source of truth: the version lives in src/origin_mcp/__init__.py
+# (__version__), which the bridge reports over its ping handshake. Keeping it
+# there avoids drift between the package metadata and the running bridge.
+path = "src/origin_mcp/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/origin_mcp"]
