@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -88,7 +89,37 @@ class _OriginClientBase:
                     "run `python -m pip install -e .[origin]`, or make Origin's Python package "
                     "visible to this interpreter."
                 ) from exc
+            self._attach_external_origin_if_needed()
         return self._op
+
+    def _attach_external_origin_if_needed(self) -> None:
+        """Bind external-mode originpro to the running Origin, not a new one.
+
+        When originpro can't find the embedded host API (e.g. Origin 2026 exposes
+        it only as ``_PyOrigin`` and originpro looks for ``PyOrigin``) it runs in
+        external OriginExt mode, where the first call does ``OriginExt.Application()``
+        and launches a BRAND-NEW Origin — so work lands in a spawned window, not
+        the Origin the bridge runs inside, and orphan instances pile up. Calling
+        the wrapper's ``Attach()`` first switches it to ``OriginExt.ApplicationSI()``
+        (single-instance), which connects to the already-running Origin instead.
+
+        No-op in embedded mode (``config.oext`` is False) or when the wrapper has
+        no ``Attach`` (older originpro), and never fatal: on failure we leave
+        originpro to its default behavior. Opt out with
+        ``ORIGIN_MCP_NO_ATTACH=1``.
+        """
+
+        if os.environ.get("ORIGIN_MCP_NO_ATTACH", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return
+        config = getattr(self._op, "config", None)
+        if config is None or not getattr(config, "oext", False):
+            return
+        attach = getattr(getattr(config, "po", None), "Attach", None)
+        if callable(attach):
+            try:
+                attach()
+            except Exception:
+                pass
 
     @staticmethod
     def _normalize_style_mode(style_mode: str | None) -> str:
