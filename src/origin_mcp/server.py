@@ -1,6 +1,10 @@
 # ruff: noqa: F401
 from __future__ import annotations
 
+import importlib
+import pkgutil
+
+from . import tools
 from .tools._shared import (
     COMPACT_TOOL_NAMES,
     FULL_TOOL_PROFILE_VALUES,
@@ -14,204 +18,36 @@ from .tools._shared import (
     client,
     mcp,
 )
-from .tools.analysis import (
-    origin_correlation,
-    origin_descriptive_stats,
-    origin_differentiate,
-    origin_fft,
-    origin_ifft,
-    origin_integrate,
-    origin_interpolate,
-    origin_linear_fit,
-    origin_list_fit_functions,
-    origin_nonlinear_fit,
-    origin_nonlinear_fit_structured,
-    origin_normalize,
-    origin_peak_find,
-    origin_polynomial_fit,
-    origin_run_analysis,
-    origin_smooth,
-    origin_ttest_one_sample,
-    origin_ttest_paired,
-    origin_ttest_two_sample,
-)
-from .tools.bridge import (
-    origin_bridge_cancel_task,
-    origin_bridge_capabilities,
-    origin_bridge_export_graph,
-    origin_bridge_get_worksheet_info,
-    origin_bridge_import_table,
-    origin_bridge_list_project,
-    origin_bridge_list_tasks,
-    origin_bridge_new_project,
-    origin_bridge_open_project,
-    origin_bridge_ping_origin,
-    origin_bridge_plot_table,
-    origin_bridge_read_worksheet,
-    origin_bridge_run_analysis,
-    origin_bridge_run_labtalk,
-    origin_bridge_save_project,
-    origin_bridge_shutdown,
-    origin_bridge_status,
-    origin_bridge_submit_task,
-    origin_bridge_task_status,
-    origin_bridge_write_worksheet,
-    origin_capabilities,
-    origin_doctor,
-    origin_ping,
-)
-from .tools.figurespec import (
-    origin_execute_figure_spec,
-    origin_plan_figure_spec,
-)
-from .tools.graph import (
-    origin_add_graph_label,
-    origin_add_inset,
-    origin_add_plot_to_graph,
-    origin_add_reference_line,
-    origin_apply_image_panel_style,
-    origin_apply_nature_style,
-    origin_arrange_layers,
-    origin_change_plot_data,
-    origin_change_plot_type,
-    origin_delete_object,
-    origin_diagnose_graph,
-    origin_export_all_graphs,
-    origin_export_graph,
-    origin_export_preview,
-    origin_format_graph,
-    origin_format_legend,
-    origin_get_graph_info,
-    origin_get_layer_info,
-    origin_inspect_export,
-    origin_list_graph_templates,
-    origin_list_project,
-    origin_palette_catalog,
-    origin_plot_style_capabilities,
-    origin_plot_style_setter_coverage,
-    origin_remove_plot_from_graph,
-    origin_rename_object,
-    origin_set_axis,
-    origin_set_axis_break,
-    origin_set_column_designations,
-    origin_set_column_labels,
-    origin_set_graph_page,
-    origin_set_plot_property,
-    origin_set_plot_style,
-    origin_view_graph,
-)
-from .tools.knowledge import (
-    origin_browse_knowledge,
-    origin_browse_labtalk,
-    origin_browse_mcp_tools,
-    origin_browse_official_docs,
-    origin_browse_python_api,
-    origin_browse_reference,
-    origin_plot_type_coverage,
-    origin_query_knowledge,
-    origin_query_labtalk,
-    origin_query_mcp_tools,
-    origin_query_official_docs,
-    origin_query_python_api,
-    origin_query_reference,
-)
-from .tools.lifecycle import (
-    origin_detach,
-    origin_force_quit,
-    origin_quit,
-    origin_release,
-    origin_run_labtalk,
-)
-from .tools.plotting import (
-    _plot_csv,
-    _plot_table_id,
-    _pti,
-    origin_batch_plot_from_template,
-    origin_chart_atlas_route,
-    origin_plot,
-    origin_plot_3d_bars,
-    origin_plot_3d_errorbar,
-    origin_plot_3d_ribbon,
-    origin_plot_3d_scatter,
-    origin_plot_3d_surface,
-    origin_plot_3d_vector,
-    origin_plot_area,
-    origin_plot_auto,
-    origin_plot_bar,
-    origin_plot_box,
-    origin_plot_bubble,
-    origin_plot_bubble_color_mapped,
-    origin_plot_candlestick,
-    origin_plot_chart_atlas,
-    origin_plot_color_mapped,
-    origin_plot_column,
-    origin_plot_column_stack,
-    origin_plot_contour,
-    origin_plot_dendrogram,
-    origin_plot_dual_y,
-    origin_plot_errorbar,
-    origin_plot_fill_area,
-    origin_plot_floating_bar,
-    origin_plot_from_range,
-    origin_plot_heatmap,
-    origin_plot_high_low_close,
-    origin_plot_histogram,
-    origin_plot_image,
-    origin_plot_line,
-    origin_plot_line_symbol,
-    origin_plot_matrix_3d_scatter,
-    origin_plot_matrix_3d_surface,
-    origin_plot_matrix_contour,
-    origin_plot_matrix_heatmap,
-    origin_plot_matrix_id,
-    origin_plot_pie,
-    origin_plot_polar,
-    origin_plot_polar_xr_ytheta,
-    origin_plot_scatter,
-    origin_plot_smith,
-    origin_plot_stack_area,
-    origin_plot_stack_bar,
-    origin_plot_table_id,
-    origin_plot_ternary,
-    origin_plot_ternary_contour,
-    origin_plot_vector_xyam,
-    origin_plot_vector_xyxy,
-    origin_plot_waterfall,
-    origin_recommend_chart,
-)
-from .tools.transform import (
-    origin_concat_worksheets,
-    origin_drop_duplicates,
-    origin_fill_missing,
-    origin_filter_rows,
-    origin_melt_worksheet,
-    origin_merge_worksheets,
-    origin_pivot_worksheet,
-    origin_transpose_worksheet,
-)
-from .tools.worksheet import (
-    origin_add_calculated_column,
-    origin_add_calculated_columns,
-    origin_append_table,
-    origin_clear_worksheet,
-    origin_delete_columns,
-    origin_diagnose_worksheet,
-    origin_export_worksheet_csv,
-    origin_get_cell_value,
-    origin_get_default_plot_config,
-    origin_get_worksheet_info,
-    origin_import_csv,
-    origin_import_excel,
-    origin_import_file,
-    origin_import_table,
-    origin_new_project,
-    origin_open_project,
-    origin_read_worksheet,
-    origin_save_project,
-    origin_set_cell_value,
-    origin_sort_worksheet,
-    origin_write_worksheet,
-)
+
+
+def _register_tools() -> None:
+    """Import every ``origin_mcp.tools`` submodule to register its tools.
+
+    Tool registration is purely an import side effect: importing a module runs
+    its ``@_mcp_tool`` decorators, which register each tool with FastMCP subject
+    to the active tool profile (see ``_shared._should_register_tool``). Importing
+    the package's submodules here therefore replaces the long hand-maintained
+    re-export block this module used to carry — adding a tool no longer requires
+    editing ``server.py``.
+
+    Each module's ``origin_*`` callables are also re-bound onto this module so
+    they stay importable as ``origin_mcp.server.<tool>`` for code and tests that
+    reference them directly. Every ``@_mcp_tool`` function is named ``origin_*``
+    (enforced by ``tests/test_tool_registration.py``), so this binds the full
+    tool surface.
+    """
+
+    for module_info in pkgutil.iter_modules(tools.__path__):
+        name = module_info.name
+        if name.startswith("_"):  # _shared holds no tools; skip private helpers.
+            continue
+        module = importlib.import_module(f"{tools.__name__}.{name}")
+        for attr, value in vars(module).items():
+            if attr.startswith("origin_") and callable(value):
+                globals()[attr] = value
+
+
+_register_tools()
 
 
 def main() -> None:
