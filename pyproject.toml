@@ -80,18 +80,14 @@ explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 # OriginClient is assembled from cooperating mixins (_TablePlotMixin,
-# _GraphStyleMixin, ...) that call across one another and into the dynamically
-# typed originpro API. Checking each mixin in isolation produces false
-# "has no attribute" positives, and the heavy originpro `Any` interaction makes
-# precise return/argument typing low-value here. Relax this package as part of
-# the lenient baseline; type enforcement focuses on the rest of the codebase.
+# _GraphStyleMixin, ...) that call across one another, so checking each mixin in
+# isolation produces false "has no attribute" positives (attr-defined). The
+# remaining "misc" suppressions cover a generator-typing quirk where len() over
+# the dynamically typed originpro plot list reads as bool. Every other error
+# code is now enforced on this package; only these two stay relaxed.
 module = "origin_mcp.client.*"
 disable_error_code = [
   "attr-defined",
-  "return-value",
-  "arg-type",
-  "assignment",
-  "union-attr",
   "misc",
 ]
 

@@ -188,7 +188,7 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             "polar": "?",
         }
         plot_type = plot_types.get(kind, "?")
-        attempts = [
+        attempts: list[dict[str, Any]] = [
             {
                 "coly": y_name,
                 "colx": x_name,
@@ -324,6 +324,9 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             legend.set_int("top", int(top))
             return {"mode": "page_pixel", "left": left, "top": top}
 
+        # Reached only when left and top are both None, so the top-of-function
+        # guard guarantees position is set.
+        assert position is not None
         normalized = position.strip().lower().replace("-", "_")
         aliases = {
             "upper_left": "inside_upper_left",
@@ -684,10 +687,7 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
     def _layer_labels(layer: Any) -> list[dict[str, Any]]:
         labels: list[dict[str, Any]] = []
         layer_labels = getattr(layer, "labels", None)
-        if isinstance(layer_labels, dict):
-            iterable = layer_labels.items()
-        else:
-            iterable = []
+        iterable: list[Any] = list(layer_labels.items()) if isinstance(layer_labels, dict) else []
         for name, label in iterable:
             label_name = _OriginClientBase._object_name(label, default=str(name))
             labels.append(

@@ -36,7 +36,7 @@ class _TablePlotMixin(_OriginClientBase):
         style_mode: str = "origin_default",
         palette_name: str | None = None,
         export_path: Path | None = None,
-    ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
+    ) -> tuple[WorksheetRef, GraphRef]:
         return self.plot_table(
             path=path,
             kind=kind,
@@ -285,7 +285,7 @@ class _TablePlotMixin(_OriginClientBase):
         style_mode: str = "origin_default",
         palette_name: str | None = None,
         export_path: Path | None = None,
-    ) -> tuple[WorksheetRef, GraphRef]:
+    ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         path = self._normalize_user_path(path)
         self._validate_file(path)
         df = self._read_table(

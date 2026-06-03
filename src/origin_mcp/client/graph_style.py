@@ -659,7 +659,8 @@ class _GraphStyleMixin(_OriginClientBase):
 
     @staticmethod
     def _diagnostic_penalty(issue: dict[str, Any]) -> int:
-        return {"error": 35, "warning": 15, "info": 5}.get(issue.get("severity"), 0)
+        severity = str(issue.get("severity") or "")
+        return {"error": 35, "warning": 15, "info": 5}.get(severity, 0)
 
     @staticmethod
     def _has_meaningful_label(value: Any) -> bool:
