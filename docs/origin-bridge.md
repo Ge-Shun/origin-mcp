@@ -86,6 +86,22 @@ and Origin can be closed normally. `Ctrl+C` is only a fallback because some
 Origin embedded Python builds do not interrupt the cooperative serve loop
 reliably.
 
+### Embedded vs external Origin
+
+`originpro` runs in *embedded* mode when it can import Origin's host API and
+drives the Origin the bridge runs inside. When that API is unavailable (for
+example Origin 2026 exposes it only as `_PyOrigin`, which the PyPI `originpro`
+does not load), `originpro` falls back to *external* automation and **launches a
+separate Origin process** for the actual data and plots. In that case the window
+you started the bridge in only hosts the socket, and your worksheets/graphs
+appear in the spawned Origin window instead.
+
+To avoid leaking that spawned instance as an orphan (which can hit the Origin
+license limit over repeated sessions), the bridge **closes the external Origin on
+shutdown** even when `close_origin` is not requested. Embedded mode never
+auto-closes the host Origin. Set `ORIGIN_MCP_KEEP_EXTERNAL=1` before launching
+the bridge to keep the external instance running on shutdown instead.
+
 No source directory needs to be edited in `addon.py`. If the file was copied
 away from the checkout and `origin-mcp` is not installed in Origin's Python, set
 `ORIGIN_MCP_SRC` to the checkout `src` directory before running the addon.

@@ -530,9 +530,71 @@ def test_bridge_shutdown_can_keep_origin_alive() -> None:
     finally:
         server.server_close()
 
-    assert result == {"shutdown_requested": True, "release_origin": False, "close_origin": False}
-    assert fake_client.force_closed is False
+    assert result == {
+        "shutdown_requested": True,
+        "release_origin": False,
+        "close_origin": False,
+        "external_origin": False,
+    }
+
+
+def test_bridge_shutdown_closes_spawned_external_origin() -> None:
+    import types
+
+    # Simulate external (OriginExt) mode: originpro is imported with config.oext
+    # True, so the bridge drives a separately-spawned Origin. Shutdown should
+    # close that spawned instance even though close_origin was not requested, so
+    # it is not left as an orphan.
+    fake_client = FakeOriginClient()
+    op_mod = types.ModuleType("originpro")
+    cfg = types.ModuleType("originpro.config")
+    cfg.oext = True
+    op_mod.config = cfg
+    fake_client._op = op_mod  # type: ignore[attr-defined]
+
+    server = OriginBridgeServer(("127.0.0.1", 0), client=fake_client)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["external_origin"] is True
+    assert result["close_origin"] is False
+    assert result["origin_release_method"] == "force_quit"
+    assert fake_client.force_closed is True
     assert fake_client.detached is False
+
+
+def test_bridge_shutdown_keeps_external_origin_when_opted_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import types
+
+    monkeypatch.setenv("ORIGIN_MCP_KEEP_EXTERNAL", "1")
+    fake_client = FakeOriginClient()
+    op_mod = types.ModuleType("originpro")
+    cfg = types.ModuleType("originpro.config")
+    cfg.oext = True
+    op_mod.config = cfg
+    fake_client._op = op_mod  # type: ignore[attr-defined]
+
+    server = OriginBridgeServer(("127.0.0.1", 0), client=fake_client)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    # Opt-out: external instance is left running (detach), not force-closed.
+    assert result["external_origin"] is True
+    assert result["origin_release_method"] == "detach"
+    assert fake_client.detached is True
+    assert fake_client.force_closed is False
     assert not thread.is_alive()
 
 
