@@ -1140,8 +1140,8 @@ class _WorksheetMixin(_OriginClientBase):
         if wks is None and worksheet:
             clean = worksheet.strip()
             if clean.startswith("[") and "]" in clean:
-                book_name, sheet_name = clean[1:].split("]", 1)
-                sheet_name = sheet_name.split("!", 1)[0].strip() or None
+                book_name, raw_sheet = clean[1:].split("]", 1)
+                sheet_name = raw_sheet.split("!", 1)[0].strip() or None
                 wks = self._find_sheet_by_book_label(book_name, sheet_name)
             else:
                 wks = self._find_sheet_by_book_label(clean, None)
