@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import socketserver
 import threading
 import time
@@ -16,6 +17,18 @@ from .errors import OriginOperationError
 from .logging_config import debug_logging_enabled, log_bridge_event
 from .origin_client import OriginClient
 from .runtime import python_runtime_profile
+
+
+def _keep_external_origin() -> bool:
+    """Opt out of closing the spawned external Origin on bridge shutdown."""
+
+    return os.environ.get("ORIGIN_MCP_KEEP_EXTERNAL", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 47631
@@ -231,16 +244,38 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             error_code="unsupported_bridge_method",
         )
 
+    def _bridge_is_external_origin(self) -> bool:
+        """True when originpro is driving a separately-spawned OriginExt instance.
+
+        Reads the already-imported originpro's ``config.oext`` via the client's
+        cached ``_op`` (never triggers an import). When the embedded host API is
+        unavailable (e.g. Origin 2026 exposes only ``_PyOrigin``), originpro runs
+        external and the bridge's data lives in a spawned Origin process distinct
+        from the one hosting this socket.
+        """
+
+        op = getattr(self.server.client, "_op", None)
+        config = getattr(op, "config", None) if op is not None else None
+        return bool(getattr(config, "oext", False))
+
     def _shutdown_bridge(self, params: dict[str, Any]) -> dict[str, Any]:
         release_origin = bool(params.get("release_origin", True))
         close_origin = bool(params.get("close_origin", False))
+        external = self._bridge_is_external_origin()
         result: dict[str, Any] = {
             "shutdown_requested": True,
             "release_origin": release_origin,
             "close_origin": close_origin,
+            "external_origin": external,
         }
         if release_origin:
-            release_method = "force_quit" if close_origin else "detach"
+            # In external mode the bridge drives a SEPARATE spawned Origin holding
+            # the data; a plain detach leaves it running as an orphan (toward the
+            # license cap), so close it on shutdown. In embedded mode originpro is
+            # the user's host Origin, so only close it when explicitly asked.
+            # Opt out of the external auto-close with ORIGIN_MCP_KEEP_EXTERNAL=1.
+            close_spawned = close_origin or (external and not _keep_external_origin())
+            release_method = "force_quit" if close_spawned else "detach"
             release = getattr(self.server.client, release_method, None)
             if callable(release):
                 try:
