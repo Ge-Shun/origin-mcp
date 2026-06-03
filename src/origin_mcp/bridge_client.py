@@ -229,17 +229,25 @@ class OriginBridgeClient:
 
 
 class OriginBridgeProxy:
-    """Proxy object with OriginClient-like methods backed by the bridge."""
+    """Proxy object with OriginClient-like methods backed by the bridge.
+
+    The proxy holds only its config and resolves the socket from the shared
+    client pool on each call rather than owning a private ``OriginBridgeClient``.
+    This keeps a single source of truth for live connections: a bridge shutdown
+    (``request_bridge("shutdown")`` -> ``close_shared_bridge_clients``) discards
+    the pooled socket, and the proxy's next call transparently reconnects a fresh
+    one instead of clinging to a stale connection.
+    """
 
     def __init__(self, config: OriginBridgeConfig | None = None) -> None:
-        self._client = OriginBridgeClient(config)
+        self._config = config or OriginBridgeConfig.from_env()
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
 
         def call(*args: Any, **kwargs: Any) -> Any:
-            response = self._client.request(
+            response = _shared_client(self._config).request(
                 "call_client",
                 {
                     "method": name,
