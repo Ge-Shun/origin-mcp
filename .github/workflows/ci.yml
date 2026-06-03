@@ -48,4 +48,4 @@ jobs:
       - name: Run tests
         run: >-
           python -m pytest -q --cov=origin_mcp --cov-report=term-missing
-          --cov-report=xml --cov-fail-under=75
+          --cov-report=xml --cov-fail-under=80
