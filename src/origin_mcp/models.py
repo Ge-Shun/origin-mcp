@@ -372,6 +372,47 @@ def _require_unique(label: str, values: list[str]) -> set[str]:
     return seen
 
 
+# The searchable template metadata record (TemplateRecord) is a plain dataclass
+# in origin_mcp.template_library, not a pydantic model here: that module is
+# imported by the Origin-embedded bridge, whose Python does not ship pydantic.
+
+
+class SaveGraphTemplateRequest(BaseModel):
+    name: str = Field(description="Template name. Reused later as the plotting template name.")
+    description: str | None = Field(default=None, description="Optional description.")
+    tags: list[str] = Field(default_factory=list, description="Optional searchable tags.")
+    plot_types: list[str] = Field(
+        default_factory=list,
+        description="Plot kinds this template is for, e.g. ['scatter']. Improves search matching.",
+    )
+    roles: list[str] = Field(
+        default_factory=list,
+        description="Data roles the source plot used, e.g. ['x', 'y', 'error'].",
+    )
+    n_columns: int | None = Field(
+        default=None,
+        description="Number of data columns the source plot used. Improves search matching.",
+    )
+    graph_name: str | None = Field(
+        default=None,
+        description="Graph page to save. Defaults to the active graph.",
+    )
+    overwrite: bool = Field(
+        default=False,
+        description="Overwrite an existing template with the same name.",
+    )
+
+
+class SearchTemplatesRequest(BaseModel):
+    query: str | None = Field(
+        default=None, description="Free-text keywords to match name/tags/desc."
+    )
+    plot_type: str | None = Field(default=None, description="Desired plot kind, e.g. scatter.")
+    n_columns: int | None = Field(default=None, description="Number of data columns to plot.")
+    tags: list[str] = Field(default_factory=list, description="Tags the template should carry.")
+    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of ranked results.")
+
+
 class ToolResult(BaseModel):
     ok: bool = True
     message: str

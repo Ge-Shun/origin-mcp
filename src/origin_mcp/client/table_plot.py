@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .. import template_library
 from ..errors import OriginOperationError
 from .base import (
     MATRIX_PLOTM_IDS,
@@ -826,7 +827,14 @@ class _TablePlotMixin(_OriginClientBase):
         }
 
     def _resolve_graph_template(self, kind: str, template: str | None = None) -> str:
-        return template or self._default_graph_templates().get(kind, "line")
+        if template:
+            # A bare name may refer to a user-library template; resolve it to the
+            # saved .otpu path so any plotting tool can reuse it by name. Built-in
+            # names and explicit paths are not in the library and pass through for
+            # Origin to resolve.
+            saved = template_library.resolve_template_name(template)
+            return str(saved) if saved is not None else template
+        return self._default_graph_templates().get(kind, "line")
 
     @staticmethod
     def _plot_command(

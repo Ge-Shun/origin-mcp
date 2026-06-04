@@ -23,6 +23,8 @@ welcome.
   descriptive statistics, interpolation, normalization, t-tests, FFT/IFFT, and
   correlation.
 - Export figures and projects through a local Origin GUI bridge.
+- Save a finished graph as a reusable user template, then search/match and reapply
+  it to same-type figures (see [docs/tools.md](docs/tools.md#user-template-library)).
 
 ## Requirements
 

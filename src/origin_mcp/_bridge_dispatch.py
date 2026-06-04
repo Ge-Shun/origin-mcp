@@ -29,6 +29,7 @@ ALLOWED_CLIENT_METHODS = {
     "capabilities",
     "plot_type_coverage",
     "default_plot_config",
+    "save_graph_template",
     "new_project",
     "open_project",
     "save_project",

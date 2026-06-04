@@ -122,6 +122,18 @@ def test_compact_profile_registers_exactly_the_compact_allow_list() -> None:
     assert names == set(server.COMPACT_TOOL_NAMES)
 
 
+def test_compact_profile_includes_template_tools() -> None:
+    """The user template library tools are part of the compact surface."""
+
+    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    assert {
+        "origin_save_graph_template",
+        "origin_search_templates",
+        "origin_list_user_templates",
+        "origin_delete_template",
+    } <= names
+
+
 def test_compact_profile_includes_analysis_wrappers() -> None:
     """Compact mode exposes the generic analysis dispatcher plus the structured fits.
 

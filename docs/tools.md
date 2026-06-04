@@ -78,6 +78,40 @@ cost — small. Pass a `graph_name` to target a specific page, or omit it to
 render the active graph. Use `origin_export_graph` instead when you need a
 persistent file on disk.
 
+## User Template Library
+
+`origin-mcp` can save a finished graph as a reusable Origin template and find a
+matching one before plotting, so a user's preferred styling is captured once and
+reapplied to same-type figures.
+
+Templates live in a per-user library, by default `~/.origin-mcp/templates`
+(override with `ORIGIN_MCP_TEMPLATE_DIR`). Each saved template is stored as three
+files plus a shared index: `<slug>.otpu` (the Origin graph template),
+`<slug>.json` (searchable metadata), and `<slug>.png` (a preview thumbnail),
+aggregated into `index.json`.
+
+The save tool stores the active or named graph and accepts optional `plot_types`
+(e.g. `["scatter"]`), `roles` (e.g. `["x", "y"]`), `tags`, `description`, and
+`n_columns` that make the template easier to match later; the layer and plot
+counts are captured automatically. The search tool ranks the library against an
+intended plot and returns each candidate with a `score` and human-readable
+`match_reasons`. Ranking weights an exact plot-type match highest, then a same
+plot-type family (e.g. a `line_symbol` template for a `scatter` request), close
+column counts, matching tags, and keyword overlap with the name, description, and
+tags, returning an empty list when nothing matches. A list tool reports every
+saved template most recent first, and a delete tool removes a template's files
+and index entry (reporting `not_found` when no template carries that name).
+
+Once saved, reuse a template by passing its name to any plotting tool's
+`template` argument (for example a table plot tool's `template` or a FigureSpec
+`style.template`). A bare name is resolved against the library first, then falls
+back to Origin's built-in templates and explicit file paths.
+
+Searching, listing, and deleting operate purely on the local library files and
+do not require Origin to be running; only saving a template drives Origin. The
+exact tool names live in `COMPACT_TOOL_NAMES` and the generated `mcp_tools`
+knowledge collection; discover them with `origin_query_knowledge`.
+
 ## FigureSpec Tools
 
 `origin-mcp` includes a first-pass declarative FigureSpec workflow for

@@ -25,6 +25,8 @@ _NCOLS_RE = re.compile(r"wks\.ncols\s*=\s*(\d+)\s*;?", re.IGNORECASE)
 _EXP_PATH_RE = re.compile(r'path:="([^"]*)"')
 _EXP_FILENAME_RE = re.compile(r'filename:="([^"]*)"')
 _EXP_TYPE_RE = re.compile(r"type:=(\w+)")
+_TEMPLATE_NAME_RE = re.compile(r'template:="([^"]*)"')
+_TEMPLATE_FILEPATH_RE = re.compile(r'filepath:="([^"]*)"')
 
 
 class WBook:
@@ -340,7 +342,26 @@ class FakeOp:
         self.calls.append(("lt_exec", (script,)))
         if "expGraph" in script:
             self._emulate_export(script)
+        if "template_saveas" in script:
+            self._emulate_template_saveas(script)
         return self.lt_exec_result
+
+    @staticmethod
+    def _emulate_template_saveas(script: str) -> None:
+        """Emulate LabTalk ``template_saveas`` writing ``<filepath>/<template>.otpu``."""
+
+        from pathlib import Path
+
+        name = _TEMPLATE_NAME_RE.search(script)
+        folder = _TEMPLATE_FILEPATH_RE.search(script)
+        if not name or not folder:
+            return
+        target = Path(folder.group(1)) / f"{name.group(1)}.otpu"
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("fake-origin-template", encoding="utf-8")
+        except OSError:
+            pass
 
     @staticmethod
     def _emulate_export(script: str) -> None:

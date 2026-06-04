@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .. import template_library
 from ..chart_router import profile_table
 from ..chart_router import recommend_chart as recommend_chart_route
 from ..errors import OriginOperationError
+from ..template_library import TemplateRecord
 from .base import GraphRef, WorksheetRef, _OriginClientBase
 
 
@@ -557,3 +559,102 @@ class _PlotRoutingMixin(_OriginClientBase):
                     }
                 )
         return discovered
+
+    def save_graph_template(
+        self,
+        name: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        plot_types: list[str] | None = None,
+        roles: list[str] | None = None,
+        n_columns: int | None = None,
+        graph_name: str | None = None,
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        """Save a finished graph into the user's template library.
+
+        Writes ``<slug>.otpu`` via Origin's ``template_saveas``, renders a
+        ``<slug>.png`` thumbnail, enriches the metadata with the live graph's
+        layer/plot counts, and persists a searchable
+        :class:`~origin_mcp.models.TemplateRecord` sidecar plus index entry.
+        """
+
+        if not name.strip():
+            raise OriginOperationError("Template name must not be empty.")
+
+        root = self._normalize_user_path(template_library.template_root())
+        root.mkdir(parents=True, exist_ok=True)
+        slug = template_library.slugify(name)
+        otpu_path = root / f"{slug}.otpu"
+        if otpu_path.exists() and not overwrite:
+            raise OriginOperationError(
+                f"Template {name!r} already exists at {otpu_path}. "
+                "Pass overwrite=True to replace it."
+            )
+
+        graph = self._find_or_active_graph(graph_name)
+        actual_name = self._object_name(graph, default=graph_name or "")
+        if not actual_name:
+            raise OriginOperationError("Could not resolve a graph page to save as a template.")
+
+        self._write_graph_template(actual_name, otpu_path)
+        if not otpu_path.is_file():
+            raise OriginOperationError(
+                f"Origin did not write a template file for graph {actual_name!r}. "
+                "template_saveas may have failed."
+            )
+
+        thumbnail_path: str | None = None
+        thumb_file = root / f"{slug}.png"
+        try:
+            self.export_graph(thumb_file, graph_name=actual_name, overwrite=True)
+            thumbnail_path = str(thumb_file)
+        except Exception:
+            # A missing thumbnail must never block saving the template itself.
+            thumbnail_path = None
+
+        layer_count: int | None = None
+        plots_count: int | None = None
+        try:
+            info = self.get_graph_info(graph_name=actual_name)
+            layer_count = info.get("layers_count")
+            plots_count = sum(
+                int(layer.get("plots_count") or 0) for layer in info.get("layers", [])
+            )
+        except Exception:
+            layer_count = plots_count = None
+
+        record = TemplateRecord(
+            name=name,
+            slug=slug,
+            description=description,
+            tags=[tag for tag in (tags or []) if tag.strip()],
+            plot_types=[value.strip().lower() for value in (plot_types or []) if value.strip()],
+            roles=[role.strip().lower() for role in (roles or []) if role.strip()],
+            n_columns=n_columns,
+            layer_count=layer_count,
+            plots_count=plots_count,
+            source_graph=actual_name,
+            otpu_path=str(otpu_path),
+            thumbnail_path=thumbnail_path,
+            created_at=template_library.now_iso(),
+        )
+        payload = template_library.write_template_record(record, root=root)
+        return {"saved": True, "template_dir": str(root), "template": payload}
+
+    def _write_graph_template(self, graph_name: str, otpu_path: Path) -> None:
+        """Issue the LabTalk that saves a graph window as an Origin template file.
+
+        Isolated so the exact ``template_saveas`` form is easy to confirm/adjust
+        against a live Origin during validation.
+        """
+
+        safe_graph = self._escape_labtalk(graph_name)
+        safe_template = self._escape_labtalk(otpu_path.stem)
+        safe_folder = self._escape_labtalk(str(otpu_path.parent))
+        # template_saveas writes <filepath>/<template>.otpu (ftype:=0). emf/bmp are
+        # turned off because we render our own PNG thumbnail separately.
+        self.run_labtalk(
+            f'template_saveas pg:=[{safe_graph}] template:="{safe_template}" '
+            f'filepath:="{safe_folder}" ftype:=0 emf:=0 bmp:=0;'
+        )

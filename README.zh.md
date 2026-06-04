@@ -17,6 +17,7 @@ pull request。
 - 创建并调整常见 2D、3D、等高线、统计和专用图形。
 - 运行拟合、平滑、积分、寻峰、描述统计、插值、归一化、t 检验、FFT/IFFT 和相关分析等 Origin 分析。
 - 通过本地 Origin GUI bridge 导出图形和项目。
+- 将画好的图保存为可复用的用户模板，之后可搜索匹配并套用到同类型图形（见 [docs/tools.md](docs/tools.md#user-template-library)）。
 
 ## 环境要求
 
