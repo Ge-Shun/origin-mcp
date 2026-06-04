@@ -2,6 +2,11 @@
 
 ![origin-mcp cover](docs/assets/github-readme-cover.png)
 
+[![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
+[![Downloads](https://static.pepy.tech/badge/origin-mcp)](https://pepy.tech/projects/origin-mcp)
+[![Python versions](https://img.shields.io/pypi/pyversions/origin-mcp)](https://pypi.org/project/origin-mcp/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 [简体中文](README.zh.md)
 
 `origin-mcp` is a local Model Context Protocol (MCP) server that lets AI
