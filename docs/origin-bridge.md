@@ -169,6 +169,24 @@ Submit a task:
 
 Then poll task status with the returned `task_id`.
 
+Task status responses are lightweight by default: they include state,
+timestamps, `progress`, `current_step`, and `cancel_requested`, plus the final
+`result` or `error` when available. Recent task logs are omitted unless
+requested:
+
+```json
+{
+  "task_id": "returned-task-id",
+  "include_logs": true,
+  "log_limit": 20,
+  "include_result": false
+}
+```
+
+Use `include_result=false` while polling long-running tasks when the final
+payload may be large. `list_tasks` always returns summaries without task logs or
+results.
+
 ## Diagnostics
 
 If a tool cannot connect to Origin, run `origin_doctor` before retrying the
@@ -210,6 +228,7 @@ run fails, it prints `origin_doctor` output before exiting.
 
 The first bridge implementation intentionally uses the Python standard library
 and a single-request JSON-lines TCP protocol. It now includes a small task queue,
-but does not yet provide streaming logs, hard cancellation of running Origin
-calls, or a WebSocket transport. Those can be added after the bridge lifecycle is
-validated against a real Origin installation.
+lightweight task progress, and optional recent task logs. It does not yet
+provide live streaming logs, hard cancellation of running Origin calls, or a
+WebSocket transport. Those can be added after the bridge lifecycle is validated
+against a real Origin installation.

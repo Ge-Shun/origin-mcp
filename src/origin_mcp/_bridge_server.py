@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import importlib
 import json
 import os
 import socketserver
@@ -222,7 +223,12 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                 raise OriginOperationError("Bridge task params must be a JSON object.")
             return self.server.tasks.submit(task_method, task_params)
         if method == "task_status":
-            return self.server.tasks.status(str(params.get("task_id") or ""))
+            return self.server.tasks.status(
+                str(params.get("task_id") or ""),
+                include_logs=bool(params.get("include_logs", False)),
+                log_limit=int(params.get("log_limit", 20)),
+                include_result=bool(params.get("include_result", True)),
+            )
         if method == "cancel_task":
             return self.server.tasks.cancel(str(params.get("task_id") or ""))
         if method == "list_tasks":
@@ -247,16 +253,30 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
     def _bridge_is_external_origin(self) -> bool:
         """True when originpro is driving a separately-spawned OriginExt instance.
 
-        Reads the already-imported originpro's ``config.oext`` via the client's
-        cached ``_op`` (never triggers an import). When the embedded host API is
-        unavailable (e.g. Origin 2026 exposes only ``_PyOrigin``), originpro runs
-        external and the bridge's data lives in a spawned Origin process distinct
-        from the one hosting this socket.
+        Prefer the already-imported originpro module on the client, then fall
+        back to ``originpro.config`` only after originpro has been loaded by a
+        real client call. Some Origin 2026 embedded sessions expose
+        ``config.oext`` as falsey even while ``originpro.config.po`` holds a
+        COM APP object for a spawned ``Origin64.exe -Embedding`` instance. In
+        that state a plain detach leaves the spawned Origin alive, so treat an
+        available ``po.Exit`` release handle as external automation too.
         """
 
         op = getattr(self.server.client, "_op", None)
+        if op is None:
+            return False
         config = getattr(op, "config", None) if op is not None else None
-        return bool(getattr(config, "oext", False))
+        if config is None:
+            try:
+                config = importlib.import_module("originpro.config")
+            except Exception:
+                config = None
+        if config is None:
+            return False
+        if bool(getattr(config, "oext", False)):
+            return True
+        po = getattr(config, "po", None)
+        return callable(getattr(po, "Exit", None))
 
     def _shutdown_bridge(self, params: dict[str, Any]) -> dict[str, Any]:
         release_origin = bool(params.get("release_origin", True))

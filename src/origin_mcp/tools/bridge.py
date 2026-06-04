@@ -730,16 +730,24 @@ def origin_bridge_submit_task(
 @_mcp_tool()
 def origin_bridge_task_status(
     task_id: str,
+    include_logs: bool = False,
+    log_limit: int = 20,
+    include_result: bool = True,
     host: str | None = None,
     port: int | None = None,
     token: str | None = None,
     timeout: float | None = 10.0,
 ) -> dict[str, Any]:
-    """Read status, result, or error for an Origin bridge background task."""
+    """Read status, result, or optional recent logs for an Origin bridge background task."""
 
     return _bridge_call(
         "task_status",
-        {"task_id": task_id},
+        {
+            "task_id": task_id,
+            "include_logs": include_logs,
+            "log_limit": log_limit,
+            "include_result": include_result,
+        },
         host=host,
         port=port,
         token=token,

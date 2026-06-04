@@ -4,6 +4,7 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,11 +26,21 @@ class BridgeTask:
     submitted_at: float = field(default_factory=time.time)
     started_at: float | None = None
     finished_at: float | None = None
+    updated_at: float = field(default_factory=time.time)
+    progress: float | None = None
+    current_step: str | None = "Queued"
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
+    logs: list[dict[str, Any]] = field(default_factory=list)
     cancel_requested: bool = False
 
-    def as_dict(self, include_result: bool = True) -> dict[str, Any]:
+    def as_dict(
+        self,
+        include_result: bool = True,
+        *,
+        include_logs: bool = False,
+        log_limit: int = 20,
+    ) -> dict[str, Any]:
         data: dict[str, Any] = {
             "task_id": self.task_id,
             "method": self.method,
@@ -37,6 +48,9 @@ class BridgeTask:
             "submitted_at": self.submitted_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "updated_at": self.updated_at,
+            "progress": self.progress,
+            "current_step": self.current_step,
             "cancel_requested": self.cancel_requested,
         }
         if include_result:
@@ -44,6 +58,9 @@ class BridgeTask:
                 data["result"] = self.result
             if self.error is not None:
                 data["error"] = self.error
+        if include_logs:
+            limit = max(1, min(int(log_limit), 100))
+            data["logs"] = self.logs[-limit:]
         return data
 
 
@@ -85,8 +102,21 @@ class BridgeTaskManager:
         self._queue.put(task.task_id)
         return {"task": task.as_dict(include_result=False)}
 
-    def status(self, task_id: str) -> dict[str, Any]:
-        return {"task": self._get_task(task_id).as_dict()}
+    def status(
+        self,
+        task_id: str,
+        *,
+        include_logs: bool = False,
+        log_limit: int = 20,
+        include_result: bool = True,
+    ) -> dict[str, Any]:
+        return {
+            "task": self._get_task(task_id).as_dict(
+                include_result=include_result,
+                include_logs=include_logs,
+                log_limit=log_limit,
+            )
+        }
 
     def cancel(self, task_id: str) -> dict[str, Any]:
         with self._lock:
@@ -101,11 +131,32 @@ class BridgeTaskManager:
                 task.status = "cancelled"
                 task.cancel_requested = True
                 task.finished_at = time.time()
+                task.updated_at = task.finished_at
+                task.progress = task.progress if task.progress is not None else 0.0
+                task.current_step = "Cancelled before start"
+                task.logs.append(
+                    {
+                        "time": task.finished_at,
+                        "level": "info",
+                        "message": "Task cancelled before it started.",
+                    }
+                )
                 changed = True
             elif task.status in TERMINAL_TASK_STATUSES:
                 changed = False
             else:
                 task.cancel_requested = True
+                task.updated_at = time.time()
+                task.logs.append(
+                    {
+                        "time": task.updated_at,
+                        "level": "warning",
+                        "message": (
+                            "Cancellation requested; running Origin calls stop at the next "
+                            "safe point."
+                        ),
+                    }
+                )
                 changed = True
             return {
                 "cancel_requested": task.cancel_requested,
@@ -171,7 +222,12 @@ class BridgeTaskManager:
         if task is None:
             return
         try:
-            result = call_origin_method(self._client, task.method, task.params)
+            result = call_origin_method(
+                self._client,
+                task.method,
+                task.params,
+                progress=self._progress_callback(task_id),
+            )
         except Exception as exc:
             self._finish_task(task_id, error=exc)
         else:
@@ -183,7 +239,12 @@ class BridgeTaskManager:
             if task is None or task.status != "queued":
                 return None
             task.status = "running"
-            task.started_at = time.time()
+            now = time.time()
+            task.started_at = now
+            task.updated_at = now
+            task.progress = 0.0
+            task.current_step = "Starting"
+            task.logs.append({"time": now, "level": "info", "message": "Task started."})
             return task
 
     def _finish_task(
@@ -197,17 +258,61 @@ class BridgeTaskManager:
             if task is None:
                 return
             task.finished_at = time.time()
+            task.updated_at = task.finished_at
             if error is not None:
                 task.status = "failed"
+                task.current_step = "Failed"
                 task.error = {
                     "message": str(error),
                     "error_code": error_code(error),
                     "error_type": type(error).__name__,
                 }
+                task.logs.append(
+                    {
+                        "time": task.finished_at,
+                        "level": "error",
+                        "message": str(error),
+                        "error_code": task.error["error_code"],
+                    }
+                )
             else:
                 task.status = "completed"
+                task.progress = 1.0
+                task.current_step = "Completed"
                 task.result = json_safe(result or {})
+                task.logs.append(
+                    {"time": task.finished_at, "level": "info", "message": "Task completed."}
+                )
             self._prune_locked()
+
+    def _progress_callback(self, task_id: str) -> Callable[[float | None, str, str | None], None]:
+        def update(progress: float | None, step: str, message: str | None = None) -> None:
+            self._update_progress(task_id, progress=progress, step=step, message=message)
+
+        return update
+
+    def _update_progress(
+        self,
+        task_id: str,
+        *,
+        progress: float | None,
+        step: str,
+        message: str | None,
+    ) -> None:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None or task.status in TERMINAL_TASK_STATUSES:
+                return
+            now = time.time()
+            task.updated_at = now
+            if progress is not None:
+                task.progress = max(0.0, min(float(progress), 1.0))
+            if step:
+                task.current_step = step
+            if message:
+                last = task.logs[-1]["message"] if task.logs else None
+                if last != message:
+                    task.logs.append({"time": now, "level": "info", "message": message})
 
     def _prune_locked(self) -> None:
         overflow = len(self._tasks) - self._max_tasks

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any
@@ -160,20 +161,32 @@ def call_origin_method(
     client: OriginClient,
     method: str,
     params: dict[str, Any],
+    progress: Callable[[float | None, str, str | None], None] | None = None,
 ) -> dict[str, Any]:
+    def report(value: float | None, step: str, message: str | None = None) -> None:
+        if progress is not None:
+            progress(value, step, message)
+
     # Hold the per-client lock for the whole call so the inner client calls and
     # the inspect_export follow-ups below run as one atomic Origin interaction
     # (the lock is reentrant, so the nested call_client_method calls are fine).
     with _origin_call_guard(client):
+        report(0.05, "Dispatching", f"Dispatching {method}.")
         # ``origin_ping``/``origin_capabilities`` are taskable aliases for client
         # methods that carry a different name, so they cannot be routed generically.
         if method == "origin_ping":
-            return client.connect(show=bool(params.get("show", True)))
+            report(0.35, "Connecting to Origin", "Connecting to Origin.")
+            result = client.connect(show=bool(params.get("show", True)))
+            report(0.95, "Origin responded", "Origin connection check completed.")
+            return result
         if method == "origin_capabilities":
-            return client.capabilities(
+            report(0.35, "Collecting capabilities", "Collecting Origin capabilities.")
+            result = client.capabilities(
                 show=bool(params.get("show", False)),
                 refresh=bool(params.get("refresh", False)),
             )
+            report(0.95, "Capabilities collected", "Origin capabilities collected.")
+            return result
         if method not in ALLOWED_CLIENT_METHODS:
             raise OriginOperationError(f"Unsupported bridge method: {method}")
 
@@ -182,19 +195,27 @@ def call_origin_method(
         # Every other client method maps cleanly onto the generic call path, which
         # already coerces path arguments and wraps WorksheetRef/GraphRef results.
         if method == "plot_table":
+            report(0.20, "Creating plot", "Creating table-backed plot.")
             worksheet, graph = call_client_method(client, "plot_table", [], params)
             graph_data = graph.as_dict()
             response = {"worksheet": worksheet.as_dict(), "graph": graph_data}
             if graph_data.get("export_path"):
+                report(0.75, "Inspecting export", "Inspecting exported graph.")
                 response["export_inspection"] = client.inspect_export(
                     Path(graph_data["export_path"])
                 )
+            report(0.95, "Plot created", "Table-backed plot completed.")
             return response
         if method == "export_graph":
+            report(0.25, "Exporting graph", "Exporting graph.")
             exported = call_client_method(client, "export_graph", [], params)
+            report(0.75, "Inspecting export", "Inspecting exported graph.")
             return {
                 **exported,
                 "inspection": client.inspect_export(Path(str(exported["path"]))),
             }
 
-        return public_result(call_client_method(client, method, [], params))
+        report(0.30, "Running Origin method", f"Running {method}.")
+        result = public_result(call_client_method(client, method, [], params))
+        report(0.95, "Method completed", f"{method} completed.")
+        return result

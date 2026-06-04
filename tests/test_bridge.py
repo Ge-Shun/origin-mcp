@@ -568,6 +568,39 @@ def test_bridge_shutdown_closes_spawned_external_origin() -> None:
     assert fake_client.detached is False
 
 
+def test_bridge_shutdown_closes_external_origin_when_po_exit_exists() -> None:
+    import types
+
+    class _FakePo:
+        def Exit(self, _release_only: bool) -> None:
+            pass
+
+    # Origin 2026 embedded Python can still hold an OriginExt COM app object
+    # even when config.oext is falsey. The po.Exit release handle is the
+    # practical signal that shutdown must close the spawned -Embedding Origin.
+    fake_client = FakeOriginClient()
+    op_mod = types.ModuleType("originpro")
+    cfg = types.ModuleType("originpro.config")
+    cfg.oext = False
+    cfg.po = _FakePo()
+    op_mod.config = cfg
+    fake_client._op = op_mod  # type: ignore[attr-defined]
+
+    server = OriginBridgeServer(("127.0.0.1", 0), client=fake_client)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["external_origin"] is True
+    assert result["origin_release_method"] == "force_quit"
+    assert fake_client.force_closed is True
+    assert fake_client.detached is False
+
+
 def test_bridge_shutdown_keeps_external_origin_when_opted_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -611,7 +644,35 @@ def test_bridge_task_lifecycle_completes() -> None:
 
     assert completed["result"]["script"] == "type ok;"
     assert completed["result"]["result"] is True
+    assert completed["progress"] == 1.0
+    assert completed["current_step"] == "Completed"
+    assert completed["updated_at"] >= completed["submitted_at"]
+    assert "logs" not in completed
     assert any(task["task_id"] == task_id for task in listed["tasks"])
+    listed_task = next(task for task in listed["tasks"] if task["task_id"] == task_id)
+    assert "result" not in listed_task
+    assert "logs" not in listed_task
+
+
+def test_bridge_task_status_can_include_recent_logs_without_result() -> None:
+    with running_bridge() as server:
+        client = bridge_client(server)
+        submitted = client.request(
+            "submit_task",
+            {"method": "run_labtalk", "params": {"script": "type ok;"}},
+        )
+        task_id = submitted["task"]["task_id"]
+        completed = wait_for_status(client, task_id, "completed")
+        status = client.request(
+            "task_status",
+            {"task_id": task_id, "include_logs": True, "log_limit": 2, "include_result": False},
+        )["task"]
+
+    assert completed["status"] == "completed"
+    assert "result" not in status
+    assert len(status["logs"]) <= 2
+    assert status["logs"][-1]["message"] == "Task completed."
+    assert status["current_step"] == "Completed"
 
 
 @pytest.mark.parametrize(
@@ -671,6 +732,7 @@ def test_bridge_task_cancel_queued_task() -> None:
     assert first_task["status"] == "completed"
     assert second_task["status"] == "cancelled"
     assert second_task["cancel_requested"] is True
+    assert second_task["current_step"] == "Cancelled before start"
 
 
 def test_bridge_task_rejects_unsupported_method() -> None:
