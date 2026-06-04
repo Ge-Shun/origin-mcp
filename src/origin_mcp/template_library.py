@@ -221,6 +221,129 @@ def delete_template(name: str, root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _existing_otpu(root: Path, slug: str) -> str:
+    """Path string of ``<slug>``'s template file, preferring .otpu over .otp."""
+
+    for suffix in TEMPLATE_SUFFIXES:
+        candidate = root / f"{slug}{suffix}"
+        if candidate.is_file():
+            return str(candidate)
+    return str(root / f"{slug}.otpu")
+
+
+def _persist_record(record: dict[str, Any], index: list[dict[str, Any]], root: Path) -> None:
+    """Write ``record``'s sidecar and upsert it into ``index`` by name."""
+
+    slug = str(record.get("slug") or slugify(str(record.get("name", ""))))
+    (root / f"{slug}.json").write_text(
+        json.dumps(record, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    merged = [item for item in index if item.get("name") != record.get("name")]
+    merged.append(record)
+    merged.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+    _write_index(merged, root)
+
+
+def rename_template(old_name: str, new_name: str, root: Path | None = None) -> dict[str, Any]:
+    """Rename a saved template's files, slug, and index entry. No Origin needed.
+
+    Returns ``{"renamed": False, "reason": ...}`` for ``not_found`` (no template
+    named ``old_name``), ``same_name``, ``name_exists`` (another template already
+    uses ``new_name``), or ``slug_exists`` (the new slug would clobber unrelated
+    files).
+    """
+
+    root = root or template_root()
+    if not new_name.strip():
+        return {"renamed": False, "reason": "invalid_name", "name": new_name}
+    index = load_index(root)
+    target = next((item for item in index if item.get("name") == old_name), None)
+    if target is None:
+        return {"renamed": False, "reason": "not_found", "name": old_name}
+    if old_name == new_name:
+        return {"renamed": False, "reason": "same_name", "name": new_name}
+    if any(item.get("name") == new_name for item in index):
+        return {"renamed": False, "reason": "name_exists", "name": new_name}
+
+    old_slug = str(target.get("slug") or slugify(old_name))
+    new_slug = slugify(new_name)
+    suffixes = (".otpu", ".otp", ".png")
+    if new_slug != old_slug and any((root / f"{new_slug}{s}").exists() for s in suffixes):
+        return {"renamed": False, "reason": "slug_exists", "slug": new_slug}
+
+    if new_slug != old_slug:
+        for suffix in suffixes:
+            src = root / f"{old_slug}{suffix}"
+            if src.is_file():
+                src.replace(root / f"{new_slug}{suffix}")
+        (root / f"{old_slug}.json").unlink(missing_ok=True)
+
+    updated = dict(target)
+    updated["name"] = new_name
+    updated["slug"] = new_slug
+    updated["otpu_path"] = _existing_otpu(root, new_slug)
+    thumb = root / f"{new_slug}.png"
+    updated["thumbnail_path"] = str(thumb) if thumb.is_file() else None
+
+    remaining = [item for item in index if item.get("name") != old_name]
+    _persist_record(updated, remaining, root)
+    return {"renamed": True, "old_name": old_name, "new_name": new_name, "template": updated}
+
+
+_UNSET: Any = object()
+
+
+def update_template_metadata(
+    name: str,
+    description: Any = _UNSET,
+    tags: Any = _UNSET,
+    plot_types: Any = _UNSET,
+    roles: Any = _UNSET,
+    n_columns: Any = _UNSET,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Edit a template's searchable metadata in place. No Origin / redraw needed.
+
+    Only the fields you pass are changed; omitted fields are left untouched. The
+    ``.otpu`` template file itself is not modified. Returns
+    ``{"updated": False, "reason": "not_found"}`` when no template carries ``name``.
+    """
+
+    root = root or template_root()
+    index = load_index(root)
+    target = next((item for item in index if item.get("name") == name), None)
+    if target is None:
+        return {"updated": False, "reason": "not_found", "name": name}
+
+    updated = dict(target)
+    changed: list[str] = []
+    if description is not _UNSET:
+        updated["description"] = description
+        changed.append("description")
+    if tags is not _UNSET:
+        updated["tags"] = [str(tag) for tag in (tags or []) if str(tag).strip()]
+        changed.append("tags")
+    if plot_types is not _UNSET:
+        updated["plot_types"] = [
+            str(value).strip().lower() for value in (plot_types or []) if str(value).strip()
+        ]
+        changed.append("plot_types")
+    if roles is not _UNSET:
+        updated["roles"] = [
+            str(role).strip().lower() for role in (roles or []) if str(role).strip()
+        ]
+        changed.append("roles")
+    if n_columns is not _UNSET:
+        updated["n_columns"] = n_columns
+        changed.append("n_columns")
+
+    if changed:
+        remaining = [item for item in index if item.get("name") != name]
+        _persist_record(updated, remaining, root)
+    return {"updated": True, "name": name, "changed": changed, "template": updated}
+
+
 def resolve_template_name(name: str, root: Path | None = None) -> Path | None:
     """Resolve a bare template name to a saved ``.otpu``/``.otp`` path.
 

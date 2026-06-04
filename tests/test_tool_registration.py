@@ -131,6 +131,8 @@ def test_compact_profile_includes_template_tools() -> None:
         "origin_search_templates",
         "origin_list_user_templates",
         "origin_delete_template",
+        "origin_rename_template",
+        "origin_update_template_metadata",
     } <= names
 
 

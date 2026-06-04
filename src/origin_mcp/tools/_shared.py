@@ -71,6 +71,8 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_search_templates",
         "origin_list_user_templates",
         "origin_delete_template",
+        "origin_rename_template",
+        "origin_update_template_metadata",
         "origin_palette_catalog",
         "origin_plot_style_capabilities",
         "origin_plot_style_setter_coverage",

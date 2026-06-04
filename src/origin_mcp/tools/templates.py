@@ -114,6 +114,67 @@ def origin_delete_template(name: str) -> dict[str, Any]:
 
 
 @_mcp_tool()
+def origin_rename_template(old_name: str, new_name: str) -> dict[str, Any]:
+    """Rename a saved user template without redrawing the graph.
+
+    Renames the template's .otpu/.json/.png files and updates the index. Returns
+    ``renamed: false`` with a ``reason`` such as ``not_found`` or ``name_exists``.
+    """
+
+    def run() -> dict[str, Any]:
+        result = template_library.rename_template(old_name, new_name)
+        message = (
+            f"Renamed template {old_name!r} to {new_name!r}."
+            if result.get("renamed")
+            else f"Could not rename template ({result.get('reason')})."
+        )
+        return _ok(message, **result)
+
+    return _wrap(run)
+
+
+@_mcp_tool()
+def origin_update_template_metadata(
+    name: str,
+    description: str | None = None,
+    tags: list[str] | None = None,
+    plot_types: list[str] | None = None,
+    roles: list[str] | None = None,
+    n_columns: int | None = None,
+) -> dict[str, Any]:
+    """Edit a saved template's searchable metadata in place (no redraw needed).
+
+    Only the fields you pass are changed; omitted fields are left untouched. The
+    .otpu template file itself is not modified. Use this to fix tags, description,
+    or matching hints without re-saving from a graph. Returns ``updated: false``
+    with reason ``not_found`` when no template carries ``name``.
+    """
+
+    def run() -> dict[str, Any]:
+        fields: dict[str, Any] = {}
+        if description is not None:
+            fields["description"] = description
+        if tags is not None:
+            fields["tags"] = tags
+        if plot_types is not None:
+            fields["plot_types"] = plot_types
+        if roles is not None:
+            fields["roles"] = roles
+        if n_columns is not None:
+            fields["n_columns"] = n_columns
+        result = template_library.update_template_metadata(name, **fields)
+        if not result.get("updated"):
+            message = f"No Origin user template named {name!r}."
+        elif result.get("changed"):
+            message = f"Updated template {name!r} ({', '.join(result['changed'])})."
+        else:
+            message = f"No metadata fields provided; template {name!r} left unchanged."
+        return _ok(message, **result)
+
+    return _wrap(run)
+
+
+@_mcp_tool()
 def origin_list_user_templates() -> dict[str, Any]:
     """List every saved user template, most recent first."""
 

@@ -99,8 +99,12 @@ intended plot and returns each candidate with a `score` and human-readable
 plot-type family (e.g. a `line_symbol` template for a `scatter` request), close
 column counts, matching tags, and keyword overlap with the name, description, and
 tags, returning an empty list when nothing matches. A list tool reports every
-saved template most recent first, and a delete tool removes a template's files
-and index entry (reporting `not_found` when no template carries that name).
+saved template most recent first, a delete tool removes a template's files and
+index entry, a rename tool moves a template to a new name (its `.otpu`/`.json`/
+`.png` files and index entry) without redrawing, and a metadata-update tool edits
+a template's description, tags, and matching hints in place without touching the
+`.otpu` or needing a live graph. These management tools report `not_found` when
+no template carries the given name.
 
 Once saved, reuse a template by passing its name to any plotting tool's
 `template` argument (for example a table plot tool's `template` or a FigureSpec

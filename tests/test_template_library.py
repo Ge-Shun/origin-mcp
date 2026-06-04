@@ -117,6 +117,79 @@ def test_delete_last_template_clears_index_file(library_dir: Path) -> None:
     assert template_library.load_index() == []
 
 
+def test_rename_template_moves_files_and_updates_index(library_dir: Path) -> None:
+    library_dir.mkdir(parents=True, exist_ok=True)
+    for suffix in (".otpu", ".png"):
+        (library_dir / f"alpha{suffix}").write_text("x", encoding="utf-8")
+    template_library.write_template_record(
+        _record(
+            "alpha",
+            otpu_path=str(library_dir / "alpha.otpu"),
+            thumbnail_path=str(library_dir / "alpha.png"),
+        )
+    )
+
+    result = template_library.rename_template("alpha", "Renamed Plot")
+    assert result["renamed"] is True
+    rec = result["template"]
+    assert rec["name"] == "Renamed Plot"
+    assert rec["slug"] == "Renamed_Plot"
+    assert rec["otpu_path"] == str(library_dir / "Renamed_Plot.otpu")
+    assert rec["thumbnail_path"] == str(library_dir / "Renamed_Plot.png")
+
+    assert not (library_dir / "alpha.otpu").exists()
+    assert not (library_dir / "alpha.json").exists()
+    assert (library_dir / "Renamed_Plot.otpu").is_file()
+    assert (library_dir / "Renamed_Plot.png").is_file()
+    assert {item["name"] for item in template_library.load_index()} == {"Renamed Plot"}
+    # Searchable under the new name's slug resolution.
+    assert template_library.resolve_template_name("Renamed Plot") == (
+        library_dir / "Renamed_Plot.otpu"
+    )
+
+
+def test_rename_template_guards(library_dir: Path) -> None:
+    template_library.write_template_record(_record("alpha"))
+    template_library.write_template_record(_record("beta"))
+
+    assert template_library.rename_template("missing", "x")["reason"] == "not_found"
+    assert template_library.rename_template("alpha", "alpha")["reason"] == "same_name"
+    assert template_library.rename_template("alpha", "beta")["reason"] == "name_exists"
+    assert template_library.rename_template("alpha", "   ")["reason"] == "invalid_name"
+
+
+def test_update_template_metadata_changes_only_passed_fields(library_dir: Path) -> None:
+    template_library.write_template_record(
+        _record("alpha", description="old", tags=["a"], plot_types=["scatter"], n_columns=2)
+    )
+
+    result = template_library.update_template_metadata(
+        "alpha", description="new", tags=["X", "Y"], plot_types=["Line"]
+    )
+    assert result["updated"] is True
+    assert set(result["changed"]) == {"description", "tags", "plot_types"}
+    rec = result["template"]
+    assert rec["description"] == "new"
+    assert rec["tags"] == ["X", "Y"]
+    assert rec["plot_types"] == ["line"]  # normalized
+    assert rec["n_columns"] == 2  # untouched
+
+    # Persisted and searchable by the new tag.
+    reloaded = {item["name"]: item for item in template_library.load_index()}["alpha"]
+    assert reloaded["description"] == "new"
+    found = template_library.search_templates(tags=["x"])
+    assert found and found[0]["name"] == "alpha"
+
+
+def test_update_template_metadata_not_found_and_noop(library_dir: Path) -> None:
+    assert template_library.update_template_metadata("missing")["reason"] == "not_found"
+    template_library.write_template_record(_record("alpha", description="keep"))
+    noop = template_library.update_template_metadata("alpha")
+    assert noop["updated"] is True
+    assert noop["changed"] == []
+    assert noop["template"]["description"] == "keep"
+
+
 def test_search_ranks_exact_plot_type_first(library_dir: Path) -> None:
     template_library.write_template_record(
         _record("scatter_nature", plot_types=["scatter"], tags=["nature"], n_columns=2)
