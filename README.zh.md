@@ -44,6 +44,21 @@ pull request。
 本项目不把外部 `originpro` 自动化作为受支持的 MCP backend。请在 Origin 内嵌
 Python 中启动 bridge，再让 MCP server 通过本机回环连接它。
 
+## 安装
+
+从 PyPI 安装 MCP server 核心：
+
+```bash
+pip install origin-mcp
+```
+
+这就是 MCP server 需要的全部：它以 `python -m origin_mcp` 运行，仅通过本机回环
+与 bridge 通信。bridge 运行在 Origin 自带的内嵌 Python 中，并自行安装依赖（见下文
+「在 Origin 内启动 bridge」一节）。
+
+可选的 `origin-mcp[origin]` extra 会把 `originpro` 和 `pywin32` 装进同一环境；
+标准的 bridge 流程并不需要它。若想基于源码使用，在仓库根目录运行 `pip install -e .`。
+
 ## Agentic Setup
 
 把下面这段发给你的 AI agent，让它按步骤自配置：

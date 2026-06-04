@@ -54,6 +54,23 @@ Direct external `originpro` automation is not a supported MCP backend for this
 project. Start the bridge inside Origin's embedded Python and let the MCP server
 connect to it over localhost.
 
+## Installation
+
+Install the MCP server core from PyPI:
+
+```bash
+pip install origin-mcp
+```
+
+That is all the MCP server needs: it runs as `python -m origin_mcp` and reaches
+Origin only through the bridge over localhost. The bridge runs inside Origin's
+own embedded Python and installs its own dependencies (see
+[Start the Origin Bridge](#start-the-origin-bridge)).
+
+An optional `origin-mcp[origin]` extra pulls `originpro` and `pywin32` into the
+same environment; the standard bridge setup does not require it. To work from a
+checkout instead, run `pip install -e .` in the repository root.
+
 ## Agentic Setup
 
 Copy this to your AI agent and let it self-configure:
