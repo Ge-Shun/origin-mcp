@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-  { name = "origin-mcp contributors" }
+  { name = "Ge-Shun", email = "Ge-Shun@users.noreply.github.com" }
 ]
 keywords = ["mcp", "origin", "originpro", "plotting", "automation"]
 classifiers = [
@@ -31,6 +31,11 @@ dependencies = [
   "openpyxl>=3.1",
   "xlrd>=2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Ge-Shun/origin-mcp"
+Repository = "https://github.com/Ge-Shun/origin-mcp"
+Issues = "https://github.com/Ge-Shun/origin-mcp/issues"
 
 [project.optional-dependencies]
 origin = [
