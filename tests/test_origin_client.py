@@ -597,17 +597,19 @@ def test_worksheet_info_returns_label_rows(monkeypatch: pytest.MonkeyPatch) -> N
 class FakeGraph:
     name = "Graph1"
 
-    def __init__(self, layer: "FakeLayer | None" = None) -> None:
-        self.layer = layer
+    def __init__(self, layer: "FakeLayer | list[FakeLayer] | None" = None) -> None:
+        self.layers = layer if isinstance(layer, list) else ([layer] if layer is not None else [])
+        self.layer = self.layers[0] if self.layers else None
         self.lname = ""
 
     def __len__(self) -> int:
-        return 1 if self.layer is not None else 0
+        return len(self.layers)
 
     def __getitem__(self, index: int) -> "FakeLayer":
-        if index != 0 or self.layer is None:
-            raise IndexError(index)
-        return self.layer
+        try:
+            return self.layers[index]
+        except IndexError as exc:
+            raise IndexError(index) from exc
 
 
 class GPage(FakeGraph):
@@ -3061,6 +3063,61 @@ def test_plot_dual_y_requires_both_axis_column_lists() -> None:
 
     with pytest.raises(OriginOperationError, match="y1_cols .* and y2_cols .* are required"):
         client.plot_dual_y(path=Path("data.csv"), x_col="time", y1_cols=None, y2_cols=["b"])
+
+
+def test_plot_dual_y_rejects_unsupported_style_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "dual.csv"
+    path.write_text("time,left,right\n0,1,10\n", encoding="utf-8")
+    client = OriginClient()
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: FakeWorksheet())
+
+    with pytest.raises(OriginOperationError, match="Unsupported style_mode"):
+        client.plot_dual_y(
+            path=path,
+            x_col="time",
+            y1_cols=["left"],
+            y2_cols=["right"],
+            style_mode="publication",
+        )
+
+
+def test_plot_dual_y_nature_style_applies_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "dual.csv"
+    path.write_text("time,left,right\n0,1,10\n", encoding="utf-8")
+    client = OriginClient()
+    left = FakeLayer()
+    right = FakeLayer()
+    graph = FakeGraph([left, right])
+    nature_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: FakeWorksheet())
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(
+        client,
+        "apply_nature_style",
+        lambda **kwargs: nature_calls.append(kwargs) or {"styled": True},
+    )
+
+    _, graph_ref = client.plot_dual_y(
+        path=path,
+        x_col="time",
+        y1_cols=["left"],
+        y2_cols=["right"],
+        plot_type="line_symbol",
+        style_mode="nature",
+    )
+
+    assert len(left.added) == 1
+    assert len(right.added) == 1
+    assert graph_ref.template == "doubleY"
+    assert graph_ref.style_mode == "nature"
+    assert nature_calls == [{"graph_name": "Graph1", "chart_type": "line_symbol"}]
 
 
 def test_add_inset_layer_requires_x_and_y_cols() -> None:

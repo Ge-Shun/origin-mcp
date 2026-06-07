@@ -191,6 +191,7 @@ class _TablePlotMixin(_OriginClientBase):
         y1_label: str | None = None,
         y2_label: str | None = None,
         plot_type: str = "line",
+        style_mode: str = "origin_default",
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         if not y1_cols or not y2_cols:
@@ -217,6 +218,7 @@ class _TablePlotMixin(_OriginClientBase):
         x_name = self._resolve_column(columns, x_col, default_index=0)
         y1_names = [self._resolve_column(columns, col, default_index=1) for col in y1_cols]
         y2_names = [self._resolve_column(columns, col, default_index=1) for col in y2_cols]
+        style_mode_actual = self._normalize_style_mode(style_mode)
 
         actual_book_name = book_name or (
             self._safe_filename(f"{graph_name}_Data") if graph_name else None
@@ -249,6 +251,8 @@ class _TablePlotMixin(_OriginClientBase):
         self._rescale(layer_left)
         self._rescale(layer_right)
         self._remember_graph_alias(graph_name, actual_graph_name)
+        if style_mode_actual == "nature":
+            self.apply_nature_style(graph_name=actual_graph_name, chart_type=plot_type)
 
         exported: str | None = None
         if export_path is not None:
@@ -259,7 +263,7 @@ class _TablePlotMixin(_OriginClientBase):
             graph_name=actual_graph_name,
             export_path=exported,
             template="doubleY",
-            style_mode="origin_default",
+            style_mode=style_mode_actual,
             requested_graph_name=graph_name,
             display_name=self._object_long_name(graph, default=graph_name),
         )

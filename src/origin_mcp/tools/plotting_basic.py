@@ -711,6 +711,7 @@ def origin_plot_dual_y(
     y1_label: str | None = None,
     y2_label: str | None = None,
     plot_type: str = "line",
+    style_mode: str = "origin_default",
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a double-Y (two Y axes) graph.
@@ -741,6 +742,7 @@ def origin_plot_dual_y(
             y1_label=y1_label,
             y2_label=y2_label,
             plot_type=plot_type,
+            style_mode=style_mode,
             export_path=Path(export_path) if export_path else None,
         )
         return _ok(

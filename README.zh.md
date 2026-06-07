@@ -24,6 +24,15 @@ pull request。
 - 通过本地 Origin GUI bridge 导出图形和项目。
 - 将画好的图保存为可复用的用户模板，之后可搜索匹配并套用到同类型图形（见 [docs/tools.md](docs/tools.md#user-template-library)）。
 
+## Nature 风格图形
+
+默认情况下，origin-mcp 会保留当前 Origin 图形模板自带的样式。如果希望得到更接近
+论文插图的清爽科研图，可以直接告诉 AI 助手“使用 Nature 格式”来创建或美化图形。
+该预设会应用色盲友好的调色板、更醒目的科研图线条、Arial 字体以及更简洁的图例。
+
+如果需要更细的控制，也可以让助手列出可用调色板。更详细的调色板和样式控制见
+[docs/tools.md](docs/tools.md#palette-catalog)。
+
 ## 环境要求
 
 - Windows

@@ -31,6 +31,18 @@ welcome.
 - Save a finished graph as a reusable user template, then search/match and reapply
   it to same-type figures (see [docs/tools.md](docs/tools.md#user-template-library)).
 
+## Nature-Style Figures
+
+By default, origin-mcp keeps the styling defined by the Origin graph template
+you are using. If you want a cleaner publication-style scientific figure, ask
+your AI assistant to use the Nature-style format when creating or refining the
+graph. The preset applies colorblind-aware palettes, stronger scientific plot
+strokes, Arial typography, and simpler legends.
+
+For more control, you can ask the assistant to list available palettes. See
+[docs/tools.md](docs/tools.md#palette-catalog) for the detailed palette and
+style controls.
+
 ## Requirements
 
 - Windows

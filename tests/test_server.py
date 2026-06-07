@@ -15,6 +15,7 @@ import origin_mcp.tools.plotting as plotting_tools
 import origin_mcp.tools.plotting_basic as plotting_basic_tools
 import origin_mcp.tools.plotting_plot_ids as plotting_plot_ids_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
+from origin_mcp.origin_client import GraphRef, WorksheetRef
 from origin_mcp.server import _error, _json_safe
 
 
@@ -541,6 +542,35 @@ def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path:
         {"graph_name": "Hist", "show_legend": False, "rescale": False},
         {"graph_name": "Box", "show_legend": True, "rescale": False},
     ]
+
+
+def test_dual_y_wrapper_passes_style_mode(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "dual.csv"
+    path.write_text("time,left,right\n0,1,10\n", encoding="utf-8")
+    calls = []
+
+    class FakeClient:
+        def plot_dual_y(self, **kwargs):
+            calls.append(kwargs)
+            return (
+                WorksheetRef("Book1", "Sheet1", ["time", "left", "right"], 1),
+                GraphRef("DualY", template="doubleY", style_mode=kwargs["style_mode"]),
+            )
+
+    monkeypatch.setattr(plotting_basic_tools, "client", FakeClient())
+
+    result = server.origin_plot_dual_y(
+        path=str(path),
+        x_col="time",
+        y1_cols=["left"],
+        y2_cols=["right"],
+        graph_name="DualY",
+        style_mode="nature",
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["style_mode"] == "nature"
+    assert result["data"]["graph"]["style_mode"] == "nature"
 
 
 def test_xyz_3d_wrappers_route_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:
