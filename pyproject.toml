@@ -82,6 +82,23 @@ mypy_path = "src"
 ignore_missing_imports = true
 namespace_packages = true
 explicit_package_bases = true
+no_site_packages = true
+
+[[tool.mypy.overrides]]
+# Keep mypy focused on origin-mcp itself across the full supported Python range.
+# Recent pandas/numpy wheels may ship type stubs that use syntax newer than our
+# Python 3.10 checking target, so site-packages are disabled globally and these
+# imports are explicitly treated as external Any-typed dependencies.
+module = [
+  "numpy",
+  "numpy.*",
+  "openpyxl",
+  "pandas",
+  "pandas.*",
+  "xlrd",
+]
+follow_imports = "skip"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # OriginClient is assembled from cooperating mixins (_TablePlotMixin,
