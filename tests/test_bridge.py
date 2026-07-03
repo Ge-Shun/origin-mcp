@@ -856,7 +856,23 @@ def test_origin_doctor_reports_reachable_bridge(
 ) -> None:
     calls = []
     status_path = tmp_path / "origin-bridge.status.txt"
-    status_path.write_text('{"running": true, "host": "127.0.0.1"}', encoding="utf-8")
+    status_path.write_text(
+        json.dumps(
+            {
+                "running": True,
+                "host": "127.0.0.1",
+                "install_phase": "running",
+                "last_successful_start": "2026-07-04T01:02:03Z",
+                "runtime_probe": {
+                    "inside_origin": True,
+                    "embedded_api_available": True,
+                    "originpro_available": True,
+                    "originpro_source": "C:/Origin/originpro/__init__.py",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     def fake_request(method: str, **_kwargs: Any) -> dict[str, Any]:
         calls.append(method)
@@ -869,6 +885,11 @@ def test_origin_doctor_reports_reachable_bridge(
     assert result["ok"] is True
     assert result["data"]["bridge"]["ok"] is True
     assert result["data"]["status_file"]["data"]["running"] is True
+    assert result["data"]["status_diagnostics"]["install_phase"] == "running"
+    assert result["data"]["status_diagnostics"]["last_successful_start"] == ("2026-07-04T01:02:03Z")
+    assert result["data"]["status_diagnostics"]["inside_origin"] is True
+    assert result["data"]["status_diagnostics"]["embedded_api_available"] is True
+    assert result["data"]["status_diagnostics"]["originpro_source"].endswith("__init__.py")
     assert result["data"]["recommendations"] == []
     assert calls == ["ping"]
 
@@ -892,6 +913,44 @@ def test_origin_doctor_reports_unavailable_bridge(
     assert result["data"]["bridge"]["error_code"] == "origin_bridge_unavailable"
     assert result["data"]["status_file"]["data"]["last_error"] == "missing pandas"
     assert any("last_error" in item for item in result["data"]["recommendations"])
+
+
+def test_origin_doctor_recommends_origin_embedded_python_for_external_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "origin-bridge.status.txt"
+    status_path.write_text(
+        json.dumps(
+            {
+                "running": False,
+                "runtime_probe": {
+                    "embedded_api_available": False,
+                    "origin_host_api_available": False,
+                    "originpro_available": False,
+                    "inside_origin": False,
+                    "likely_origin_embedded_python": False,
+                    "originpro_source": None,
+                },
+                "install_phase": "failed",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_request(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise OriginBridgeError("bridge unavailable", "origin_bridge_unavailable")
+
+    monkeypatch.setattr(bridge_tools, "request_bridge", fake_request)
+
+    result = mcp_server.origin_doctor(status_path=str(status_path))
+
+    recommendations = result["data"]["recommendations"]
+    assert any("Origin's embedded Python" in item for item in recommendations)
+    assert any("originpro was not importable" in item for item in recommendations)
+    assert result["data"]["status_diagnostics"]["inside_origin"] is False
+    assert result["data"]["status_diagnostics"]["embedded_api_available"] is False
+    assert result["data"]["status_diagnostics"]["install_phase"] == "failed"
 
 
 def test_server_bridge_submit_task_wraps_response(monkeypatch: pytest.MonkeyPatch) -> None:

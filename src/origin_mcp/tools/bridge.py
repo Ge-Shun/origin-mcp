@@ -88,6 +88,54 @@ def _read_bridge_status(status_path: str | None = None) -> dict[str, Any]:
     }
 
 
+def _status_runtime_recommendations(status_data: dict[str, Any]) -> list[str]:
+    probe = status_data.get("runtime_probe")
+    if not isinstance(probe, dict):
+        return []
+
+    recommendations: list[str] = []
+    if probe.get("inside_origin", probe.get("likely_origin_embedded_python")) is False:
+        recommendations.append(
+            "The status file does not look like it came from Origin's embedded Python. "
+            "Start addon.py from Origin's Python Console or the Origin MCP Bridge Start App, "
+            "not from a normal terminal Python."
+        )
+    if probe.get("originpro_available") is False:
+        recommendations.append(
+            "originpro was not importable when addon.py wrote the status file. Start the "
+            "bridge inside Origin, or allow addon.py to install missing runtime dependencies."
+        )
+    return recommendations
+
+
+def _status_diagnostics(status_data: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(status_data, dict):
+        return {}
+    probe = status_data.get("runtime_probe")
+    probe_data = probe if isinstance(probe, dict) else {}
+    return {
+        "message": status_data.get("message"),
+        "running": status_data.get("running"),
+        "install_phase": status_data.get("install_phase"),
+        "last_successful_start": status_data.get("last_successful_start"),
+        "last_error": status_data.get("last_error"),
+        "last_error_type": status_data.get("last_error_type"),
+        "inside_origin": probe_data.get(
+            "inside_origin",
+            probe_data.get("likely_origin_embedded_python"),
+        ),
+        "embedded_api_available": probe_data.get(
+            "embedded_api_available",
+            probe_data.get("origin_host_api_available"),
+        ),
+        "originpro_available": probe_data.get("originpro_available"),
+        "originpro_source": probe_data.get("originpro_source"),
+        "python_executable": status_data.get("python_executable"),
+        "python_version": status_data.get("python_version"),
+        "status_updated_at": status_data.get("updated_at"),
+    }
+
+
 def _bridge_call(
     method: str,
     params: dict[str, Any] | None = None,
@@ -253,6 +301,8 @@ def origin_doctor(
             recommendations.append(
                 "addon.py recorded last_error in the status file; inspect that field first."
             )
+        if isinstance(status_data, dict):
+            recommendations.extend(_status_runtime_recommendations(status_data))
         if not status_file.get("exists"):
             recommendations.append(
                 "No bridge status file was found. Set ORIGIN_MCP_BRIDGE_STATUS or start addon.py "
@@ -288,6 +338,7 @@ def origin_doctor(
                 },
             },
             status_file=status_file,
+            status_diagnostics=_status_diagnostics(status_data),
             bridge=bridge_check,
             origin=origin_check,
             log=log_info,

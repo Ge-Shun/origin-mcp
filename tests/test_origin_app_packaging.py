@@ -53,7 +53,8 @@ def test_build_origin_app_sources() -> None:
     config.read(app_dir / "package.ini", encoding="utf-8")
 
     assert config["Package"]["Name"] == builder.START_APP_NAME
-    assert config["Package"]["Version"] == "0.1.2"
+    assert config["Package"]["Version"] == builder.package_version()
+    assert builder.APP_VERSION == builder.package_version()
     assert config["Package"]["Description"] == "Start the origin-mcp Origin GUI bridge."
     assert config["App"]["LaunchScript"] == "launch.ogs"
     assert config["AppEnable"]["Always"] == "1"

@@ -83,6 +83,21 @@ An optional `origin-mcp[origin]` extra pulls `originpro` and `pywin32` into the
 same environment; the standard bridge setup does not require it. To work from a
 checkout instead, run `pip install -e .` in the repository root.
 
+## Development Checks
+
+For a fast local check that avoids stale or locked `.ruff_cache` / `.mypy_cache`
+directories, run:
+
+```bash
+python scripts/dev_check.py
+```
+
+Add tests when you want the fuller local gate:
+
+```bash
+python scripts/dev_check.py --tests
+```
+
 ## Agentic Setup
 
 Copy this to your AI agent and let it self-configure:

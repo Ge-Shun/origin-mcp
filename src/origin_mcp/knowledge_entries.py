@@ -511,13 +511,17 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "Use examples/smoke_bridge.py for the canonical real-Origin validation workflow. "
             "It checks bridge status, pings Origin, creates a new project, imports "
             "examples/sample_data.csv, reads worksheet rows, creates a line plot, exports a "
-            "PNG, inspects that the export is non-empty, saves an OPJU project, and prints "
-            "origin_doctor output on failure. For ad hoc long-running file-to-figure work, "
-            "submit a bridge task and poll task status."
+            "PNG, inspects that the export is non-empty, saves an OPJU project, and writes "
+            "a structured smoke-report.json with origin_doctor output on failure. For "
+            "release-style manual validation, run scripts/real_origin_smoke.py after "
+            "starting the bridge; it stores PNG, OPJU, and the JSON report under "
+            "output/smoke. For ad hoc long-running file-to-figure work, submit a bridge "
+            "task and poll task status."
         ),
         keywords=("bridge", "smoke", "file to figure", "import", "plot", "export", "opju"),
         metadata={
             "script": "examples/smoke_bridge.py",
+            "release_gate_script": "scripts/real_origin_smoke.py",
             "sample_data": "examples/sample_data.csv",
             "failure_diagnostic": "origin_doctor",
         },

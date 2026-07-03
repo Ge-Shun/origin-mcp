@@ -177,6 +177,42 @@ def _origin_mcp_source() -> str:
     return "installed"
 
 
+def _origin_runtime_probe() -> dict[str, Any]:
+    """Best-effort snapshot of whether addon.py is running inside Origin.
+
+    The bridge can technically be launched from a normal Python interpreter, but
+    the supported daily path is Origin's embedded Python. Recording these hints
+    in the status file lets origin_doctor distinguish "bridge failed to start"
+    from "addon.py was launched in the wrong interpreter".
+    """
+
+    embedded_api_available = importlib.util.find_spec("_PyOrigin") is not None
+    probe: dict[str, Any] = {
+        "embedded_api_available": embedded_api_available,
+        "origin_host_api_available": embedded_api_available,
+        "originpro_available": importlib.util.find_spec("originpro") is not None,
+        "inside_origin": False,
+        "likely_origin_embedded_python": False,
+        "originpro_source": None,
+    }
+    if probe["originpro_available"]:
+        spec = importlib.util.find_spec("originpro")
+        probe["originpro_source"] = spec.origin if spec and spec.origin else "unknown"
+
+    executable = sys.executable.lower()
+    prefix = sys.prefix.lower()
+    path_text = os.pathsep.join(sys.path).lower()
+    origin_path_hint = any(
+        token in text
+        for text in (executable, prefix, path_text)
+        for token in ("originlab", "originpro", "origin202")
+    )
+    inside_origin = bool(embedded_api_available or origin_path_hint)
+    probe["inside_origin"] = inside_origin
+    probe["likely_origin_embedded_python"] = inside_origin
+    return probe
+
+
 def _ensure_origin_mcp_importable(src_dir: str | os.PathLike[str] | None = None) -> str:
     _ensure_user_site_on_path()
     importlib.invalidate_caches()
@@ -286,7 +322,10 @@ def _install_missing_runtime_packages() -> None:
     if not missing:
         return
 
-    _emit("installing runtime dependencies into Origin Python: " + ", ".join(missing))
+    _emit(
+        "installing runtime dependencies into Origin Python: " + ", ".join(missing),
+        fields={"install_phase": "installing_dependencies", "missing_runtime_packages": missing},
+    )
     status = _pip(["install", "--progress-bar", "off", *_user_install_flag(), *missing])
     if status:
         raise RuntimeError(
@@ -297,6 +336,10 @@ def _install_missing_runtime_packages() -> None:
         )
     _ensure_user_site_on_path()
     importlib.invalidate_caches()
+    _emit(
+        "installed runtime dependencies into Origin Python",
+        fields={"install_phase": "dependencies_ready", "missing_runtime_packages": []},
+    )
 
 
 def _missing_dependency_message(missing: list[str]) -> str:
@@ -468,6 +511,9 @@ def start_origin_mcp_bridge(
             "port": port,
             "max_tasks": max_tasks,
             "background": background,
+            "runtime_probe": _origin_runtime_probe(),
+            "install_phase": "initializing",
+            "missing_runtime_packages": None,
             "last_error": None,
         },
     )
@@ -486,12 +532,21 @@ def start_origin_mcp_bridge(
             # local process by default. The MCP server reads it back from the
             # handshake file (see origin_mcp.bridge_handshake) with no config.
             token = generate_token()
+        _emit("checking runtime dependencies", fields={"install_phase": "checking_dependencies"})
         if install_missing:
             _install_missing_runtime_packages()
         else:
             still_missing = _missing_runtime_packages()
             if still_missing:
+                _emit(
+                    "runtime dependencies are missing",
+                    fields={
+                        "install_phase": "dependencies_missing",
+                        "missing_runtime_packages": still_missing,
+                    },
+                )
                 raise RuntimeError(_missing_dependency_message(still_missing))
+        _emit("loading bridge server", fields={"install_phase": "loading_bridge_server"})
         OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
         server = OriginBridgeServer((host, port), token=token, max_tasks=max_tasks)
     except Exception as exc:
@@ -499,6 +554,7 @@ def start_origin_mcp_bridge(
             "failed to start inside Origin Python",
             fields={
                 "running": False,
+                "install_phase": "failed",
                 "last_error": str(exc),
                 "last_error_type": type(exc).__name__,
                 "last_traceback": traceback.format_exc(),
@@ -545,6 +601,8 @@ def start_origin_mcp_bridge(
             "running": True,
             "auth_enabled": auth_enabled,
             "handshake_path": str(handshake_path) if handshake_path else None,
+            "install_phase": "running",
+            "last_successful_start": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "last_error": None,
         },
     )

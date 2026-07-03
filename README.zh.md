@@ -68,6 +68,21 @@ pip install origin-mcp
 可选的 `origin-mcp[origin]` extra 会把 `originpro` 和 `pywin32` 装进同一环境；
 标准的 bridge 流程并不需要它。若想基于源码使用，在仓库根目录运行 `pip install -e .`。
 
+## 开发检查
+
+本地快速检查可使用下面的入口；它会使用隔离缓存目录，避免 `.ruff_cache` /
+`.mypy_cache` 被锁定或权限异常时误报失败：
+
+```bash
+python scripts/dev_check.py
+```
+
+需要同时跑测试时：
+
+```bash
+python scripts/dev_check.py --tests
+```
+
 ## Agentic Setup
 
 把下面这段发给你的 AI agent，让它按步骤自配置：

@@ -176,6 +176,116 @@ def test_addon_status_file_is_json(monkeypatch, tmp_path) -> None:
     assert data["python_executable"]
 
 
+def test_addon_status_file_records_runtime_probe(monkeypatch, tmp_path) -> None:
+    addon = load_addon_module()
+    status_path = tmp_path / "bridge-status.json"
+    monkeypatch.setenv("ORIGIN_MCP_BRIDGE_STATUS", str(status_path))
+    monkeypatch.setattr(
+        addon,
+        "_origin_runtime_probe",
+        lambda: {
+            "embedded_api_available": True,
+            "origin_host_api_available": True,
+            "originpro_available": True,
+            "inside_origin": True,
+            "likely_origin_embedded_python": True,
+            "originpro_source": "C:/Origin/originpro/__init__.py",
+        },
+    )
+
+    addon._emit("starting", fields={"runtime_probe": addon._origin_runtime_probe()})
+
+    data = json.loads(status_path.read_text(encoding="utf-8"))
+    assert data["runtime_probe"] == {
+        "embedded_api_available": True,
+        "origin_host_api_available": True,
+        "originpro_available": True,
+        "inside_origin": True,
+        "likely_origin_embedded_python": True,
+        "originpro_source": "C:/Origin/originpro/__init__.py",
+    }
+
+
+def test_start_records_runtime_probe_before_import_fail(monkeypatch) -> None:
+    addon = load_addon_module()
+    emitted: list[tuple[str, dict | None]] = []
+    probe = {
+        "embedded_api_available": False,
+        "origin_host_api_available": False,
+        "originpro_available": False,
+        "inside_origin": False,
+        "likely_origin_embedded_python": False,
+        "originpro_source": None,
+    }
+
+    monkeypatch.setattr(addon, "_origin_runtime_probe", lambda: probe)
+    monkeypatch.setattr(
+        addon,
+        "_emit",
+        lambda message, fields=None: emitted.append((message, fields)),
+    )
+    monkeypatch.setattr(addon, "_notify", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        addon,
+        "_ensure_origin_mcp_importable",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("import failed")),
+    )
+
+    try:
+        addon.start_origin_mcp_bridge()
+    except RuntimeError:
+        pass
+
+    starting = emitted[0]
+    assert starting[0] == "starting inside Origin Python"
+    assert starting[1] is not None
+    assert starting[1]["runtime_probe"] == probe
+    assert starting[1]["install_phase"] == "initializing"
+
+
+def test_start_records_successful_start_diagnostics(monkeypatch) -> None:
+    addon = load_addon_module()
+    emitted: list[tuple[str, dict | None]] = []
+
+    class FakeServer:
+        server_address = ("127.0.0.1", 47631)
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+    class FakeThread:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+            self.started = False
+
+        def start(self) -> None:
+            self.started = True
+
+    monkeypatch.setattr(
+        addon, "_emit", lambda message, fields=None: emitted.append((message, fields))
+    )
+    monkeypatch.setattr(
+        addon, "_notify", lambda message, fields=None: emitted.append((message, fields))
+    )
+    monkeypatch.setattr(addon, "_clear_origin_mcp_imports", lambda: None)
+    monkeypatch.setattr(addon, "_ensure_origin_mcp_importable", lambda _src=None: "source")
+    monkeypatch.setattr(addon, "_install_missing_runtime_packages", lambda: None)
+    monkeypatch.setattr(addon, "_load_bridge_server", lambda install_missing=True: FakeServer)
+    monkeypatch.setattr(addon, "_env_bool", lambda _name, _default: True)
+    monkeypatch.setattr(addon.threading, "Thread", FakeThread)
+
+    result = addon.start_origin_mcp_bridge(background=True)
+
+    assert result["running"] is True
+    running_fields = [
+        fields for message, fields in emitted if message == "Bridge is running inside Origin."
+    ][0]
+    assert running_fields is not None
+    assert running_fields["install_phase"] == "running"
+    assert running_fields["last_successful_start"]
+    assert running_fields["last_error"] is None
+
+
 def test_user_install_flag_added_when_site_packages_not_writable(monkeypatch) -> None:
     addon = load_addon_module()
     monkeypatch.setattr(addon.sys, "prefix", addon.sys.base_prefix, raising=False)
@@ -216,6 +326,25 @@ def test_install_missing_uses_user_flag_when_not_writable(monkeypatch) -> None:
     addon._install_missing_runtime_packages()
 
     assert captured["args"] == ["install", "--progress-bar", "off", "--user", "pandas>=2.0"]
+
+
+def test_install_missing_records_install_phase(monkeypatch) -> None:
+    addon = load_addon_module()
+    emitted: list[tuple[str, dict | None]] = []
+    monkeypatch.setattr(addon, "_missing_runtime_packages", lambda: ["pandas>=2.0"])
+    monkeypatch.setattr(addon, "_user_install_flag", lambda: [])
+    monkeypatch.setattr(addon, "_ensure_user_site_on_path", lambda: None)
+    monkeypatch.setattr(addon, "_pip", lambda _args: 0)
+    monkeypatch.setattr(
+        addon,
+        "_emit",
+        lambda message, fields=None: emitted.append((message, fields)),
+    )
+
+    addon._install_missing_runtime_packages()
+
+    phases = [fields["install_phase"] for _message, fields in emitted if fields]
+    assert phases == ["installing_dependencies", "dependencies_ready"]
 
 
 def test_missing_dependency_message_includes_origin_console_retry_snippet() -> None:

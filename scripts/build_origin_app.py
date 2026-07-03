@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import configparser
 import os
+import re
 import shutil
 import struct
 import zlib
@@ -27,7 +28,6 @@ STOP_APP_NAME = "Origin MCP Bridge Stop"
 APP_NAMES = (START_APP_NAME, STOP_APP_NAME)
 APP_NAME = START_APP_NAME
 LEGACY_APP_NAME = "Origin MCP Bridge"
-APP_VERSION = "0.1.2"
 BUILD_ROOT = ROOT / "build" / "origin-app"
 APP_DIR = BUILD_ROOT / START_APP_NAME
 START_APP_DIR = BUILD_ROOT / START_APP_NAME
@@ -36,6 +36,17 @@ OPX_PATH = BUILD_ROOT / f"{START_APP_NAME}.opx"
 STOP_OPX_PATH = BUILD_ROOT / f"{STOP_APP_NAME}.opx"
 COMMAND_PATH = BUILD_ROOT / "mkopx-command.txt"
 OBSOLETE_OGS_PATH = BUILD_ROOT / "make-origin-mcp-bridge-opx.ogs"
+
+
+def package_version() -> str:
+    init_path = ROOT / "src" / "origin_mcp" / "__init__.py"
+    match = re.search(r'^__version__\s*=\s*"([^"]+)"', init_path.read_text(encoding="utf-8"), re.M)
+    if not match:
+        raise RuntimeError(f"Could not read __version__ from {init_path}")
+    return match.group(1)
+
+
+APP_VERSION = package_version()
 
 
 def origin_apps_dir() -> Path | None:

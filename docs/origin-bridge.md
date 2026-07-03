@@ -221,8 +221,29 @@ python examples\smoke_bridge.py --keep-origin-open
 
 The smoke run creates a new project, imports `examples/sample_data.csv`, reads
 worksheet rows, creates a line plot, exports a PNG, checks that the export looks
-non-empty, and saves an OPJU project under the output directory. If the smoke
-run fails, it prints `origin_doctor` output before exiting.
+non-empty, and saves an OPJU project under the output directory. It always writes
+a structured JSON report, by default to `%TEMP%\origin-mcp-smoke\smoke-report.json`;
+pass `--output-dir` or `--report` to choose deterministic paths. If the smoke
+run fails, the report includes the failing step and `origin_doctor` output.
+
+For a release-style manual gate, use the wrapper below after starting the bridge:
+
+```powershell
+python scripts\real_origin_smoke.py --keep-origin-open
+```
+
+The wrapper stores the PNG, OPJU, and report under `output\smoke\`. Treat the
+gate as passed only when the command exits with status 0, `smoke-report.json`
+has `"ok": true`, the export inspection has `"looks_nonempty": true`, and both
+the PNG and OPJU paths in the report exist. The output directory is ignored by
+git so release validation artifacts do not pollute the working tree.
+
+To run all non-Origin release checks plus the real-Origin gate from one entry
+point, use:
+
+```powershell
+python scripts\release_check.py --real-origin-smoke --keep-origin-open
+```
 
 ## Current Limits
 
