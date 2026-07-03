@@ -25,8 +25,8 @@ MCP servers, merge this entry without removing them.
 
 ## Claude Code
 
-Use Claude Code's native MCP configuration mechanism when available, but keep
-the same launch contract:
+Use Claude Code's native MCP configuration command instead of copying the
+Claude Desktop file by hand. Keep the same launch contract:
 
 - server name: `origin`
 - command: `python` or the absolute path to a Python 3.10+ `python.exe`
@@ -34,6 +34,9 @@ the same launch contract:
 
 Prefer user/global configuration for the same reason as the main bootstrap
 guide: the Origin GUI bridge is machine-local, not project-local.
+
+See the Claude Code section in `../mcp-config.md#claude-code` for the exact
+`claude mcp add` command, verification steps, and project-scope notes.
 
 ## After Configuration
 
