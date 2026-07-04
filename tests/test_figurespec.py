@@ -763,3 +763,27 @@ def test_origin_plan_figure_spec_reports_unsupported_group_style_details(
     plot_op = next(item for item in result["data"]["operations"] if item["op"] == "plot")
     assert plot_op["group_style_supported"] is False
     assert plot_op["group_style_unsupported_keys"] == ["dash_patterns"]
+
+
+def test_origin_plan_figure_spec_rejects_named_symbol_kind(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response\n0,1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"][0]["style"] = {"symbol_kind": "circle"}
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert result["data"]["warnings"] == ["executor_does_not_apply_plot_style"]
+    detail = result["data"]["warning_details"][0]
+    assert detail["code"] == "executor_does_not_apply_plot_style"
+    assert detail["plot_id"] == "plot_a"
+    assert detail["field"] == "style"
+    assert detail["unsupported_values"] == [
+        {
+            "key": "symbol_kind",
+            "value": "circle",
+            "expected": "Origin integer symbol code",
+        }
+    ]

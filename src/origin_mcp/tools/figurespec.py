@@ -728,6 +728,19 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
                     "supported_keys": sorted(SUPPORTED_GROUP_STYLE_KEYS),
                 }
             )
+        style_unsupported_values = _unsupported_style_values(plot)
+        if style_unsupported_values:
+            warnings.append(
+                {
+                    "code": "executor_does_not_apply_plot_style",
+                    "plot_id": plot.id,
+                    "field": "style",
+                    "unsupported_values": style_unsupported_values,
+                    "supported_alternatives": [
+                        "style.symbol_kind as an Origin integer symbol code",
+                    ],
+                }
+            )
         uncertainty_unsupported_keys = _unsupported_uncertainty_keys(plot.uncertainty)
         if uncertainty_unsupported_keys:
             warnings.append(
@@ -1004,7 +1017,24 @@ def _plot_style_kwargs(style: dict[str, Any]) -> dict[str, Any]:
         "symbol_size",
         "transparency",
     }
-    return {key: value for key, value in style.items() if key in supported and value is not None}
+    kwargs = {key: value for key, value in style.items() if key in supported and value is not None}
+    if "symbol_kind" in kwargs and not isinstance(kwargs["symbol_kind"], int):
+        kwargs.pop("symbol_kind")
+    return kwargs
+
+
+def _unsupported_style_values(plot: Any) -> list[dict[str, Any]]:
+    issues = []
+    symbol_kind = plot.style.get("symbol_kind")
+    if symbol_kind is not None and not isinstance(symbol_kind, int):
+        issues.append(
+            {
+                "key": "symbol_kind",
+                "value": symbol_kind,
+                "expected": "Origin integer symbol code",
+            }
+        )
+    return issues
 
 
 def _uncertainty_mapping(plot: Any) -> dict[str, Any]:
