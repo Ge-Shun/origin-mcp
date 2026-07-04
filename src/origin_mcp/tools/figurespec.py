@@ -20,6 +20,41 @@ SUPPORTED_PLOT_TYPES = {
     "heatmap",
 }
 SUPPORTED_LAYOUTS = {"single", "grid"}
+SUPPORTED_UNCERTAINTY_KEYS = {
+    "error",
+    "y_error",
+    "y_error_col",
+    "yerr",
+    "x_error",
+    "x_error_col",
+    "xerr",
+    "type",
+    "kind",
+}
+SUPPORTED_UNCERTAINTY_KINDS = {"errorbar", "error_bar", "symmetric", "standard_error"}
+GROUP_STYLE_SEQUENCE_KEYS = {
+    "colors": "color",
+    "line_widths": "line_width",
+    "bar_gaps": "bar_gap",
+    "line_styles": "line_style",
+    "symbol_kinds": "symbol_kind",
+    "symbol_sizes": "symbol_size",
+    "transparencies": "transparency",
+}
+GROUP_STYLE_DIRECT_KEYS = {
+    "color",
+    "line_width",
+    "bar_gap",
+    "line_style",
+    "symbol_kind",
+    "symbol_size",
+    "transparency",
+}
+SUPPORTED_GROUP_STYLE_KEYS = {
+    "series",
+    *GROUP_STYLE_SEQUENCE_KEYS,
+    *GROUP_STYLE_DIRECT_KEYS,
+}
 
 
 @_mcp_tool()
@@ -62,7 +97,8 @@ def origin_execute_figure_spec(
 
 def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
     data_validation = _validate_data_columns(spec)
-    warnings = _executor_warnings(spec)
+    warning_details = _executor_warning_details(spec)
+    warnings = _executor_warnings_from_details(warning_details)
     operations: list[dict[str, Any]] = []
 
     if spec.runtime.new_project:
@@ -93,6 +129,8 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
         )
 
     for plot in spec.plots:
+        uncertainty_unsupported_keys = _unsupported_uncertainty_keys(plot.uncertainty)
+        group_style_unsupported_keys = _unsupported_group_style_keys(plot.group_style)
         operations.append(
             {
                 "op": "plot",
@@ -101,6 +139,15 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
                 "layer": plot.layer,
                 "data_ref": _plot_data_ref(spec, plot),
                 "map": plot.map,
+                "uncertainty": plot.uncertainty,
+                "uncertainty_mapping": _uncertainty_mapping(plot),
+                "uncertainty_supported": not uncertainty_unsupported_keys,
+                "uncertainty_unsupported_keys": uncertainty_unsupported_keys,
+                "group_style": plot.group_style,
+                "group_style_supported": not group_style_unsupported_keys
+                and not bool(plot.map.get("group")),
+                "group_style_supported_keys": sorted(SUPPORTED_GROUP_STYLE_KEYS),
+                "group_style_unsupported_keys": group_style_unsupported_keys,
             }
         )
 
@@ -139,6 +186,7 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
         "title": spec.figure.title,
         "executor_executable": executable,
         "warnings": warnings,
+        "warning_details": warning_details,
         "data_validation": data_validation,
         "operations": operations,
         "exports": [str(path) for path in _export_paths(spec)],
@@ -403,27 +451,102 @@ def _missing_mapping_columns(
 
 
 def _executor_warnings(spec: FigureSpec) -> list[str]:
-    warnings: list[str] = []
+    return _executor_warnings_from_details(_executor_warning_details(spec))
+
+
+def _executor_warnings_from_details(details: list[dict[str, Any]]) -> list[str]:
+    return sorted({str(item["code"]) for item in details})
+
+
+def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
     if any(item.object != "worksheet" for item in spec.data):
-        warnings.append("executor_supports_only_worksheet_data")
+        warnings.append(
+            {
+                "code": "executor_supports_only_worksheet_data",
+                "field": "data.object",
+                "supported_values": ["worksheet"],
+            }
+        )
     for plot in spec.plots:
         plot_type = _normalize_plot_type(plot.type)
         mapping = _plot_mapping(_data_by_id(spec, _plot_data_ref(spec, plot)), plot)
         if plot_type not in SUPPORTED_PLOT_TYPES:
-            warnings.append(f"unsupported_executor_plot_type:{plot.type}")
+            warnings.append(
+                {
+                    "code": f"unsupported_executor_plot_type:{plot.type}",
+                    "plot_id": plot.id,
+                    "field": "type",
+                    "value": plot.type,
+                    "supported_values": sorted(SUPPORTED_PLOT_TYPES),
+                }
+            )
         if plot.id != _base_plot(spec).id and plot_type != "histogram" and mapping.get("y") is None:
-            warnings.append("executor_requires_y_mapping_for_additional_plots")
-        if plot.map.get("group") or plot.group_style:
-            warnings.append("executor_does_not_apply_group_style")
-        if plot.uncertainty:
-            warnings.append("executor_does_not_apply_uncertainty_bands")
+            warnings.append(
+                {
+                    "code": "executor_requires_y_mapping_for_additional_plots",
+                    "plot_id": plot.id,
+                    "field": "map.y",
+                }
+            )
+        if plot.map.get("group"):
+            warnings.append(
+                {
+                    "code": "executor_does_not_apply_group_style",
+                    "plot_id": plot.id,
+                    "field": "map.group",
+                    "unsupported_keys": ["group"],
+                    "supported_keys": sorted(SUPPORTED_GROUP_STYLE_KEYS),
+                    "supported_alternatives": ["group_style.colors", "group_style.series"],
+                }
+            )
+        group_style_unsupported_keys = _unsupported_group_style_keys(plot.group_style)
+        if group_style_unsupported_keys:
+            warnings.append(
+                {
+                    "code": "executor_does_not_apply_group_style",
+                    "plot_id": plot.id,
+                    "field": "group_style",
+                    "unsupported_keys": group_style_unsupported_keys,
+                    "supported_keys": sorted(SUPPORTED_GROUP_STYLE_KEYS),
+                }
+            )
+        uncertainty_unsupported_keys = _unsupported_uncertainty_keys(plot.uncertainty)
+        if uncertainty_unsupported_keys:
+            warnings.append(
+                {
+                    "code": "executor_does_not_apply_uncertainty_bands",
+                    "plot_id": plot.id,
+                    "field": "uncertainty",
+                    "unsupported_keys": uncertainty_unsupported_keys,
+                    "supported_alternatives": ["uncertainty.y_error", "uncertainty.x_error"],
+                }
+            )
     if spec.page.layout not in SUPPORTED_LAYOUTS:
-        warnings.append("executor_supports_only_single_or_grid_layout")
+        warnings.append(
+            {
+                "code": "executor_supports_only_single_or_grid_layout",
+                "field": "page.layout",
+                "value": spec.page.layout,
+                "supported_values": sorted(SUPPORTED_LAYOUTS),
+            }
+        )
     if len(spec.layers) > 1 and not any(plot.layer == spec.layers[0].id for plot in spec.plots):
-        warnings.append("executor_requires_at_least_one_plot_on_first_layer")
+        warnings.append(
+            {
+                "code": "executor_requires_at_least_one_plot_on_first_layer",
+                "field": "plots.layer",
+                "layer": spec.layers[0].id,
+            }
+        )
     if any(_normalize_plot_type(plot.type) == "histogram" for plot in spec.plots[1:]):
-        warnings.append("executor_supports_histogram_only_as_first_plot")
-    return sorted(set(warnings))
+        warnings.append(
+            {
+                "code": "executor_supports_histogram_only_as_first_plot",
+                "field": "plots.type",
+            }
+        )
+    return warnings
 
 
 def _base_plot(spec: FigureSpec) -> Any:
@@ -455,7 +578,7 @@ def _layer_by_id(spec: FigureSpec, layer_id: str) -> Any:
 
 
 def _plot_mapping(data: Any, plot: Any) -> dict[str, Any]:
-    return {**data.roles, **plot.map}
+    return {**data.roles, **_uncertainty_mapping(plot), **plot.map}
 
 
 def _normalize_plot_type(value: str) -> str:
@@ -553,14 +676,15 @@ def _apply_plot_styles(
         data = _data_by_id(spec, _plot_data_ref(spec, plot))
         mapping = _plot_mapping(data, plot)
         y_count = len(_y_columns(mapping) or [None])
-        style = _plot_style_kwargs(plot.style)
         layer_index = layer_indexes[plot.layer]
         start_index = next_plot_index[plot.layer]
-        if style:
-            for offset in range(y_count):
+        for offset in range(y_count):
+            style = _plot_style_kwargs(_plot_series_style(plot, offset))
+            if style:
                 updates.append(
                     {
                         "plot_id": plot.id,
+                        "series_index": offset,
                         **client.set_plot_style(
                             graph_name=graph_name,
                             layer_index=layer_index,
@@ -571,6 +695,39 @@ def _apply_plot_styles(
                 )
         next_plot_index[plot.layer] = start_index + y_count
     return updates
+
+
+def _plot_series_style(plot: Any, series_index: int) -> dict[str, Any]:
+    style = dict(plot.style)
+    group_style = plot.group_style
+    if not group_style:
+        return style
+
+    series = group_style.get("series")
+    if (
+        isinstance(series, list)
+        and series_index < len(series)
+        and isinstance(series[series_index], dict)
+    ):
+        style.update(series[series_index])
+
+    for source_key, target_key in GROUP_STYLE_SEQUENCE_KEYS.items():
+        value = _series_value(group_style.get(source_key), series_index)
+        if value is not None:
+            style[target_key] = value
+
+    for key in GROUP_STYLE_DIRECT_KEYS:
+        value = _series_value(group_style.get(key), series_index)
+        if value is not None:
+            style[key] = value
+
+    return style
+
+
+def _series_value(value: Any, index: int) -> Any:
+    if isinstance(value, list):
+        return value[index] if index < len(value) else None
+    return value
 
 
 def _plot_style_kwargs(style: dict[str, Any]) -> dict[str, Any]:
@@ -584,6 +741,39 @@ def _plot_style_kwargs(style: dict[str, Any]) -> dict[str, Any]:
         "transparency",
     }
     return {key: value for key, value in style.items() if key in supported and value is not None}
+
+
+def _uncertainty_mapping(plot: Any) -> dict[str, Any]:
+    uncertainty = plot.uncertainty
+    if not uncertainty:
+        return {}
+    mapping: dict[str, Any] = {}
+    y_error = (
+        uncertainty.get("y_error")
+        or uncertainty.get("y_error_col")
+        or uncertainty.get("error")
+        or uncertainty.get("yerr")
+    )
+    x_error = (
+        uncertainty.get("x_error") or uncertainty.get("x_error_col") or uncertainty.get("xerr")
+    )
+    if y_error is not None:
+        mapping["y_error"] = y_error
+    if x_error is not None:
+        mapping["x_error"] = x_error
+    return mapping
+
+
+def _unsupported_uncertainty_keys(uncertainty: dict[str, Any]) -> list[str]:
+    unsupported = [key for key in uncertainty if key not in SUPPORTED_UNCERTAINTY_KEYS]
+    kind = uncertainty.get("type", uncertainty.get("kind"))
+    if kind is not None and str(kind).strip().lower() not in SUPPORTED_UNCERTAINTY_KINDS:
+        unsupported.append("type")
+    return sorted(set(unsupported))
+
+
+def _unsupported_group_style_keys(group_style: dict[str, Any]) -> list[str]:
+    return sorted(key for key in group_style if key not in SUPPORTED_GROUP_STYLE_KEYS)
 
 
 def _apply_annotations(

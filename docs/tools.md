@@ -204,6 +204,15 @@ Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make
 columns or bars narrower. FigureSpec plot `style` entries can use the same
 fields for supported plot primitives.
 
+FigureSpec plot `group_style` can apply safe per-series style sequences for
+multi-Y plots: `colors`, `line_widths`, `bar_gaps`, `line_styles`,
+`symbol_kinds`, `symbol_sizes`, and `transparencies`, or a `series` list of
+per-series style objects. FigureSpec `uncertainty` supports error-bar mappings
+that route to the existing safe plotting path, for example
+`{"type": "errorbar", "y_error": "se"}` or `{"x_error": "xerr"}`. Filled
+confidence/uncertainty bands are still reported as unsupported executor
+features instead of being guessed.
+
 For natural-language or registry-backed edits, `origin_set_plot_property`
 resolves a semantic `property_name` such as `柱宽`, `折线粗细`, `点大小`, or
 `误差棒帽宽` against the plot style capability registry. It only applies

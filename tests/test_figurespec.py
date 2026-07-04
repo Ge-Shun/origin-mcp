@@ -326,3 +326,121 @@ def test_origin_execute_figure_spec_applies_combo_plot_styles(
             "line_width": 1.2,
         },
     ]
+
+
+def test_origin_execute_figure_spec_maps_uncertainty_to_error_columns(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,se\n0,1,0.1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["data"][0]["roles"] = {"x": "time", "y": "response"}
+    spec["plots"][0]["uncertainty"] = {"type": "errorbar", "y_error": "se"}
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    plot_op = next(item for item in plan["data"]["operations"] if item["op"] == "plot")
+    assert plot_op["uncertainty_mapping"] == {"y_error": "se"}
+    assert plot_op["uncertainty_supported"] is True
+    assert result["ok"] is True
+    plot_call = next(kwargs for name, kwargs in fake.calls if name == "plot_table")
+    assert plot_call["y_error_col"] == "se"
+
+
+def test_origin_plan_figure_spec_keeps_band_uncertainty_unsupported(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,lo,hi\n0,1,0.8,1.2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"][0]["uncertainty"] = {"type": "band", "lower": "lo", "upper": "hi"}
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert result["data"]["warnings"] == ["executor_does_not_apply_uncertainty_bands"]
+    assert result["data"]["warning_details"] == [
+        {
+            "code": "executor_does_not_apply_uncertainty_bands",
+            "plot_id": "plot_a",
+            "field": "uncertainty",
+            "unsupported_keys": ["lower", "type", "upper"],
+            "supported_alternatives": ["uncertainty.y_error", "uncertainty.x_error"],
+        }
+    ]
+    plot_op = next(item for item in result["data"]["operations"] if item["op"] == "plot")
+    assert plot_op["uncertainty_supported"] is False
+    assert plot_op["uncertainty_unsupported_keys"] == ["lower", "type", "upper"]
+
+
+def test_origin_execute_figure_spec_applies_group_style_sequences(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,a,b\n0,1,2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["data"][0]["roles"] = {"x": "time", "y": ["a", "b"]}
+    spec["plots"][0]["map"] = {"x": "time", "y": ["a", "b"]}
+    spec["plots"][0]["group_style"] = {
+        "colors": ["red", "blue"],
+        "line_widths": [1.0, 2.0],
+    }
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    plot_op = next(item for item in plan["data"]["operations"] if item["op"] == "plot")
+    assert plot_op["group_style_supported"] is True
+    assert plot_op["group_style_unsupported_keys"] == []
+    assert result["ok"] is True
+    style_calls = [kwargs for name, kwargs in fake.calls if name == "set_plot_style"]
+    assert style_calls[:2] == [
+        {
+            "graph_name": "Graph1",
+            "layer_index": 0,
+            "plot_index": 0,
+            "color": "red",
+            "line_width": 1.0,
+        },
+        {
+            "graph_name": "Graph1",
+            "layer_index": 0,
+            "plot_index": 1,
+            "color": "blue",
+            "line_width": 2.0,
+        },
+    ]
+
+
+def test_origin_plan_figure_spec_reports_unsupported_group_style_details(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response\n0,1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"][0]["group_style"] = {"dash_patterns": ["solid", "dash"]}
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert result["data"]["warnings"] == ["executor_does_not_apply_group_style"]
+    detail = result["data"]["warning_details"][0]
+    assert detail["code"] == "executor_does_not_apply_group_style"
+    assert detail["plot_id"] == "plot_a"
+    assert detail["field"] == "group_style"
+    assert detail["unsupported_keys"] == ["dash_patterns"]
+    assert "colors" in detail["supported_keys"]
+    plot_op = next(item for item in result["data"]["operations"] if item["op"] == "plot")
+    assert plot_op["group_style_supported"] is False
+    assert plot_op["group_style_unsupported_keys"] == ["dash_patterns"]
