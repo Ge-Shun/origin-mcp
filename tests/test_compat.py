@@ -37,9 +37,19 @@ def test_plot_type_coverage_reports_direct_and_generic_support() -> None:
     assert coverage["summary"]["not_wrapped_count"] == 0
 
     by_id = {item["id"]: item for item in coverage["items"]}
+    assert by_id[103]["templates"] == [
+        "glmesh",
+        "glcmap",
+        "glwirefrm",
+        "glwireface",
+        "glxconst",
+        "glyconst",
+    ]
     assert by_id[200]["direct_tool"] == "origin_plot_line"
     assert by_id[204]["direct_tool"] == "origin_plot_area"
     assert by_id[220]["direct_tool"] == "origin_plot_image"
+    assert by_id[230]["direct_tool"] == "origin_plot_from_range"
+    assert by_id[230]["note"] == "Origin determines the plot type from the specified template."
 
 
 def test_plot_type_coverage_marks_2024b_as_not_guaranteed() -> None:

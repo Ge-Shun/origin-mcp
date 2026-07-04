@@ -168,12 +168,13 @@ def test_analysis_script_linear_fit() -> None:
         x_col="time",
         y_col="force",
         output_sheet="FitOut",
-        options={"intercept": False},
+        options={"fix_intercept": True, "fixed_intercept": 0},
     )
 
     assert "fitlr iy:=[Book1]Sheet1!(time,force)" in script
     assert "oy:=FitOut" in script
-    assert "fixintercept:=0" in script
+    assert "fixint:=1" in script
+    assert "intercept:=0" in script
 
 
 def test_analysis_script_requires_range() -> None:

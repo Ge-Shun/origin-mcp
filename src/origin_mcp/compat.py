@@ -18,7 +18,7 @@ PLOT_TYPE_CATALOG: list[dict[str, Any]] = [
         "id": 103,
         "name": "3D Surface",
         "input": "XYZ Range/Matrix Object",
-        "templates": ["glmesh", "glcmap", "glwirefrm", "glwireface"],
+        "templates": ["glmesh", "glcmap", "glwirefrm", "glwireface", "glxconst", "glyconst"],
         "category": "3D",
     },
     {
@@ -253,6 +253,14 @@ PLOT_TYPE_CATALOG: list[dict[str, Any]] = [
         "category": "Contour",
     },
     {
+        "id": 230,
+        "name": "Unknown/template-determined",
+        "input": "Unknown",
+        "templates": [],
+        "category": "Template",
+        "note": "Origin determines the plot type from the specified template.",
+    },
+    {
         "id": 231,
         "name": "Error Bar",
         "input": "XYyErr Range",
@@ -357,6 +365,7 @@ PLOT_TYPE_DIRECT_TOOLS = {
     221: "origin_plot_candlestick",
     225: "origin_plot_pie",
     226: "origin_plot_matrix_contour",
+    230: "origin_plot_from_range",
     231: "origin_plot_errorbar",
     233: "origin_plot_errorbar",
     240: "origin_plot_3d_scatter",

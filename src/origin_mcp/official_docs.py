@@ -554,6 +554,17 @@ def _classify_labtalk_url(
             keywords=("labtalk", "objects", "properties", "methods"),
             versions=versions,
         )
+    if first == "plot-type-ids":
+        return OfficialDocRecord(
+            path="labtalk/reference-tables/plot-type-ids",
+            title=_clean_title(text) or "Plot Type IDs",
+            summary="Official LabTalk reference table for Origin Plot Type IDs.",
+            url=url,
+            doc_family="labtalk",
+            doc_kind="reference_table",
+            keywords=("labtalk", "plot type id", "plotxy", "plotxyz", "plotm", "template"),
+            versions=versions,
+        )
     return None
 
 

@@ -45,6 +45,28 @@ def test_smooth_adapter_uses_official_input_and_option_names() -> None:
     assert "polyorder:=2" in command
 
 
+def test_linear_fit_adapter_uses_official_fix_parameter_names() -> None:
+    adapter = resolve_analysis_adapter("linear_fit", 10.3)
+    command = adapter.command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[FitOut]Result!(1,2)",
+        options={
+            "fix_intercept": True,
+            "fixed_intercept": 0,
+            "fix_slope": True,
+            "fixed_slope": 0.667,
+        },
+    )
+
+    assert command.startswith("fitlr iy:=[Book1]1!(time,signal)")
+    assert "oy:=[FitOut]Result!(1,2)" in command
+    assert "fixint:=1" in command
+    assert "intercept:=0" in command
+    assert "fixslope:=1" in command
+    assert "slope:=0.667" in command
+    assert "fixintercept" not in command
+
+
 def test_polynomial_adapter_leaves_output_variables_unquoted() -> None:
     adapter = resolve_analysis_adapter("polynomial_fit", 10.3)
     command = adapter.command(

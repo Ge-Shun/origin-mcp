@@ -49,6 +49,18 @@ def test_classify_labtalk_command_page() -> None:
     assert record.doc_kind == "command"
 
 
+def test_classify_labtalk_plot_type_ids_reference_table() -> None:
+    record = classify_originlab_doc_url(
+        "https://docs.originlab.com/labtalk/ref/plot-type-ids/",
+        "Plot Type IDs",
+    )
+
+    assert record is not None
+    assert record.path == "labtalk/reference-tables/plot-type-ids"
+    assert record.doc_family == "labtalk"
+    assert record.doc_kind == "reference_table"
+
+
 def test_classify_originpro_class_page() -> None:
     record = classify_originlab_doc_url(
         "https://docs.originlab.com/originpro/classoriginpro_1_1graph_1_1Axis.html",

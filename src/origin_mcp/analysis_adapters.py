@@ -51,7 +51,12 @@ ANALYSIS_ADAPTERS = {
         x_function="fitlr",
         aliases=("fitlr", "linear-fit"),
         range_required=True,
-        option_aliases={"intercept": "fixintercept", "slope": "fixslope"},
+        option_aliases={
+            "fix_intercept": "fixint",
+            "fixed_intercept": "intercept",
+            "fix_slope": "fixslope",
+            "fixed_slope": "slope",
+        },
     ),
     "polynomial_fit": AnalysisAdapter(
         name="polynomial_fit",

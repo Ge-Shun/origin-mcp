@@ -720,6 +720,19 @@ OFFICIAL_DOC_PAGES: tuple[OfficialDocPage, ...] = (
         ),
     ),
     OfficialDocPage(
+        path="labtalk/reference-tables/plot-type-ids",
+        title="Plot Type IDs",
+        summary="Official LabTalk reference table for Origin Plot Type IDs.",
+        url="https://docs.originlab.com/labtalk/ref/plot-type-ids/",
+        doc_family="labtalk",
+        doc_kind="reference_table",
+        keywords=("labtalk", "plot type id", "plotxy", "plotxyz", "plotm", "template"),
+        body=(
+            "Use this official table when validating plot:= IDs used by worksheet -p, "
+            "layer plotting, plotxy, plotxyz, and plotm routes."
+        ),
+    ),
+    OfficialDocPage(
         path="labtalk/commands/data-manipulation-and-calculation",
         title="Data Manipulation and Calculation commands",
         summary="Official category for commands that change data or run calculations.",

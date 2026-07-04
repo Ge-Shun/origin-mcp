@@ -232,6 +232,13 @@ def test_generated_official_docs_include_labtalk_command() -> None:
     assert result["entry"]["metadata"]["official_url"].endswith("/legend-cmd/")
 
 
+def test_official_docs_include_plot_type_ids_reference_table() -> None:
+    result = browse_knowledge("official_docs", "labtalk/reference-tables/plot-type-ids")
+
+    assert result["entry"]["metadata"]["doc_kind"] == "reference_table"
+    assert result["entry"]["metadata"]["official_url"].endswith("/plot-type-ids/")
+
+
 def test_generated_official_docs_include_originpro_member() -> None:
     result = browse_knowledge("official_docs", "python/originpro-api/graph/Axis/scale")
 
