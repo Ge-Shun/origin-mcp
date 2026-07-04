@@ -141,6 +141,7 @@ class GPlot:
         self.name = f"Plot{index + 1}"
         self.commands: list[str] = []
         self.props: dict[str, Any] = {}
+        self.fill_area_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
     def set_cmd(self, command: str) -> None:
         self.commands.append(command)
@@ -150,6 +151,9 @@ class GPlot:
 
     def set_float(self, name: str, value: float) -> None:
         self.props[name] = value
+
+    def set_fill_area(self, *args: Any, **kwargs: Any) -> None:
+        self.fill_area_calls.append((args, kwargs))
 
 
 class GLayer:

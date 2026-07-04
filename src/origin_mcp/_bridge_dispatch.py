@@ -79,6 +79,7 @@ ALLOWED_CLIENT_METHODS = {
     "plot_chart_atlas",
     "apply_image_panel_style",
     "add_plot_to_graph",
+    "add_uncertainty_band",
     "add_inset_layer",
     "remove_plot_from_graph",
     "change_plot_type",

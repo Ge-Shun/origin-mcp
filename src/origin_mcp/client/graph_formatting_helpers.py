@@ -750,6 +750,39 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             raise OriginOperationError("Plot object does not support set_cmd().")
         set_cmd(command)
 
+    def _set_plot_fill_area(
+        self,
+        plot: Any,
+        graph_name: str,
+        layer_index: int,
+        plot_index: int,
+        fill_color_index: int,
+        transparency: float | None = None,
+    ) -> str:
+        range_name = "__origin_mcp_band_plot"
+        script_parts = [
+            f'win -a "{self._escape_labtalk(graph_name)}";',
+            f"range {range_name} = !{plot_index + 1};",
+            f"set {range_name} -pf 1;",
+            f"set {range_name} -pfv 9;",
+            f"set {range_name} -pfb {fill_color_index};",
+            f"set {range_name} -p2fb {fill_color_index};",
+        ]
+        if transparency is not None:
+            script_parts.append(f"set {range_name} -paap {transparency:g};")
+        script_parts.append("rescale;")
+        script = " ".join(script_parts)
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(f"Origin rejected fill-area script: {script}")
+        set_fill_area = getattr(plot, "set_fill_area", None)
+        if callable(set_fill_area):
+            try:
+                set_fill_area(fill_color_index, 9, fill_color_index)
+            except TypeError:
+                pass
+        return script
+
     def _set_plot_line_width(self, plot: Any, line_width: float) -> None:
         native_width = self._origin_line_width_units(line_width)
         self._set_plot_command(plot, f"-w {native_width}")

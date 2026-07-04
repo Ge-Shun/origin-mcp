@@ -203,6 +203,36 @@ def test_add_plot_to_graph(fake_client: OriginClient) -> None:
     assert len(page[0].plots) == 1
 
 
+def test_add_uncertainty_band_adds_bounds_and_fill(fake_client: OriginClient) -> None:
+    fake_client.op.add_book(
+        "Data",
+        pd.DataFrame({"x": [1, 2], "lower": [2, 3], "upper": [4, 5]}),
+    )
+    page = fake_client.op.add_graph("G1")
+
+    result = fake_client.add_uncertainty_band(
+        worksheet="Data",
+        x_col="x",
+        lower_col="lower",
+        upper_col="upper",
+        graph_name="G1",
+        fill_color="lightblue",
+        transparency=70,
+    )
+
+    assert result["lower_col"] == "lower"
+    assert result["upper_col"] == "upper"
+    assert result["plot_indices"] == [0, 1]
+    assert "set __origin_mcp_band_plot -pf 1;" in result["fill_script"]
+    assert "set __origin_mcp_band_plot -pfv 9;" in result["fill_script"]
+    assert "set __origin_mcp_band_plot -paap 70;" in result["fill_script"]
+    assert len(page[0].plots) == 2
+    assert page[0].plots[0].fill_area_calls == [((4, 9, 4), {})]
+    assert page[0].plots[0].color == "lightblue"
+    assert page[0].plots[0].transparency == 70
+    assert page[0].plots[1].transparency == 70
+
+
 def test_get_graph_info_reports_layers_and_plots(fake_client: OriginClient) -> None:
     fake_client.op.add_book("Data", pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
     fake_client.op.add_graph("G1", lname="Long")

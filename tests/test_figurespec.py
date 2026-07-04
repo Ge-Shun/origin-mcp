@@ -29,8 +29,8 @@ class FakeFigureSpecClient:
     def plot_table_by_id(self, **kwargs: Any) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         self.calls.append(("plot_table_by_id", kwargs))
         return (
-            WorksheetRef("Book1", "Sheet1", ["x", "y", "z"], 2),
-            GraphRef("Heat", export_path=str(kwargs.get("export_path") or "")),
+            WorksheetRef("Book1", "Sheet1", ["time", "response", "lo", "hi"], 2),
+            GraphRef("Graph1", export_path=str(kwargs.get("export_path") or "")),
             {"plot_type_id": kwargs["plot_type_id"]},
         )
 
@@ -60,6 +60,15 @@ class FakeFigureSpecClient:
             "graph_name": kwargs.get("graph_name"),
             "layer_index": kwargs["layer_index"],
             "plot_type": kwargs["plot_type"],
+        }
+
+    def add_uncertainty_band(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("add_uncertainty_band", kwargs))
+        return {
+            "graph_name": kwargs.get("graph_name"),
+            "layer_index": kwargs["layer_index"],
+            "lower_col": kwargs["lower_col"],
+            "upper_col": kwargs["upper_col"],
         }
 
     def set_plot_style(self, **kwargs: Any) -> dict[str, Any]:
@@ -353,11 +362,88 @@ def test_origin_execute_figure_spec_maps_uncertainty_to_error_columns(
     assert plot_call["y_error_col"] == "se"
 
 
-def test_origin_plan_figure_spec_keeps_band_uncertainty_unsupported(tmp_path: Path) -> None:
+def test_origin_execute_figure_spec_adds_uncertainty_band(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     data_path = tmp_path / "data.csv"
     data_path.write_text("time,response,lo,hi\n0,1,0.8,1.2\n", encoding="utf-8")
     spec = _single_line_spec(data_path, tmp_path)
-    spec["plots"][0]["uncertainty"] = {"type": "band", "lower": "lo", "upper": "hi"}
+    spec["plots"][0]["uncertainty"] = {
+        "type": "band",
+        "lower": "lo",
+        "upper": "hi",
+        "fill_color": "lightblue",
+        "transparency": 65,
+    }
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    assert plan["data"]["warnings"] == []
+    plot_op = next(item for item in plan["data"]["operations"] if item["op"] == "plot")
+    assert plot_op["uncertainty_mapping"] == {"lower": "lo", "upper": "hi"}
+    assert plot_op["uncertainty_style"] == {"fill_color": "lightblue", "transparency": 65}
+    assert plot_op["uncertainty_supported"] is True
+    assert result["ok"] is True
+    assert result["data"]["executed"] is True
+    assert result["data"]["band_updates"] == [
+        {
+            "plot_id": "plot_a",
+            "graph_name": "Graph1",
+            "layer_index": 0,
+            "mode": "native_fillarea_base",
+            "lower_col": "lo",
+            "upper_col": "hi",
+            "plot_indices": [0, 1],
+            "fill_color": "lightblue",
+            "transparency": 65,
+        }
+    ]
+    fillarea_call = next(kwargs for name, kwargs in fake.calls if name == "plot_table_by_id")
+    assert fillarea_call["plot_type_id"] == 249
+    assert fillarea_call["template"] == "fillarea"
+    assert fillarea_call["selected_cols"] == [
+        "__origin_mcp_band_x",
+        "__origin_mcp_band_lower",
+        "__origin_mcp_band_upper",
+    ]
+    assert str(fillarea_call["path"]).endswith("line_demo_plot_a_band.csv")
+    assert fillarea_call["export_path"] is None
+    labtalk_call = next(
+        kwargs
+        for name, kwargs in fake.calls
+        if name == "run_labtalk" and "-pfv 9" in kwargs["script"]
+    )
+    assert "set __origin_mcp_band_plot -paap 65;" in labtalk_call["script"]
+    line_call = next(kwargs for name, kwargs in fake.calls if name == "add_plot_to_graph")
+    assert line_call == {
+        "worksheet": "[Book1]Sheet1",
+        "x_col": "__origin_mcp_band_x",
+        "y_col": "__origin_mcp_band_y",
+        "graph_name": "Graph1",
+        "layer_index": 0,
+        "plot_type": "line",
+        "z_col": None,
+        "y_error_col": None,
+        "x_error_col": None,
+    }
+    legend_call = next(kwargs for name, kwargs in fake.calls if name == "format_legend")
+    assert legend_call["text"] == "\\l(3) response"
+    export_call = next(kwargs for name, kwargs in fake.calls if name == "export_graph")
+    assert str(export_call["path"]).endswith("line_demo.png")
+    assert export_call["graph_name"] == "Graph1"
+
+
+def test_origin_plan_figure_spec_requires_band_bounds(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,lo\n0,1,0.8\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"][0]["uncertainty"] = {"type": "band", "lower": "lo"}
 
     result = figurespec_tools.origin_plan_figure_spec(spec)
 
@@ -369,13 +455,43 @@ def test_origin_plan_figure_spec_keeps_band_uncertainty_unsupported(tmp_path: Pa
             "code": "executor_does_not_apply_uncertainty_bands",
             "plot_id": "plot_a",
             "field": "uncertainty",
-            "unsupported_keys": ["lower", "type", "upper"],
+            "unsupported_keys": ["upper"],
             "supported_alternatives": ["uncertainty.y_error", "uncertainty.x_error"],
         }
     ]
     plot_op = next(item for item in result["data"]["operations"] if item["op"] == "plot")
     assert plot_op["uncertainty_supported"] is False
-    assert plot_op["uncertainty_unsupported_keys"] == ["lower", "type", "upper"]
+    assert plot_op["uncertainty_unsupported_keys"] == ["upper"]
+
+
+def test_origin_plan_figure_spec_limits_band_to_base_plot(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,other,lo,hi\n0,1,2,0.8,1.2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"].append(
+        {
+            "id": "plot_b",
+            "layer": "panel_a",
+            "type": "line",
+            "map": {"x": "time", "y": "other"},
+            "uncertainty": {"type": "band", "lower": "lo", "upper": "hi"},
+        }
+    )
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert result["data"]["warnings"] == ["executor_does_not_apply_uncertainty_bands"]
+    detail = result["data"]["warning_details"][0]
+    assert detail["plot_id"] == "plot_b"
+    assert detail["unsupported_keys"] == ["non_base_plot"]
+    plot_op = next(
+        item
+        for item in result["data"]["operations"]
+        if item["op"] == "plot" and item["id"] == "plot_b"
+    )
+    assert plot_op["uncertainty_supported"] is False
 
 
 def test_origin_execute_figure_spec_applies_group_style_sequences(

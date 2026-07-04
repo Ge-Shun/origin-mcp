@@ -28,10 +28,25 @@ SUPPORTED_UNCERTAINTY_KEYS = {
     "x_error",
     "x_error_col",
     "xerr",
+    "lower",
+    "lower_col",
+    "upper",
+    "upper_col",
+    "fill_color",
+    "color",
+    "transparency",
     "type",
     "kind",
 }
-SUPPORTED_UNCERTAINTY_KINDS = {"errorbar", "error_bar", "symmetric", "standard_error"}
+SUPPORTED_UNCERTAINTY_KINDS = {
+    "band",
+    "confidence_band",
+    "errorbar",
+    "error_bar",
+    "symmetric",
+    "standard_error",
+    "uncertainty_band",
+}
 GROUP_STYLE_SEQUENCE_KEYS = {
     "colors": "color",
     "line_widths": "line_width",
@@ -131,6 +146,9 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
     for plot in spec.plots:
         uncertainty_unsupported_keys = _unsupported_uncertainty_keys(plot.uncertainty)
         group_style_unsupported_keys = _unsupported_group_style_keys(plot.group_style)
+        uncertainty_supported = not uncertainty_unsupported_keys and _band_executor_supported(
+            spec, plot
+        )
         operations.append(
             {
                 "op": "plot",
@@ -141,7 +159,8 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
                 "map": plot.map,
                 "uncertainty": plot.uncertainty,
                 "uncertainty_mapping": _uncertainty_mapping(plot),
-                "uncertainty_supported": not uncertainty_unsupported_keys,
+                "uncertainty_style": _uncertainty_style(plot),
+                "uncertainty_supported": uncertainty_supported,
                 "uncertainty_unsupported_keys": uncertainty_unsupported_keys,
                 "group_style": plot.group_style,
                 "group_style_supported": not group_style_unsupported_keys
@@ -214,6 +233,13 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
             worksheet_refs[data.id] = client.import_table(**_import_kwargs(data))
 
     layer_setup = _ensure_layers_and_layout(spec, graph_name)
+    band_updates = _add_uncertainty_bands(
+        spec,
+        graph_name,
+        layer_indexes,
+        worksheet_refs,
+        base_plot,
+    )
     added_plots = _add_remaining_plots(spec, graph_name, layer_indexes, worksheet_refs, base_plot)
 
     axis_updates = []
@@ -233,6 +259,7 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
         "graph": graph_data,
         "command": command,
         "layer_setup": layer_setup,
+        "band_updates": band_updates,
         "added_plots": added_plots,
         "axis_updates": axis_updates,
         "style_updates": style_updates,
@@ -275,9 +302,60 @@ def _create_base_graph(
             y_label=layer.y.title,
             style_mode=_style_mode(spec),
             palette_name=spec.style.palette_name,
-            export_path=first_export,
+            export_path=None,
         )
         return worksheet, graph, command
+
+    band_mapping = _uncertainty_band_mapping(plot)
+    if band_mapping:
+        band_source, band_columns = _write_band_source(spec, data, plot, mapping, band_mapping)
+        worksheet, graph, command = client.plot_table_by_id(
+            path=band_source,
+            plot_type_id=249,
+            template=spec.style.template or "fillarea",
+            selected_cols=band_columns[:3],
+            book_name=None,
+            sheet_name=None,
+            excel_sheet=None,
+            delimiter=None,
+            encoding=None,
+            header=data.header,
+            skiprows=None,
+            nrows=None,
+            na_values=None,
+            graph_name=spec.figure.id,
+            title=spec.figure.title or layer.title,
+            x_label=layer.x.title,
+            y_label=layer.y.title,
+            style_mode=_style_mode(spec),
+            palette_name=spec.style.palette_name,
+            export_path=None,
+        )
+        graph_name = graph.as_dict().get("graph_name")
+        fill_result = client.run_labtalk(
+            _fill_area_script(graph_name, plot_index=0, **_uncertainty_style(plot))
+        )
+        y_col = band_columns[3]
+        base_plot_result = client.add_plot_to_graph(
+            worksheet=_worksheet_ref_expr(worksheet),
+            x_col=band_columns[0],
+            y_col=y_col,
+            graph_name=graph_name,
+            layer_index=0,
+            plot_type=plot_type,
+            z_col=mapping.get("z"),
+            y_error_col=mapping.get("error") or mapping.get("y_error"),
+            x_error_col=mapping.get("x_error"),
+        )
+        return (
+            worksheet,
+            graph,
+            {
+                **(command or {}),
+                "band_fill": fill_result,
+                "base_plot": base_plot_result,
+            },
+        )
 
     worksheet, graph = client.plot_table(
         path=data.source,
@@ -339,6 +417,47 @@ def _add_remaining_plots(
     return added
 
 
+def _add_uncertainty_bands(
+    spec: FigureSpec,
+    graph_name: str | None,
+    layer_indexes: dict[str, int],
+    worksheet_refs: dict[str, Any],
+    base_plot: Any,
+) -> list[dict[str, Any]]:
+    updates = []
+    for plot in spec.plots:
+        band_mapping = _uncertainty_band_mapping(plot)
+        if not band_mapping:
+            continue
+        if plot.id == base_plot.id:
+            updates.append(
+                {
+                    "plot_id": plot.id,
+                    "graph_name": graph_name,
+                    "layer_index": layer_indexes[plot.layer],
+                    "mode": "native_fillarea_base",
+                    "lower_col": band_mapping["lower"],
+                    "upper_col": band_mapping["upper"],
+                    "plot_indices": [0, 1],
+                    **_uncertainty_style(plot),
+                }
+            )
+            continue
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        mapping = _plot_mapping(data, plot)
+        result = client.add_uncertainty_band(
+            worksheet=_worksheet_ref_expr(worksheet_refs[data.id]),
+            x_col=mapping.get("x"),
+            lower_col=band_mapping["lower"],
+            upper_col=band_mapping["upper"],
+            graph_name=graph_name,
+            layer_index=layer_indexes[plot.layer],
+            **_uncertainty_style(plot),
+        )
+        updates.append({"plot_id": plot.id, **result})
+    return updates
+
+
 def _ensure_layers_and_layout(spec: FigureSpec, graph_name: str | None) -> dict[str, Any]:
     layer_count = len(spec.layers)
     added_layers = 0
@@ -363,6 +482,73 @@ def _add_layers_script(graph_name: str | None, count: int) -> str:
         parts.append(f'win -a "{_escape_labtalk(graph_name)}";')
     parts.extend("layadd;" for _ in range(count))
     return " ".join(parts)
+
+
+def _fill_area_script(
+    graph_name: str | None,
+    plot_index: int,
+    fill_color: str | int | tuple[int, int, int] | None = None,
+    transparency: float | None = None,
+) -> str:
+    fill_color_index = fill_color if isinstance(fill_color, int) else 4
+    parts = []
+    if graph_name:
+        parts.append(f'win -a "{_escape_labtalk(graph_name)}";')
+    parts.extend(
+        [
+            f"range __origin_mcp_band_plot = !{plot_index + 1};",
+            "set __origin_mcp_band_plot -pf 1;",
+            "set __origin_mcp_band_plot -pfv 9;",
+            f"set __origin_mcp_band_plot -pfb {fill_color_index};",
+            f"set __origin_mcp_band_plot -p2fb {fill_color_index};",
+        ]
+    )
+    if transparency is not None:
+        parts.append(f"set __origin_mcp_band_plot -paap {transparency:g};")
+    parts.append("rescale;")
+    return " ".join(parts)
+
+
+def _write_band_source(
+    spec: FigureSpec,
+    data: Any,
+    plot: Any,
+    mapping: dict[str, Any],
+    band_mapping: dict[str, Any],
+) -> tuple[Path, list[str]]:
+    y_columns = _y_columns(mapping) or []
+    if len(y_columns) != 1:
+        raise ValueError("FigureSpec band uncertainty currently requires exactly one y column.")
+    x_col = mapping.get("x")
+    y_col = y_columns[0]
+    lower_col = band_mapping["lower"]
+    upper_col = band_mapping["upper"]
+    if not all(isinstance(value, str) for value in (x_col, y_col, lower_col, upper_col)):
+        raise ValueError("FigureSpec band uncertainty currently requires named columns.")
+
+    df = read_table(
+        data.source,
+        excel_sheet=data.excel_sheet,
+        delimiter=data.delimiter,
+        encoding=data.encoding,
+        header=data.header,
+        skiprows=data.skiprows,
+        nrows=data.nrows,
+        na_values=data.na_values,
+    )
+    columns = [
+        "__origin_mcp_band_x",
+        "__origin_mcp_band_lower",
+        "__origin_mcp_band_upper",
+        "__origin_mcp_band_y",
+    ]
+    band_df = df[[x_col, lower_col, upper_col, y_col]].copy()
+    band_df.columns = columns
+    output_dir = spec.export.dir_figures or data.source.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"{spec.figure.id}_{plot.id}_band.csv"
+    band_df.to_csv(path, index=False)
+    return path, columns
 
 
 def _validate_data_columns(spec: FigureSpec) -> dict[str, Any]:
@@ -520,6 +706,19 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
                     "field": "uncertainty",
                     "unsupported_keys": uncertainty_unsupported_keys,
                     "supported_alternatives": ["uncertainty.y_error", "uncertainty.x_error"],
+                }
+            )
+        if _uncertainty_band_mapping(plot) and not _band_executor_supported(spec, plot):
+            warnings.append(
+                {
+                    "code": "executor_does_not_apply_uncertainty_bands",
+                    "plot_id": plot.id,
+                    "field": "uncertainty",
+                    "unsupported_keys": _unsupported_band_executor_features(spec, plot),
+                    "supported_alternatives": [
+                        "put the band on the first/base plot",
+                        "use named x/y/lower/upper columns",
+                    ],
                 }
             )
     if spec.page.layout not in SUPPORTED_LAYOUTS:
@@ -747,6 +946,9 @@ def _uncertainty_mapping(plot: Any) -> dict[str, Any]:
     uncertainty = plot.uncertainty
     if not uncertainty:
         return {}
+    band_mapping = _uncertainty_band_mapping(plot)
+    if band_mapping:
+        return band_mapping
     mapping: dict[str, Any] = {}
     y_error = (
         uncertainty.get("y_error")
@@ -764,16 +966,90 @@ def _uncertainty_mapping(plot: Any) -> dict[str, Any]:
     return mapping
 
 
+def _uncertainty_band_mapping(plot: Any) -> dict[str, Any]:
+    uncertainty = plot.uncertainty
+    if not uncertainty or _uncertainty_kind(uncertainty) not in {
+        "band",
+        "confidence_band",
+        "uncertainty_band",
+    }:
+        return {}
+    lower = uncertainty.get("lower") or uncertainty.get("lower_col")
+    upper = uncertainty.get("upper") or uncertainty.get("upper_col")
+    if lower is None or upper is None:
+        return {}
+    mapping: dict[str, Any] = {
+        "lower": lower,
+        "upper": upper,
+    }
+    return mapping
+
+
+def _uncertainty_style(plot: Any) -> dict[str, Any]:
+    uncertainty = plot.uncertainty
+    if not uncertainty:
+        return {}
+    mapping: dict[str, Any] = {}
+    fill_color = uncertainty.get("fill_color") or uncertainty.get("color")
+    transparency = uncertainty.get("transparency")
+    if fill_color is not None:
+        mapping["fill_color"] = fill_color
+    if transparency is not None:
+        mapping["transparency"] = transparency
+    return mapping
+
+
+def _uncertainty_kind(uncertainty: dict[str, Any]) -> str | None:
+    kind = uncertainty.get("type", uncertainty.get("kind"))
+    if kind is None:
+        return None
+    return str(kind).strip().lower()
+
+
 def _unsupported_uncertainty_keys(uncertainty: dict[str, Any]) -> list[str]:
     unsupported = [key for key in uncertainty if key not in SUPPORTED_UNCERTAINTY_KEYS]
-    kind = uncertainty.get("type", uncertainty.get("kind"))
-    if kind is not None and str(kind).strip().lower() not in SUPPORTED_UNCERTAINTY_KINDS:
+    kind = _uncertainty_kind(uncertainty)
+    if kind is not None and kind not in SUPPORTED_UNCERTAINTY_KINDS:
         unsupported.append("type")
+    if kind in {"band", "confidence_band", "uncertainty_band"}:
+        if uncertainty.get("lower") is None and uncertainty.get("lower_col") is None:
+            unsupported.append("lower")
+        if uncertainty.get("upper") is None and uncertainty.get("upper_col") is None:
+            unsupported.append("upper")
     return sorted(set(unsupported))
 
 
 def _unsupported_group_style_keys(group_style: dict[str, Any]) -> list[str]:
     return sorted(key for key in group_style if key not in SUPPORTED_GROUP_STYLE_KEYS)
+
+
+def _band_executor_supported(spec: FigureSpec, plot: Any) -> bool:
+    if not _uncertainty_band_mapping(plot):
+        return True
+    return not _unsupported_band_executor_features(spec, plot)
+
+
+def _unsupported_band_executor_features(spec: FigureSpec, plot: Any) -> list[str]:
+    if not _uncertainty_band_mapping(plot):
+        return []
+    unsupported = []
+    if plot.id != _base_plot(spec).id:
+        unsupported.append("non_base_plot")
+    data = _data_by_id(spec, _plot_data_ref(spec, plot))
+    mapping = _plot_mapping(data, plot)
+    y_columns = _y_columns(mapping) or []
+    if len(y_columns) != 1:
+        unsupported.append("multiple_y_columns")
+    band_mapping = _uncertainty_band_mapping(plot)
+    required = [
+        mapping.get("x"),
+        *(y_columns[:1]),
+        band_mapping.get("lower"),
+        band_mapping.get("upper"),
+    ]
+    if not all(isinstance(value, str) for value in required):
+        unsupported.append("non_named_columns")
+    return sorted(set(unsupported))
 
 
 def _apply_annotations(
@@ -798,9 +1074,11 @@ def _apply_annotations(
         kind = annotation.type.strip().lower()
         layer_index = layer_indexes.get(annotation.layer or spec.layers[0].id, 0)
         if kind == "legend":
+            text = annotation.text or _legend_text(spec)
             results.append(
                 client.format_legend(
                     graph_name=graph_name,
+                    text=text,
                     font_family=_legend_font(spec),
                     show_frame=annotation.frame,
                     position=annotation.location,
@@ -830,6 +1108,18 @@ def _apply_annotations(
     return results
 
 
+def _legend_text(spec: FigureSpec) -> str | None:
+    base_plot = _base_plot(spec)
+    if not _uncertainty_band_mapping(base_plot):
+        return None
+    data = _data_by_id(spec, _plot_data_ref(spec, base_plot))
+    mapping = _plot_mapping(data, base_plot)
+    y_columns = _y_columns(mapping) or []
+    if len(y_columns) != 1:
+        return None
+    return f"\\l(3) {y_columns[0]}"
+
+
 def _export_outputs(
     spec: FigureSpec,
     graph_data: dict[str, Any],
@@ -840,6 +1130,9 @@ def _export_outputs(
     first_export = export_paths[0] if export_paths else None
     if first_export and graph_data.get("export_path"):
         exported.append(client.inspect_export(Path(graph_data["export_path"])))
+    elif first_export:
+        item = client.export_graph(first_export, graph_name=graph_name, overwrite=True)
+        exported.append(client.inspect_export(Path(item["path"])))
     for path in export_paths[1:]:
         item = client.export_graph(path, graph_name=graph_name, overwrite=True)
         exported.append(client.inspect_export(Path(item["path"])))

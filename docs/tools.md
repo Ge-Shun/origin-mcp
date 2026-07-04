@@ -209,9 +209,13 @@ multi-Y plots: `colors`, `line_widths`, `bar_gaps`, `line_styles`,
 `symbol_kinds`, `symbol_sizes`, and `transparencies`, or a `series` list of
 per-series style objects. FigureSpec `uncertainty` supports error-bar mappings
 that route to the existing safe plotting path, for example
-`{"type": "errorbar", "y_error": "se"}` or `{"x_error": "xerr"}`. Filled
-confidence/uncertainty bands are still reported as unsupported executor
-features instead of being guessed.
+`{"type": "errorbar", "y_error": "se"}` or `{"x_error": "xerr"}`. It also
+supports worksheet-backed filled bands with lower/upper bound columns, for
+example `{"type": "band", "lower": "lo", "upper": "hi", "transparency": 65}`.
+Band support is intentionally narrow: the band must be on the first/base plot
+with one named y column. The executor creates a native Origin fill-area base
+graph from contiguous temporary x/lower/upper columns, overlays the main line,
+and trims the legend to the main series.
 
 For natural-language or registry-backed edits, `origin_set_plot_property`
 resolves a semantic `property_name` such as `柱宽`, `折线粗细`, `点大小`, or

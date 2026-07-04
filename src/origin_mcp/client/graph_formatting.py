@@ -258,6 +258,65 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             "plot_type": plot_type,
         }
 
+    def add_uncertainty_band(
+        self,
+        worksheet: str | None = None,
+        x_col: str | int | None = None,
+        lower_col: str | int | None = None,
+        upper_col: str | int | None = None,
+        graph_name: str | None = None,
+        layer_index: int = 0,
+        fill_color: str | int | tuple[int, int, int] | None = None,
+        transparency: float | None = None,
+    ) -> dict[str, Any]:
+        if x_col is None or lower_col is None or upper_col is None:
+            raise OriginOperationError(
+                "x_col, lower_col, and upper_col are required.",
+                error_code="invalid_request",
+            )
+        graph = self._find_or_active_graph(graph_name)
+        layer = self._graph_layer(graph, layer_index)
+        wks = self._find_sheet_from_ref(worksheet)
+        ref = self._worksheet_ref(wks)
+        columns = ref.columns
+        x_name = self._resolve_column(columns, x_col, default_index=0)
+        lower_name = self._resolve_column(columns, lower_col, default_index=1)
+        upper_name = self._resolve_column(columns, upper_col, default_index=2)
+        start_index = len(layer.plot_list())
+
+        self._add_plot(layer, wks, x_name=x_name, y_name=lower_name, kind="line")
+        self._add_plot(layer, wks, x_name=x_name, y_name=upper_name, kind="line")
+        plots = layer.plot_list()
+        lower_plot = plots[start_index]
+        upper_plot = plots[start_index + 1]
+        fill_color_index = fill_color if isinstance(fill_color, int) else 4
+        fill_script = self._set_plot_fill_area(
+            lower_plot,
+            graph_name=self._object_name(graph, default=graph_name or ""),
+            layer_index=layer_index,
+            plot_index=start_index,
+            fill_color_index=fill_color_index,
+            transparency=transparency,
+        )
+        if fill_color is not None:
+            lower_plot.color = fill_color
+        if transparency is not None:
+            lower_plot.transparency = transparency
+            upper_plot.transparency = transparency
+        self._rescale(layer)
+        return {
+            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "layer_index": layer_index,
+            "worksheet": ref.as_dict(),
+            "x_col": x_name,
+            "lower_col": lower_name,
+            "upper_col": upper_name,
+            "plot_indices": [start_index, start_index + 1],
+            "fill_color": fill_color,
+            "transparency": transparency,
+            "fill_script": fill_script,
+        }
+
     def add_inset_layer(
         self,
         worksheet: str | None = None,
