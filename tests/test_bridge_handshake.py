@@ -112,6 +112,45 @@ def test_from_env_falls_back_to_defaults_without_handshake(isolated_handshake: P
     assert config.token is None
 
 
+def test_from_env_rejects_invalid_env_port(
+    isolated_handshake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGIN_MCP_BRIDGE_PORT", "not-a-port")
+
+    with pytest.raises(OriginBridgeError) as excinfo:
+        OriginBridgeConfig.from_env()
+
+    assert excinfo.value.error_code == "invalid_bridge_config"
+    assert "ORIGIN_MCP_BRIDGE_PORT" in str(excinfo.value)
+
+
+def test_from_env_rejects_invalid_handshake_port(isolated_handshake: Path) -> None:
+    isolated_handshake.write_text(
+        '{"host": "127.0.0.1", "port": "not-a-port", "token": "tok"}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OriginBridgeError) as excinfo:
+        OriginBridgeConfig.from_env()
+
+    assert excinfo.value.error_code == "invalid_bridge_config"
+    assert "bridge handshake port" in str(excinfo.value)
+
+
+def test_from_env_rejects_invalid_env_timeout(
+    isolated_handshake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGIN_MCP_BRIDGE_TIMEOUT", "not-a-timeout")
+
+    with pytest.raises(OriginBridgeError) as excinfo:
+        OriginBridgeConfig.from_env()
+
+    assert excinfo.value.error_code == "invalid_bridge_config"
+    assert "ORIGIN_MCP_BRIDGE_TIMEOUT" in str(excinfo.value)
+
+
 def test_handshake_token_authenticates_against_running_bridge(isolated_handshake: Path) -> None:
     """End-to-end: a token-protected bridge accepts a client configured purely
     from the handshake file, and rejects one that ignores it."""

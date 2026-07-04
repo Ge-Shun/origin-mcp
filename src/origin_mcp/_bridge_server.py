@@ -185,10 +185,10 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             if not persistent:
                 return
 
-    def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
-        request_id = request.get("id")
+    def _dispatch(self, request: Any) -> dict[str, Any]:
         if not isinstance(request, dict):
             raise OriginOperationError("Bridge request must be a JSON object.")
+        request_id = request.get("id")
         if self.server.token:
             supplied = request.get("token")
             if not isinstance(supplied, str) or not hmac.compare_digest(

@@ -195,6 +195,24 @@ def test_bridge_client_pings_bridge() -> None:
     assert result["max_tasks"] == 200
 
 
+def test_bridge_rejects_non_object_json_request_cleanly() -> None:
+    with running_bridge() as server:
+        host, port = server.server_address
+        raw = bridge_client_module.socket.create_connection((host, port), timeout=2.0)
+        try:
+            stream = raw.makefile("rwb")
+            stream.write(b'["not", "an", "object"]\n')
+            stream.flush()
+            response = json.loads(stream.readline().decode("utf-8"))
+        finally:
+            raw.close()
+
+    assert response["ok"] is False
+    assert response["error_code"] == "origin_operation_failed"
+    assert response["error_type"] == "OriginOperationError"
+    assert response["message"] == "Bridge request must be a JSON object."
+
+
 def test_request_does_not_retry_after_read_timeout() -> None:
     # A timeout while waiting for the response means the bridge may still be
     # executing the (non-idempotent) request, so the client must fail fast with
@@ -673,6 +691,39 @@ def test_bridge_task_status_can_include_recent_logs_without_result() -> None:
     assert len(status["logs"]) <= 2
     assert status["logs"][-1]["message"] == "Task completed."
     assert status["current_step"] == "Completed"
+
+
+def test_bridge_task_status_serializes_while_holding_lock() -> None:
+    class _CheckingTask:
+        def __init__(self, manager: Any) -> None:
+            self.manager = manager
+
+        def as_dict(
+            self,
+            include_result: bool = True,
+            *,
+            include_logs: bool = False,
+            log_limit: int = 20,
+        ) -> dict[str, Any]:
+            assert self.manager._lock.locked()
+            return {
+                "include_result": include_result,
+                "include_logs": include_logs,
+                "log_limit": log_limit,
+            }
+
+    manager = bridge.BridgeTaskManager(FakeOriginClient(), use_worker_thread=False)
+    with manager._lock:
+        manager._tasks["task-1"] = _CheckingTask(manager)  # type: ignore[assignment]
+
+    result = manager.status(
+        "task-1",
+        include_result=False,
+        include_logs=True,
+        log_limit=3,
+    )
+
+    assert result == {"task": {"include_result": False, "include_logs": True, "log_limit": 3}}
 
 
 @pytest.mark.parametrize(

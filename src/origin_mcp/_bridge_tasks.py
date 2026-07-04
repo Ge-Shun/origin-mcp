@@ -110,13 +110,20 @@ class BridgeTaskManager:
         log_limit: int = 20,
         include_result: bool = True,
     ) -> dict[str, Any]:
-        return {
-            "task": self._get_task(task_id).as_dict(
-                include_result=include_result,
-                include_logs=include_logs,
-                log_limit=log_limit,
-            )
-        }
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                raise OriginOperationError(
+                    f"Bridge task not found: {task_id}",
+                    error_code="bridge_task_not_found",
+                )
+            return {
+                "task": task.as_dict(
+                    include_result=include_result,
+                    include_logs=include_logs,
+                    log_limit=log_limit,
+                )
+            }
 
     def cancel(self, task_id: str) -> dict[str, Any]:
         with self._lock:

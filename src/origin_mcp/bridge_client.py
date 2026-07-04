@@ -22,6 +22,26 @@ DEFAULT_BRIDGE_PORT = 47631
 DEFAULT_BRIDGE_TIMEOUT = 30.0
 
 
+def _parse_bridge_port(value: Any, source: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise OriginBridgeError(
+            f"Invalid {source}: expected an integer port, got {value!r}.",
+            "invalid_bridge_config",
+        ) from exc
+
+
+def _parse_bridge_timeout(value: Any, source: str) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise OriginBridgeError(
+            f"Invalid {source}: expected a numeric timeout, got {value!r}.",
+            "invalid_bridge_config",
+        ) from exc
+
+
 @dataclass(frozen=True)
 class OriginBridgeConfig:
     host: str = DEFAULT_BRIDGE_HOST
@@ -57,9 +77,9 @@ class OriginBridgeConfig:
         if resolved_port is None:
             env_port = env.get("ORIGIN_MCP_BRIDGE_PORT")
             if env_port:
-                resolved_port = int(env_port)
+                resolved_port = _parse_bridge_port(env_port, "ORIGIN_MCP_BRIDGE_PORT")
             elif handshake.get("port"):
-                resolved_port = int(handshake["port"])
+                resolved_port = _parse_bridge_port(handshake["port"], "bridge handshake port")
             else:
                 resolved_port = DEFAULT_BRIDGE_PORT
 
@@ -74,7 +94,10 @@ class OriginBridgeConfig:
         resolved_timeout = (
             timeout
             if timeout is not None
-            else float(env.get("ORIGIN_MCP_BRIDGE_TIMEOUT", DEFAULT_BRIDGE_TIMEOUT))
+            else _parse_bridge_timeout(
+                env.get("ORIGIN_MCP_BRIDGE_TIMEOUT", DEFAULT_BRIDGE_TIMEOUT),
+                "ORIGIN_MCP_BRIDGE_TIMEOUT",
+            )
         )
 
         return cls(
