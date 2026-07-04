@@ -841,13 +841,21 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
 
     @staticmethod
     def _set_origin_property(obj: Any, name: str, value: Any) -> None:
+        float_properties = {
+            "bar_gap",
+            "height",
+            "line_width",
+            "symbol_size",
+            "transparency",
+            "width",
+        }
         setter = getattr(obj, "set_int", None)
-        if callable(setter) and isinstance(value, int):
+        if callable(setter) and isinstance(value, int) and name not in float_properties:
             setter(name, value)
             return
         setter = getattr(obj, "set_float", None)
-        if callable(setter) and isinstance(value, float):
-            setter(name, value)
+        if callable(setter) and isinstance(value, (float, int)) and name in float_properties:
+            setter(name, float(value))
             return
         try:
             setattr(obj, name, value)

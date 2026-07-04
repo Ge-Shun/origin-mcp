@@ -1624,6 +1624,32 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert result["diagnostics"]["summary"]["plots"] == 1
 
 
+def test_set_origin_property_sends_int_width_as_float() -> None:
+    client = OriginClient()
+
+    class PlotWithTypedSetters:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def set_int(self, name: str, value: int) -> None:
+            self.calls.append(("int", name, value))
+
+        def set_float(self, name: str, value: float) -> None:
+            self.calls.append(("float", name, value))
+
+    plot = PlotWithTypedSetters()
+
+    client._set_origin_property(plot, "width", 2)
+    client._set_origin_property(plot, "symbol_size", 5)
+    client._set_origin_property(plot, "fsize", 18)
+
+    assert plot.calls == [
+        ("float", "width", 2.0),
+        ("float", "symbol_size", 5.0),
+        ("int", "fsize", 18),
+    ]
+
+
 def test_apply_nature_style_uses_chart_specific_scatter_rules(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
