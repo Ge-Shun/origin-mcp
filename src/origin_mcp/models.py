@@ -255,6 +255,13 @@ class FigureLayerSpec(BaseModel):
     id: str = Field(description="Layer/panel id.")
     page: str | None = None
     position_mode: Literal["grid", "absolute"] = Field(default="grid")
+    position: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Absolute layer geometry for position_mode='absolute': left, top, width, "
+            "height as page percentages."
+        ),
+    )
     grid_cell: list[int] | None = None
     grid_span: list[int] | None = None
     title: str | None = None

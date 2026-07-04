@@ -57,26 +57,67 @@ class _ExportMixin(_OriginClientBase):
         graph_name: str | None = None,
         graph: Any | None = None,
         overwrite: bool = True,
+        width: int = 0,
     ) -> dict[str, Any]:
         path = self._normalize_user_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not overwrite:
             raise OriginOperationError(f"Export path already exists: {path}")
 
+        target = graph
+        target_lookup_error: Exception | None = None
+        if target is None:
+            try:
+                target = self._find_or_active_graph(graph_name)
+            except Exception as exc:
+                if graph_name is None:
+                    raise
+                target_lookup_error = exc
         if graph_name:
             self._suppress_graph_title_text(graph_name=graph_name, title=None)
-            self.run_labtalk(self._export_graph_labtalk(path, graph_name))
-        else:
-            target = graph if graph is not None else self._find_or_active_graph(graph_name)
+        elif target is not None:
             self._suppress_graph_title_text(graph=target, graph_name=None, title=None)
-            if not hasattr(target, "save_fig"):
-                self.run_labtalk(self._export_graph_labtalk(path, None))
-                return {"path": str(path)}
-            target.save_fig(str(path))
 
-        return {"path": str(path)}
+        if target is not None and hasattr(target, "save_fig"):
+            try:
+                target.save_fig(
+                    str(path),
+                    type=path.suffix.lower().lstrip(".") or "png",
+                    replace=overwrite,
+                    width=width,
+                )
+                return {"path": str(path), "method": "originpro.save_fig"}
+            except TypeError:
+                target.save_fig(str(path))
+                return {"path": str(path), "method": "originpro.save_fig"}
+            except Exception as exc:
+                fallback = self._export_graph_labtalk(path, graph_name, width=width)
+                result = self.run_labtalk(fallback)
+                if result.get("result") is False:
+                    raise OriginOperationError(
+                        f"Origin graph export failed via save_fig and expGraph: {exc}",
+                        error_code="graph_export_failed",
+                    ) from exc
+                return {
+                    "path": str(path),
+                    "method": "labtalk.expGraph",
+                    "fallback_error": f"{type(exc).__name__}: {exc}",
+                }
 
-    def _export_graph_labtalk(self, path: Path, graph_name: str | None) -> str:
+        self.run_labtalk(self._export_graph_labtalk(path, graph_name, width=width))
+        result = {"path": str(path), "method": "labtalk.expGraph"}
+        if target_lookup_error is not None:
+            result["target_lookup_error"] = (
+                f"{type(target_lookup_error).__name__}: {target_lookup_error}"
+            )
+        return result
+
+    def _export_graph_labtalk(
+        self,
+        path: Path,
+        graph_name: str | None,
+        width: int = 0,
+    ) -> str:
         export_type = path.suffix.lower().lstrip(".") or "png"
         if export_type == "jpeg":
             export_type = "jpg"
@@ -90,6 +131,8 @@ class _ExportMixin(_OriginClientBase):
             parts.append(f'expGraph pages:="{safe_graph_name}"')
         else:
             parts.append("expGraph")
+        if width > 0:
+            parts.append(f"tr1.width:={int(width)} tr1.unit:=pixel")
         parts.append(
             f'type:={export_type} path:="{safe_path}" '
             f'filename:="{safe_filename}" overwrite:=replace;'

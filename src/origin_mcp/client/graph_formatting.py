@@ -284,36 +284,39 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
         upper_name = self._resolve_column(columns, upper_col, default_index=2)
         start_index = len(layer.plot_list())
 
-        self._add_plot(layer, wks, x_name=x_name, y_name=lower_name, kind="line")
-        self._add_plot(layer, wks, x_name=x_name, y_name=upper_name, kind="line")
-        plots = layer.plot_list()
-        lower_plot = plots[start_index]
-        upper_plot = plots[start_index + 1]
+        data_range = self._worksheet_range_expr(wks, columns, [x_name, lower_name, upper_name])
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
+        safe_graph = self._escape_labtalk(graph_name_actual)
+        plot_script = f"plotxy iy:={data_range} plot:=249 ogl:=[{safe_graph}]{layer_index + 1};"
+        result = self.run_labtalk(plot_script)
+        if result.get("result") is False:
+            raise OriginOperationError(f"Origin rejected uncertainty-band script: {plot_script}")
+
+        end_index = len(layer.plot_list())
+        plot_index = start_index if end_index <= start_index else end_index - 1
         fill_color_index = fill_color if isinstance(fill_color, int) else 4
-        fill_script = self._set_plot_fill_area(
-            lower_plot,
-            graph_name=self._object_name(graph, default=graph_name or ""),
+        fill_script = self._fill_area_script(
+            graph_name=graph_name_actual,
             layer_index=layer_index,
-            plot_index=start_index,
+            plot_index=plot_index,
             fill_color_index=fill_color_index,
             transparency=transparency,
         )
-        if fill_color is not None:
-            lower_plot.color = fill_color
-        if transparency is not None:
-            lower_plot.transparency = transparency
-            upper_plot.transparency = transparency
+        fill_result = self.run_labtalk(fill_script)
+        if fill_result.get("result") is False:
+            raise OriginOperationError(f"Origin rejected fill-area script: {fill_script}")
         self._rescale(layer)
         return {
-            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "graph_name": graph_name_actual,
             "layer_index": layer_index,
             "worksheet": ref.as_dict(),
             "x_col": x_name,
             "lower_col": lower_name,
             "upper_col": upper_name,
-            "plot_indices": [start_index, start_index + 1],
+            "plot_indices": list(range(start_index, max(start_index + 1, end_index))),
             "fill_color": fill_color,
             "transparency": transparency,
+            "plot_script": plot_script,
             "fill_script": fill_script,
         }
 
@@ -522,6 +525,7 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
         columns: int = 1,
         gap_x: float | None = None,
         gap_y: float | None = None,
+        layer_geometries: list[dict[str, float | int]] | None = None,
     ) -> dict[str, Any]:
         if rows < 1 or columns < 1:
             raise OriginOperationError("rows and columns must be at least 1.")
@@ -530,16 +534,34 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
         self._activate_graph(graph, graph_name_actual)
         args = [f"row:={rows}", f"col:={columns}"]
         if gap_x is not None:
-            args.append(f"vgap:={gap_x}")
+            args.append(f"xgap:={gap_x}")
         if gap_y is not None:
-            args.append(f"hgap:={gap_y}")
+            args.append(f"ygap:={gap_y}")
         script = "layarrange " + " ".join(args) + ";"
         result = self.run_labtalk(script)
+        geometry_script = None
+        geometry_result = None
+        if layer_geometries:
+            geometry_parts = []
+            for item in layer_geometries:
+                index = int(item["layer_index"])
+                geometry_parts.append(
+                    f"layer -s {index + 1}; "
+                    f"layer.left={float(item['left'])}; "
+                    f"layer.top={float(item['top'])}; "
+                    f"layer.width={float(item['width'])}; "
+                    f"layer.height={float(item['height'])};"
+                )
+            geometry_script = " ".join(geometry_parts)
+            geometry_result = self.run_labtalk(geometry_script)
         return {
             "graph_name": graph_name_actual,
             "rows": rows,
             "columns": columns,
             "script": script,
+            "layer_geometries": layer_geometries or [],
+            "geometry_script": geometry_script,
+            "geometry_result": geometry_result,
             **result,
         }
 

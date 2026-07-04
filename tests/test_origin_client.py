@@ -1225,13 +1225,14 @@ def test_export_preview_does_not_prune_caller_directory(
     assert len([p for p in out.iterdir() if p.is_file()]) == 26
 
 
-def test_export_graph_prefers_labtalk_when_graph_name_provided(
+def test_export_graph_falls_back_to_labtalk_without_save_fig(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = OriginClient()
     path = tmp_path / "graph.png"
     scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: object())
     monkeypatch.setattr(
         client,
         "run_labtalk",
@@ -1241,9 +1242,36 @@ def test_export_graph_prefers_labtalk_when_graph_name_provided(
     result = client.export_graph(path, graph_name="Graph 1")
 
     assert result["path"] == str(path)
+    assert result["method"] == "labtalk.expGraph"
     assert 'title.show=0; title.text$="";' in scripts[0]
     assert 'win -a "Graph 1"; expGraph pages:="Graph 1" type:=png path:="' in scripts[1]
     assert 'filename:="graph" overwrite:=replace;' in scripts[1]
+
+
+def test_export_graph_by_name_uses_labtalk_when_target_lookup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    path = tmp_path / "graph.png"
+    scripts = []
+
+    def fail_lookup(_name: str | None) -> object:
+        raise OriginOperationError("Graph object is not available")
+
+    monkeypatch.setattr(client, "_find_or_active_graph", fail_lookup)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.export_graph(path, graph_name="Graph 1")
+
+    assert result["path"] == str(path)
+    assert result["method"] == "labtalk.expGraph"
+    assert result["target_lookup_error"].startswith("OriginOperationError:")
+    assert 'win -a "Graph 1"; expGraph pages:="Graph 1" type:=png path:="' in scripts[1]
 
 
 def test_add_graph_label_formats_text(monkeypatch: pytest.MonkeyPatch) -> None:

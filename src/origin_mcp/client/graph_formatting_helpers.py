@@ -759,19 +759,13 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         fill_color_index: int,
         transparency: float | None = None,
     ) -> str:
-        range_name = "__origin_mcp_band_plot"
-        script_parts = [
-            f'win -a "{self._escape_labtalk(graph_name)}";',
-            f"range {range_name} = !{plot_index + 1};",
-            f"set {range_name} -pf 1;",
-            f"set {range_name} -pfv 9;",
-            f"set {range_name} -pfb {fill_color_index};",
-            f"set {range_name} -p2fb {fill_color_index};",
-        ]
-        if transparency is not None:
-            script_parts.append(f"set {range_name} -paap {transparency:g};")
-        script_parts.append("rescale;")
-        script = " ".join(script_parts)
+        script = self._fill_area_script(
+            graph_name=graph_name,
+            layer_index=layer_index,
+            plot_index=plot_index,
+            fill_color_index=fill_color_index,
+            transparency=transparency,
+        )
         result = self.run_labtalk(script)
         if result.get("result") is False:
             raise OriginOperationError(f"Origin rejected fill-area script: {script}")
@@ -782,6 +776,29 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             except TypeError:
                 pass
         return script
+
+    def _fill_area_script(
+        self,
+        graph_name: str,
+        layer_index: int,
+        plot_index: int,
+        fill_color_index: int,
+        transparency: float | None = None,
+    ) -> str:
+        range_name = "__origin_mcp_band_plot"
+        script_parts = [
+            f'win -a "{self._escape_labtalk(graph_name)}";',
+            f"layer -s {layer_index + 1};",
+            f"range {range_name} = !{plot_index + 1};",
+            f"set {range_name} -pf 1;",
+            f"set {range_name} -pfv 9;",
+            f"set {range_name} -pfb {fill_color_index};",
+            f"set {range_name} -p2fb {fill_color_index};",
+        ]
+        if transparency is not None:
+            script_parts.append(f"set {range_name} -paap {transparency:g};")
+        script_parts.append("rescale;")
+        return " ".join(script_parts)
 
     def _set_plot_line_width(self, plot: Any, line_width: float) -> None:
         native_width = self._origin_line_width_units(line_width)

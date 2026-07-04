@@ -19,7 +19,7 @@ SUPPORTED_PLOT_TYPES = {
     "contour",
     "heatmap",
 }
-SUPPORTED_LAYOUTS = {"single", "grid"}
+SUPPORTED_LAYOUTS = {"single", "grid", "custom"}
 SUPPORTED_UNCERTAINTY_KEYS = {
     "error",
     "y_error",
@@ -140,6 +140,9 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
                 "y": layer.y.model_dump(exclude_none=True),
                 "panel_tag": layer.panel_tag,
                 "grid_cell": layer.grid_cell,
+                "grid_span": layer.grid_span,
+                "position_mode": layer.position_mode,
+                "position": layer.position,
             }
         )
 
@@ -170,9 +173,17 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
             }
         )
 
-    if spec.page.layout == "grid" and len(spec.layers) > 1:
+    page_setup = _page_setup_plan(spec)
+    if page_setup:
+        operations.append({"op": "set_graph_page", **page_setup})
+
+    if spec.page.layout in {"grid", "custom"} and len(spec.layers) > 1:
         rows, columns = _grid_shape(spec)
-        operations.append({"op": "arrange_layers", "rows": rows, "columns": columns})
+        arrange_op = {"op": "arrange_layers", "rows": rows, "columns": columns}
+        arrange_op.update(_layout_spacing_plan(spec))
+        if spec.page.layout == "custom":
+            arrange_op["layer_geometries"] = _layer_geometries(spec, rows, columns)
+        operations.append(arrange_op)
 
     for annotation in spec.annotations:
         operations.append(
@@ -224,7 +235,10 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
         client.new_project(show=spec.runtime.show_origin)
 
     worksheet, graph, command = _create_base_graph(spec, base_data, base_layer, base_plot)
-    worksheet_refs[base_data.id] = worksheet
+    if _uncertainty_band_mapping(base_plot):
+        worksheet_refs[base_data.id] = client.import_table(**_import_kwargs(base_data))
+    else:
+        worksheet_refs[base_data.id] = worksheet
     graph_data = graph.as_dict()
     graph_name = graph_data.get("graph_name")
 
@@ -240,7 +254,10 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
         worksheet_refs,
         base_plot,
     )
-    added_plots = _add_remaining_plots(spec, graph_name, layer_indexes, worksheet_refs, base_plot)
+    added_plots, additional_band_updates = _add_remaining_plots(
+        spec, graph_name, layer_indexes, worksheet_refs, base_plot
+    )
+    band_updates.extend(additional_band_updates)
 
     axis_updates = []
     for layer in spec.layers:
@@ -333,7 +350,7 @@ def _create_base_graph(
         )
         graph_name = graph.as_dict().get("graph_name")
         fill_result = client.run_labtalk(
-            _fill_area_script(graph_name, plot_index=0, **_uncertainty_style(plot))
+            _fill_area_script(graph_name, layer_index=0, plot_index=0, **_uncertainty_style(plot))
         )
         y_col = band_columns[3]
         base_plot_result = client.add_plot_to_graph(
@@ -393,13 +410,26 @@ def _add_remaining_plots(
     layer_indexes: dict[str, int],
     worksheet_refs: dict[str, Any],
     base_plot: Any,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     added = []
+    band_updates = []
     for plot in spec.plots:
         if plot.id == base_plot.id:
             continue
         data = _data_by_id(spec, _plot_data_ref(spec, plot))
         mapping = _plot_mapping(data, plot)
+        band_mapping = _uncertainty_band_mapping(plot)
+        if band_mapping:
+            result = client.add_uncertainty_band(
+                worksheet=_worksheet_ref_expr(worksheet_refs[data.id]),
+                x_col=mapping.get("x"),
+                lower_col=band_mapping["lower"],
+                upper_col=band_mapping["upper"],
+                graph_name=graph_name,
+                layer_index=layer_indexes[plot.layer],
+                **_uncertainty_style(plot),
+            )
+            band_updates.append({"plot_id": plot.id, **result})
         y_options: list[Any] = list(_y_columns(mapping) or []) or [None]
         for y_col in y_options:
             result = client.add_plot_to_graph(
@@ -414,7 +444,7 @@ def _add_remaining_plots(
                 x_error_col=mapping.get("x_error"),
             )
             added.append({"plot_id": plot.id, "y_col": y_col, **result})
-    return added
+    return added, band_updates
 
 
 def _add_uncertainty_bands(
@@ -428,6 +458,8 @@ def _add_uncertainty_bands(
     for plot in spec.plots:
         band_mapping = _uncertainty_band_mapping(plot)
         if not band_mapping:
+            continue
+        if plot.id != base_plot.id:
             continue
         if plot.id == base_plot.id:
             updates.append(
@@ -443,23 +475,12 @@ def _add_uncertainty_bands(
                 }
             )
             continue
-        data = _data_by_id(spec, _plot_data_ref(spec, plot))
-        mapping = _plot_mapping(data, plot)
-        result = client.add_uncertainty_band(
-            worksheet=_worksheet_ref_expr(worksheet_refs[data.id]),
-            x_col=mapping.get("x"),
-            lower_col=band_mapping["lower"],
-            upper_col=band_mapping["upper"],
-            graph_name=graph_name,
-            layer_index=layer_indexes[plot.layer],
-            **_uncertainty_style(plot),
-        )
-        updates.append({"plot_id": plot.id, **result})
     return updates
 
 
 def _ensure_layers_and_layout(spec: FigureSpec, graph_name: str | None) -> dict[str, Any]:
     layer_count = len(spec.layers)
+    page_setup = _apply_page_setup(spec, graph_name)
     added_layers = 0
     if layer_count > 1:
         script = _add_layers_script(graph_name, layer_count - 1)
@@ -468,10 +489,18 @@ def _ensure_layers_and_layout(spec: FigureSpec, graph_name: str | None) -> dict[
             added_layers = layer_count - 1
 
     arranged = None
-    if spec.page.layout == "grid" and layer_count > 1:
+    if spec.page.layout in {"grid", "custom"} and layer_count > 1:
         rows, columns = _grid_shape(spec)
-        arranged = client.arrange_layers(graph_name=graph_name, rows=rows, columns=columns)
-    return {"added_layers": added_layers, "arranged": arranged}
+        arrange_kwargs: dict[str, Any] = {
+            "graph_name": graph_name,
+            "rows": rows,
+            "columns": columns,
+            **_layout_spacing_plan(spec),
+        }
+        if spec.page.layout == "custom":
+            arrange_kwargs["layer_geometries"] = _layer_geometries(spec, rows, columns)
+        arranged = client.arrange_layers(**arrange_kwargs)
+    return {"page": page_setup, "added_layers": added_layers, "arranged": arranged}
 
 
 def _add_layers_script(graph_name: str | None, count: int) -> str:
@@ -486,6 +515,7 @@ def _add_layers_script(graph_name: str | None, count: int) -> str:
 
 def _fill_area_script(
     graph_name: str | None,
+    layer_index: int,
     plot_index: int,
     fill_color: str | int | tuple[int, int, int] | None = None,
     transparency: float | None = None,
@@ -494,6 +524,7 @@ def _fill_area_script(
     parts = []
     if graph_name:
         parts.append(f'win -a "{_escape_labtalk(graph_name)}";')
+    parts.append(f"layer -s {layer_index + 1};")
     parts.extend(
         [
             f"range __origin_mcp_band_plot = !{plot_index + 1};",
@@ -716,7 +747,7 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
                     "field": "uncertainty",
                     "unsupported_keys": _unsupported_band_executor_features(spec, plot),
                     "supported_alternatives": [
-                        "put the band on the first/base plot",
+                        "use exactly one y column per banded plot",
                         "use named x/y/lower/upper columns",
                     ],
                 }
@@ -724,12 +755,30 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
     if spec.page.layout not in SUPPORTED_LAYOUTS:
         warnings.append(
             {
-                "code": "executor_supports_only_single_or_grid_layout",
+                "code": "executor_supports_only_single_grid_or_custom_layout",
                 "field": "page.layout",
                 "value": spec.page.layout,
                 "supported_values": sorted(SUPPORTED_LAYOUTS),
             }
         )
+    for layer in spec.layers:
+        if layer.position_mode == "absolute" and _missing_absolute_position_keys(layer):
+            warnings.append(
+                {
+                    "code": "executor_requires_absolute_layer_position",
+                    "layer_id": layer.id,
+                    "field": "layers.position",
+                    "missing_keys": _missing_absolute_position_keys(layer),
+                    "required_keys": ["left", "top", "width", "height"],
+                    "supported_alternatives": [
+                        "page.layout=custom",
+                        "layers.grid_cell",
+                        "layers.grid_span",
+                        "page.margins_mm",
+                        "page.panel_spacing_mm",
+                    ],
+                }
+            )
     if len(spec.layers) > 1 and not any(plot.layer == spec.layers[0].id for plot in spec.plots):
         warnings.append(
             {
@@ -869,14 +918,12 @@ def _apply_plot_styles(
     base_plot: Any,
 ) -> list[dict[str, Any]]:
     updates = []
-    next_plot_index = {layer.id: 0 for layer in spec.layers}
-    execution_order = [base_plot, *(plot for plot in spec.plots if plot.id != base_plot.id)]
-    for plot in execution_order:
+    primary_indices = _plot_primary_indices(spec, base_plot)
+    for plot in _plot_execution_order(spec, base_plot):
         data = _data_by_id(spec, _plot_data_ref(spec, plot))
         mapping = _plot_mapping(data, plot)
         y_count = len(_y_columns(mapping) or [None])
         layer_index = layer_indexes[plot.layer]
-        start_index = next_plot_index[plot.layer]
         for offset in range(y_count):
             style = _plot_style_kwargs(_plot_series_style(plot, offset))
             if style:
@@ -887,13 +934,31 @@ def _apply_plot_styles(
                         **client.set_plot_style(
                             graph_name=graph_name,
                             layer_index=layer_index,
-                            plot_index=start_index + offset,
+                            plot_index=primary_indices[plot.id][offset],
                             **style,
                         ),
                     }
                 )
-        next_plot_index[plot.layer] = start_index + y_count
     return updates
+
+
+def _plot_execution_order(spec: FigureSpec, base_plot: Any) -> list[Any]:
+    return [base_plot, *(plot for plot in spec.plots if plot.id != base_plot.id)]
+
+
+def _plot_primary_indices(spec: FigureSpec, base_plot: Any) -> dict[str, list[int]]:
+    next_plot_index = {layer.id: 0 for layer in spec.layers}
+    indices: dict[str, list[int]] = {}
+    for plot in _plot_execution_order(spec, base_plot):
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        mapping = _plot_mapping(data, plot)
+        y_count = len(_y_columns(mapping) or [None])
+        start_index = next_plot_index[plot.layer]
+        band_slots = 2 if _uncertainty_band_mapping(plot) else 0
+        primary_start = start_index + band_slots
+        indices[plot.id] = [primary_start + offset for offset in range(y_count)]
+        next_plot_index[plot.layer] = primary_start + y_count
+    return indices
 
 
 def _plot_series_style(plot: Any, series_index: int) -> dict[str, Any]:
@@ -1033,8 +1098,6 @@ def _unsupported_band_executor_features(spec: FigureSpec, plot: Any) -> list[str
     if not _uncertainty_band_mapping(plot):
         return []
     unsupported = []
-    if plot.id != _base_plot(spec).id:
-        unsupported.append("non_base_plot")
     data = _data_by_id(spec, _plot_data_ref(spec, plot))
     mapping = _plot_mapping(data, plot)
     y_columns = _y_columns(mapping) or []
@@ -1110,14 +1173,21 @@ def _apply_annotations(
 
 def _legend_text(spec: FigureSpec) -> str | None:
     base_plot = _base_plot(spec)
-    if not _uncertainty_band_mapping(base_plot):
+    if not any(_uncertainty_band_mapping(plot) for plot in spec.plots):
         return None
-    data = _data_by_id(spec, _plot_data_ref(spec, base_plot))
-    mapping = _plot_mapping(data, base_plot)
-    y_columns = _y_columns(mapping) or []
-    if len(y_columns) != 1:
+    entries = []
+    primary_indices = _plot_primary_indices(spec, base_plot)
+    for plot in _plot_execution_order(spec, base_plot):
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        mapping = _plot_mapping(data, plot)
+        y_columns = _y_columns(mapping) or []
+        if not y_columns:
+            continue
+        for index, y_col in zip(primary_indices[plot.id], y_columns, strict=False):
+            entries.append(f"\\l({index + 1}) {y_col}")
+    if not entries:
         return None
-    return f"\\l(3) {y_columns[0]}"
+    return "\n".join(entries)
 
 
 def _export_outputs(
@@ -1131,12 +1201,32 @@ def _export_outputs(
     if first_export and graph_data.get("export_path"):
         exported.append(client.inspect_export(Path(graph_data["export_path"])))
     elif first_export:
-        item = client.export_graph(first_export, graph_name=graph_name, overwrite=True)
+        item = client.export_graph(
+            first_export,
+            graph_name=graph_name,
+            overwrite=True,
+            width=_export_width_px(spec, first_export),
+        )
         exported.append(client.inspect_export(Path(item["path"])))
     for path in export_paths[1:]:
-        item = client.export_graph(path, graph_name=graph_name, overwrite=True)
+        item = client.export_graph(
+            path,
+            graph_name=graph_name,
+            overwrite=True,
+            width=_export_width_px(spec, path),
+        )
         exported.append(client.inspect_export(Path(item["path"])))
     return exported
+
+
+def _export_width_px(spec: FigureSpec, path: Path) -> int:
+    suffix = path.suffix.lower().lstrip(".")
+    item = getattr(spec.export, suffix, None)
+    if isinstance(item, FigureExportFormatSpec) and item.width_px:
+        return int(item.width_px)
+    if suffix in {"png", "jpg", "jpeg", "tif", "tiff"}:
+        return 1600
+    return 0
 
 
 def _save_project_if_requested(spec: FigureSpec) -> dict[str, Any] | None:
@@ -1193,9 +1283,29 @@ def _project_path(spec: FigureSpec) -> Path | None:
     return None
 
 
+def _apply_page_setup(spec: FigureSpec, graph_name: str | None) -> dict[str, Any] | None:
+    page_setup = _page_setup_plan(spec)
+    if not page_setup:
+        return None
+    return client.set_graph_page(graph_name=graph_name, **page_setup)
+
+
+def _page_setup_plan(spec: FigureSpec) -> dict[str, Any]:
+    if not spec.page.size_mm:
+        return {}
+    width = float(spec.page.size_mm[0]) / 25.4 if len(spec.page.size_mm) > 0 else None
+    height = float(spec.page.size_mm[1]) / 25.4 if len(spec.page.size_mm) > 1 else None
+    plan: dict[str, Any] = {"unit": "inch"}
+    if width is not None:
+        plan["width"] = width
+    if height is not None:
+        plan["height"] = height
+    return plan
+
+
 def _grid_shape(spec: FigureSpec) -> tuple[int, int]:
     rows = 1
-    columns = max(1, len(spec.layers))
+    columns = 1 if any(layer.grid_cell for layer in spec.layers) else max(1, len(spec.layers))
     for index, layer in enumerate(spec.layers):
         cell = layer.grid_cell or [index // columns, index % columns]
         span = layer.grid_span or [1, 1]
@@ -1207,6 +1317,97 @@ def _grid_shape(spec: FigureSpec) -> tuple[int, int]:
         columns = 2 if len(spec.layers) > 2 else len(spec.layers)
         rows = (len(spec.layers) + columns - 1) // columns
     return rows, columns
+
+
+def _layout_spacing_plan(spec: FigureSpec) -> dict[str, float]:
+    if not spec.page.panel_spacing_mm:
+        return {}
+    spacing = spec.page.panel_spacing_mm
+    page_size = spec.page.size_mm or []
+    plan: dict[str, float] = {}
+    if len(spacing) > 0 and len(page_size) > 0 and float(page_size[0]) > 0:
+        plan["gap_x"] = float(spacing[0]) / float(page_size[0]) * 100.0
+    if len(spacing) > 1 and len(page_size) > 1 and float(page_size[1]) > 0:
+        plan["gap_y"] = float(spacing[1]) / float(page_size[1]) * 100.0
+    return plan
+
+
+def _layer_geometries(spec: FigureSpec, rows: int, columns: int) -> list[dict[str, float | int]]:
+    width_mm, height_mm = _page_size_mm(spec)
+    margins = _page_margins_mm(spec)
+    spacing_x, spacing_y = _panel_spacing_mm(spec)
+    usable_width = max(1.0, width_mm - margins[0] - margins[2] - spacing_x * (columns - 1))
+    usable_height = max(1.0, height_mm - margins[1] - margins[3] - spacing_y * (rows - 1))
+    cell_width = usable_width / columns
+    cell_height = usable_height / rows
+    geometries = []
+    for index, layer in enumerate(spec.layers):
+        if layer.position_mode == "absolute":
+            position = layer.position
+            geometries.append(
+                {
+                    "layer_index": index,
+                    "left": float(position["left"]),
+                    "top": float(position["top"]),
+                    "width": float(position["width"]),
+                    "height": float(position["height"]),
+                }
+            )
+            continue
+        cell = layer.grid_cell or [index // columns, index % columns]
+        span = layer.grid_span or [1, 1]
+        row = int(cell[0])
+        column = int(cell[1])
+        row_span = max(1, int(span[0]))
+        col_span = max(1, int(span[1]))
+        left_mm = margins[0] + column * (cell_width + spacing_x)
+        top_mm = margins[1] + row * (cell_height + spacing_y)
+        panel_width = cell_width * col_span + spacing_x * (col_span - 1)
+        panel_height = cell_height * row_span + spacing_y * (row_span - 1)
+        geometries.append(
+            {
+                "layer_index": index,
+                "left": left_mm / width_mm * 100.0,
+                "top": top_mm / height_mm * 100.0,
+                "width": panel_width / width_mm * 100.0,
+                "height": panel_height / height_mm * 100.0,
+            }
+        )
+    return geometries
+
+
+def _missing_absolute_position_keys(layer: Any) -> list[str]:
+    required = ["left", "top", "width", "height"]
+    position = getattr(layer, "position", {}) or {}
+    return [key for key in required if position.get(key) is None]
+
+
+def _page_size_mm(spec: FigureSpec) -> tuple[float, float]:
+    if spec.page.size_mm and len(spec.page.size_mm) >= 2:
+        return max(1.0, float(spec.page.size_mm[0])), max(1.0, float(spec.page.size_mm[1]))
+    return 180.0, 120.0
+
+
+def _page_margins_mm(spec: FigureSpec) -> tuple[float, float, float, float]:
+    margins = [float(item) for item in (spec.page.margins_mm or [])]
+    if len(margins) == 1:
+        margins *= 4
+    elif len(margins) == 2:
+        margins = [margins[0], margins[1], margins[0], margins[1]]
+    elif len(margins) == 3:
+        margins = [margins[0], margins[1], margins[2], margins[1]]
+    elif len(margins) < 4:
+        margins = [12.0, 10.0, 8.0, 10.0]
+    return tuple(margins[:4])  # type: ignore[return-value]
+
+
+def _panel_spacing_mm(spec: FigureSpec) -> tuple[float, float]:
+    spacing = [float(item) for item in (spec.page.panel_spacing_mm or [])]
+    if len(spacing) == 1:
+        return spacing[0], spacing[0]
+    if len(spacing) >= 2:
+        return spacing[0], spacing[1]
+    return 6.0, 6.0
 
 
 def _import_kwargs(data: Any) -> dict[str, Any]:

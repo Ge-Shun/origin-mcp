@@ -163,11 +163,17 @@ def origin_export_graph(
     path: str,
     graph_name: str | None = None,
     overwrite: bool = True,
+    width: int = 0,
 ) -> dict[str, Any]:
     """Export the active or named Origin graph to an image/PDF file."""
 
     def run() -> dict[str, Any]:
-        exported = client.export_graph(Path(path), graph_name=graph_name, overwrite=overwrite)
+        exported = client.export_graph(
+            Path(path),
+            graph_name=graph_name,
+            overwrite=overwrite,
+            width=width,
+        )
         return _ok(
             "Exported Origin graph.",
             **exported,
@@ -860,6 +866,7 @@ def origin_arrange_layers(
     columns: int = 1,
     gap_x: float | None = None,
     gap_y: float | None = None,
+    layer_geometries: list[dict[str, float | int]] | None = None,
 ) -> dict[str, Any]:
     """Arrange graph layers into a panel layout."""
 
@@ -872,6 +879,7 @@ def origin_arrange_layers(
                 columns=columns,
                 gap_x=gap_x,
                 gap_y=gap_y,
+                layer_geometries=layer_geometries,
             ),
         )
     )

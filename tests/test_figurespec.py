@@ -48,7 +48,17 @@ class FakeFigureSpecClient:
 
     def arrange_layers(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("arrange_layers", kwargs))
-        return {"rows": kwargs["rows"], "columns": kwargs["columns"]}
+        return {
+            "rows": kwargs["rows"],
+            "columns": kwargs["columns"],
+            "gap_x": kwargs.get("gap_x"),
+            "gap_y": kwargs.get("gap_y"),
+            "layer_geometries": kwargs.get("layer_geometries", []),
+        }
+
+    def set_graph_page(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("set_graph_page", kwargs))
+        return kwargs
 
     def import_table(self, **kwargs: Any) -> WorksheetRef:
         self.calls.append(("import_table", kwargs))
@@ -248,7 +258,8 @@ def test_origin_execute_figure_spec_runs_grid_multi_panel(
     assert result["ok"] is True
     assert result["data"]["executed"] is True
     assert result["data"]["layer_setup"]["added_layers"] == 1
-    assert result["data"]["layer_setup"]["arranged"] == {"rows": 1, "columns": 2}
+    assert result["data"]["layer_setup"]["arranged"]["rows"] == 1
+    assert result["data"]["layer_setup"]["arranged"]["columns"] == 2
     assert result["data"]["added_plots"][0]["plot_id"] == "plot_b"
     axis_calls = [kwargs for name, kwargs in fake.calls if name == "set_axis"]
     assert {
@@ -275,6 +286,140 @@ def test_origin_execute_figure_spec_runs_grid_multi_panel(
     assert "run_labtalk" in called
     assert "arrange_layers" in called
     assert "add_plot_to_graph" in called
+
+
+def test_origin_execute_figure_spec_runs_custom_layout_with_spans(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,other,third\n0,1,2,3\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {
+        "layout": "custom",
+        "size_mm": [180, 120],
+        "margins_mm": [18, 12, 12, 10],
+        "panel_spacing_mm": [6, 8],
+    }
+    spec["layers"][0]["grid_cell"] = [0, 0]
+    spec["layers"][0]["grid_span"] = [1, 2]
+    spec["layers"].extend(
+        [
+            {
+                "id": "panel_b",
+                "data_ref": "ds_line",
+                "grid_cell": [1, 0],
+                "x": {"title": "Time (s)", "limits": "auto"},
+                "y": {"title": "Other", "limits": "auto"},
+            },
+            {
+                "id": "panel_c",
+                "data_ref": "ds_line",
+                "grid_cell": [1, 1],
+                "x": {"title": "Time (s)", "limits": "auto"},
+                "y": {"title": "Third", "limits": "auto"},
+            },
+        ]
+    )
+    spec["plots"].extend(
+        [
+            {
+                "id": "plot_b",
+                "layer": "panel_b",
+                "type": "scatter",
+                "map": {"x": "time", "y": "other"},
+            },
+            {
+                "id": "plot_c",
+                "layer": "panel_c",
+                "type": "line",
+                "map": {"x": "time", "y": "third"},
+            },
+        ]
+    )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    ops = [item["op"] for item in plan["data"]["operations"]]
+    assert "set_graph_page" in ops
+    arrange_op = next(item for item in plan["data"]["operations"] if item["op"] == "arrange_layers")
+    assert arrange_op["rows"] == 2
+    assert arrange_op["columns"] == 2
+    assert round(arrange_op["gap_x"], 3) == 3.333
+    assert round(arrange_op["gap_y"], 3) == 6.667
+    assert arrange_op["layer_geometries"][0]["layer_index"] == 0
+    assert round(arrange_op["layer_geometries"][0]["width"], 3) == 83.333
+    assert result["ok"] is True
+    assert result["data"]["layer_setup"]["page"]["unit"] == "inch"
+    assert round(result["data"]["layer_setup"]["page"]["width"], 3) == 7.087
+    arrange_call = next(kwargs for name, kwargs in fake.calls if name == "arrange_layers")
+    assert len(arrange_call["layer_geometries"]) == 3
+    assert (
+        arrange_call["layer_geometries"][0]["width"] > arrange_call["layer_geometries"][1]["width"]
+    )
+
+
+def test_origin_plan_figure_spec_requires_absolute_position(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response\n0,1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {"layout": "custom"}
+    spec["layers"][0]["position_mode"] = "absolute"
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert result["data"]["warnings"] == ["executor_requires_absolute_layer_position"]
+    detail = result["data"]["warning_details"][0]
+    assert detail["field"] == "layers.position"
+    assert detail["missing_keys"] == ["left", "top", "width", "height"]
+
+
+def test_origin_execute_figure_spec_runs_absolute_custom_layout(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,other\n0,1,2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {"layout": "custom", "size_mm": [160, 100]}
+    spec["layers"][0]["position_mode"] = "absolute"
+    spec["layers"][0]["position"] = {"left": 12, "top": 10, "width": 76, "height": 35}
+    spec["layers"].append(
+        {
+            "id": "panel_b",
+            "data_ref": "ds_line",
+            "position_mode": "absolute",
+            "position": {"left": 12, "top": 55, "width": 76, "height": 35},
+            "x": {"title": "Time (s)", "limits": "auto"},
+            "y": {"title": "Other", "limits": "auto"},
+        }
+    )
+    spec["plots"].append(
+        {
+            "id": "plot_b",
+            "layer": "panel_b",
+            "type": "scatter",
+            "map": {"x": "time", "y": "other"},
+        }
+    )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert result["ok"] is True
+    arrange_call = next(kwargs for name, kwargs in fake.calls if name == "arrange_layers")
+    assert arrange_call["layer_geometries"] == [
+        {"layer_index": 0, "left": 12.0, "top": 10.0, "width": 76.0, "height": 35.0},
+        {"layer_index": 1, "left": 12.0, "top": 55.0, "width": 76.0, "height": 35.0},
+    ]
 
 
 def test_origin_execute_figure_spec_applies_combo_plot_styles(
@@ -464,7 +609,10 @@ def test_origin_plan_figure_spec_requires_band_bounds(tmp_path: Path) -> None:
     assert plot_op["uncertainty_unsupported_keys"] == ["upper"]
 
 
-def test_origin_plan_figure_spec_limits_band_to_base_plot(tmp_path: Path) -> None:
+def test_origin_execute_figure_spec_supports_non_base_band(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     data_path = tmp_path / "data.csv"
     data_path.write_text("time,response,other,lo,hi\n0,1,2,0.8,1.2\n", encoding="utf-8")
     spec = _single_line_spec(data_path, tmp_path)
@@ -477,21 +625,76 @@ def test_origin_plan_figure_spec_limits_band_to_base_plot(tmp_path: Path) -> Non
             "uncertainty": {"type": "band", "lower": "lo", "upper": "hi"},
         }
     )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
 
-    result = figurespec_tools.origin_plan_figure_spec(spec)
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
 
-    assert result["ok"] is True
-    assert result["data"]["executor_executable"] is False
-    assert result["data"]["warnings"] == ["executor_does_not_apply_uncertainty_bands"]
-    detail = result["data"]["warning_details"][0]
-    assert detail["plot_id"] == "plot_b"
-    assert detail["unsupported_keys"] == ["non_base_plot"]
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    assert plan["data"]["warnings"] == []
     plot_op = next(
         item
-        for item in result["data"]["operations"]
+        for item in plan["data"]["operations"]
         if item["op"] == "plot" and item["id"] == "plot_b"
     )
-    assert plot_op["uncertainty_supported"] is False
+    assert plot_op["uncertainty_supported"] is True
+    assert result["ok"] is True
+    assert result["data"]["band_updates"] == [
+        {
+            "plot_id": "plot_b",
+            "graph_name": "Graph1",
+            "layer_index": 0,
+            "lower_col": "lo",
+            "upper_col": "hi",
+        }
+    ]
+    call_names = [name for name, _kwargs in fake.calls]
+    assert call_names.index("add_uncertainty_band") < call_names.index("add_plot_to_graph")
+    band_call = next(kwargs for name, kwargs in fake.calls if name == "add_uncertainty_band")
+    assert band_call == {
+        "worksheet": "[Book1]Sheet1",
+        "x_col": "time",
+        "lower_col": "lo",
+        "upper_col": "hi",
+        "graph_name": "Graph1",
+        "layer_index": 0,
+    }
+    legend_call = next(kwargs for name, kwargs in fake.calls if name == "format_legend")
+    assert legend_call["text"] == "\\l(1) response\n\\l(4) other"
+
+
+def test_origin_execute_figure_spec_uses_source_data_for_plots_after_base_band(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,other,lo,hi\n0,1,2,0.8,1.2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["plots"][0]["uncertainty"] = {"type": "band", "lower": "lo", "upper": "hi"}
+    spec["plots"].append(
+        {
+            "id": "plot_b",
+            "layer": "panel_a",
+            "type": "line",
+            "map": {"x": "time", "y": "other"},
+        }
+    )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert result["ok"] is True
+    import_call = next(kwargs for name, kwargs in fake.calls if name == "import_table")
+    assert import_call["path"] == data_path
+    added_call = [
+        kwargs
+        for name, kwargs in fake.calls
+        if name == "add_plot_to_graph" and kwargs["y_col"] == "other"
+    ][0]
+    assert added_call["worksheet"] == "[Book2]Sheet1"
 
 
 def test_origin_execute_figure_spec_applies_group_style_sequences(

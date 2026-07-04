@@ -128,10 +128,10 @@ Use `origin_plan_figure_spec(spec)` to validate a JSON FigureSpec and return
 the planned Origin operations without touching Origin. Planning reads the data
 file headers and verifies that mapped columns and column indexes exist before
 any Origin calls are made. Use `origin_execute_figure_spec(spec, dry_run=false)`
-to execute the current supported subset: worksheet-backed single-panel or grid
-multi-panel figures, common plot types, axis settings, panel/legend/reference
-annotations, exports, OPJU save, and graph diagnostics. Unsupported features are
-reported in the plan instead of being guessed.
+to execute the current supported subset: worksheet-backed single-panel, grid,
+or custom grid/span multi-panel figures, common plot types, axis settings,
+panel/legend/reference annotations, exports, OPJU save, and graph diagnostics.
+Unsupported features are reported in the plan instead of being guessed.
 
 Minimal JSON shape:
 
@@ -176,6 +176,13 @@ Minimal JSON shape:
 }
 ```
 
+For custom panel layouts, set `page.layout` to `custom`. Grid-style custom
+layouts use `page.size_mm`, optional `page.margins_mm`, optional
+`page.panel_spacing_mm`, and per-layer `grid_cell` / `grid_span`; the executor
+converts those values into Origin page size plus per-layer geometry. Absolute
+custom layouts use `position_mode="absolute"` plus `position.left`,
+`position.top`, `position.width`, and `position.height` as page percentages.
+
 For Nature-style graph formatting, `origin_palette_catalog()` lists the built-in
 palette registry, including semantic roles, source links, color counts, and
 license notes. By default the catalog returns a lightweight summary and omits
@@ -212,10 +219,11 @@ that route to the existing safe plotting path, for example
 `{"type": "errorbar", "y_error": "se"}` or `{"x_error": "xerr"}`. It also
 supports worksheet-backed filled bands with lower/upper bound columns, for
 example `{"type": "band", "lower": "lo", "upper": "hi", "transparency": 65}`.
-Band support is intentionally narrow: the band must be on the first/base plot
-with one named y column. The executor creates a native Origin fill-area base
-graph from contiguous temporary x/lower/upper columns, overlays the main line,
-and trims the legend to the main series.
+Band support is intentionally narrow but covers multiple plot entries: each
+banded plot must have one named y column plus named x/lower/upper columns. The
+executor creates native Origin fill-area plots from contiguous x/lower/upper
+columns, overlays the main line, and trims generated legend text to the main
+series rather than the auxiliary band bounds.
 
 For natural-language or registry-backed edits, `origin_set_plot_property`
 resolves a semantic `property_name` such as `柱宽`, `折线粗细`, `点大小`, or

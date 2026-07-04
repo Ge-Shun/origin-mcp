@@ -7,6 +7,7 @@ list_project, export_*) against the in-memory fake graph surface.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -146,15 +147,47 @@ def test_delete_object(fake_client: OriginClient) -> None:
 # -- export ---------------------------------------------------------------
 
 
-def test_export_graph_by_name_uses_labtalk(fake_client: OriginClient, tmp_path: Path) -> None:
+def test_export_graph_by_name_uses_save_fig(fake_client: OriginClient, tmp_path: Path) -> None:
     fake_client.op.add_graph("G1")
     out = tmp_path / "g.png"
 
     result = fake_client.export_graph(path=out, graph_name="G1")
 
     assert result["path"] == str(out)
-    # The export ran through a LabTalk expGraph command.
-    assert any("expGraph" in script for _, (script, *_rest) in _lt_exec_calls(fake_client))
+    assert result["method"] == "originpro.save_fig"
+    assert out.exists()
+
+
+def test_export_graph_by_name_can_set_pixel_width(
+    fake_client: OriginClient,
+    tmp_path: Path,
+) -> None:
+    fake_client.op.add_graph("G1")
+    out = tmp_path / "g.png"
+
+    result = fake_client.export_graph(path=out, graph_name="G1", width=1600)
+
+    assert result["method"] == "originpro.save_fig"
+
+
+def test_export_graph_falls_back_to_labtalk_when_save_fig_fails(
+    fake_client: OriginClient,
+    tmp_path: Path,
+) -> None:
+    page = fake_client.op.add_graph("G1")
+
+    def fail_save_fig(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("save_fig failed")
+
+    page.save_fig = fail_save_fig  # type: ignore[method-assign]
+    out = tmp_path / "g.png"
+
+    result = fake_client.export_graph(path=out, graph_name="G1", width=1600)
+
+    assert result["method"] == "labtalk.expGraph"
+    assert result["fallback_error"].startswith("RuntimeError: save_fig failed")
+    scripts = [call[1][0] for call in _lt_exec_calls(fake_client)]
+    assert 'tr1.width:=1600 tr1.unit:=pixel type:=png path:="' in scripts[-1]
 
 
 def test_export_graph_refuses_existing(fake_client: OriginClient, tmp_path: Path) -> None:
@@ -222,15 +255,40 @@ def test_add_uncertainty_band_adds_bounds_and_fill(fake_client: OriginClient) ->
 
     assert result["lower_col"] == "lower"
     assert result["upper_col"] == "upper"
-    assert result["plot_indices"] == [0, 1]
+    assert result["plot_indices"] == [0]
+    assert "plotxy iy:=[Data]Sheet1!(1,2,3) plot:=249 ogl:=[G1]1;" == result["plot_script"]
+    assert "layer -s 1;" in result["fill_script"]
     assert "set __origin_mcp_band_plot -pf 1;" in result["fill_script"]
     assert "set __origin_mcp_band_plot -pfv 9;" in result["fill_script"]
     assert "set __origin_mcp_band_plot -paap 70;" in result["fill_script"]
-    assert len(page[0].plots) == 2
-    assert page[0].plots[0].fill_area_calls == [((4, 9, 4), {})]
-    assert page[0].plots[0].color == "lightblue"
-    assert page[0].plots[0].transparency == 70
-    assert page[0].plots[1].transparency == 70
+    assert len(page[0].plots) == 0
+    scripts = [call[1][0] for call in _lt_exec_calls(fake_client)]
+    assert scripts[0] == "plotxy iy:=[Data]Sheet1!(1,2,3) plot:=249 ogl:=[G1]1;"
+    assert "set __origin_mcp_band_plot -paap 70;" in scripts[1]
+
+
+def test_arrange_layers_applies_custom_geometry(fake_client: OriginClient) -> None:
+    fake_client.op.add_graph("G1", layers=2)
+
+    result = fake_client.arrange_layers(
+        graph_name="G1",
+        rows=1,
+        columns=2,
+        gap_x=4,
+        gap_y=6,
+        layer_geometries=[
+            {"layer_index": 0, "left": 10, "top": 12, "width": 40, "height": 80},
+            {"layer_index": 1, "left": 55, "top": 12, "width": 35, "height": 80},
+        ],
+    )
+
+    assert result["rows"] == 1
+    assert result["columns"] == 2
+    assert result["layer_geometries"][1]["left"] == 55
+    scripts = [call[1][0] for call in _lt_exec_calls(fake_client)]
+    assert scripts[0] == "layarrange row:=1 col:=2 xgap:=4 ygap:=6;"
+    assert "layer -s 1; layer.left=10.0; layer.top=12.0;" in scripts[1]
+    assert "layer -s 2; layer.left=55.0; layer.top=12.0;" in scripts[1]
 
 
 def test_get_graph_info_reports_layers_and_plots(fake_client: OriginClient) -> None:
