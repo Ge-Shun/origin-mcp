@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package with dev dependencies
-        run: python -m pip install --upgrade pip ".[dev]"
+        run: python -m pip install --upgrade pip -e ".[dev]"
       - name: Run tests
         run: >-
           python -m pytest -q --cov=origin_mcp --cov-report=term-missing
