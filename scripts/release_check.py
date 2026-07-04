@@ -27,6 +27,11 @@ def main() -> int:
         help="Also run the real-Origin smoke gate. Start the Origin bridge first.",
     )
     parser.add_argument(
+        "--real-origin-health",
+        action="store_true",
+        help="Also run the lightweight real-Origin bridge health gate.",
+    )
+    parser.add_argument(
         "--keep-origin-open",
         action="store_true",
         help="Pass --keep-origin-open to the real-Origin smoke gate.",
@@ -40,6 +45,13 @@ def main() -> int:
     args = parser.parse_args()
 
     checks = default_checks()
+    if args.real_origin_health:
+        health = [
+            sys.executable,
+            "scripts\\real_origin_health.py",
+            "--show-origin" if args.show_origin else "--no-show-origin",
+        ]
+        checks.append(Check("real Origin health", health))
     if args.real_origin_smoke:
         smoke = [
             sys.executable,

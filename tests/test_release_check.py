@@ -80,3 +80,33 @@ def test_cli_adds_real_origin_smoke_step(monkeypatch) -> None:
         "--no-show-origin",
         "--keep-origin-open",
     ]
+
+
+def test_cli_adds_real_origin_health_before_smoke(monkeypatch) -> None:
+    release_check = load_release_check_module()
+    captured = {}
+
+    def fake_run_checks(checks):
+        captured["checks"] = checks
+        return 0
+
+    monkeypatch.setattr(release_check, "run_checks", fake_run_checks)
+    monkeypatch.setattr(
+        release_check.sys,
+        "argv",
+        [
+            "release_check.py",
+            "--real-origin-health",
+            "--real-origin-smoke",
+            "--no-show-origin",
+        ],
+    )
+
+    assert release_check.main() == 0
+    names = [check.name for check in captured["checks"][-2:]]
+    assert names == ["real Origin health", "real Origin smoke"]
+    assert captured["checks"][-2].command == [
+        sys.executable,
+        "scripts\\real_origin_health.py",
+        "--no-show-origin",
+    ]
