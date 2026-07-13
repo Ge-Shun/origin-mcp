@@ -19,6 +19,7 @@ DEFAULT_PORT = 47631
 DEFAULT_MAX_TASKS = 200
 RUNTIME_PACKAGES = {
     "originpro": "originpro>=1.1",
+    "pydantic": "pydantic>=2.0",
     "pandas": "pandas>=2.0",
     "openpyxl": "openpyxl>=3.1",
     "xlrd": "xlrd>=2.0",
@@ -517,6 +518,7 @@ def start_origin_mcp_bridge(
             "last_error": None,
         },
     )
+    auto_token_generated = False
     try:
         # Drop any stale cached origin_mcp modules first -- Origin's Python
         # Console commonly reruns this addon during development -- then resolve
@@ -532,6 +534,7 @@ def start_origin_mcp_bridge(
             # local process by default. The MCP server reads it back from the
             # handshake file (see origin_mcp.bridge_handshake) with no config.
             token = generate_token()
+            auto_token_generated = True
         _emit("checking runtime dependencies", fields={"install_phase": "checking_dependencies"})
         if install_missing:
             _install_missing_runtime_packages()
@@ -574,12 +577,41 @@ def start_origin_mcp_bridge(
         try:
             from origin_mcp.bridge_handshake import write_handshake
 
-            handshake_path = write_handshake(actual_host, actual_port, token)
+            handshake_path = write_handshake(
+                actual_host,
+                actual_port,
+                token,
+                status_path=_status_path(),
+            )
         except Exception as exc:  # pragma: no cover - defensive
             _emit(
                 "failed to write bridge handshake file",
                 fields={"handshake_error": str(exc)},
             )
+            if auto_token_generated:
+                try:
+                    server.server_close()
+                except Exception:
+                    pass
+                globals()["_origin_mcp_bridge_server"] = None
+                _emit(
+                    "failed to start inside Origin Python",
+                    fields={
+                        "running": False,
+                        "install_phase": "failed",
+                        "last_error": (
+                            f"Could not publish the automatically generated bridge token: {exc}"
+                        ),
+                        "last_error_type": type(exc).__name__,
+                    },
+                )
+                _notify(
+                    "Bridge failed to start because its authentication handshake could not "
+                    "be written. See the status file for details."
+                )
+                raise RuntimeError(
+                    "Could not publish the automatically generated Origin bridge token."
+                ) from exc
     globals()["_origin_mcp_handshake_path"] = handshake_path
     result = {
         "running": True,

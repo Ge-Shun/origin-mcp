@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from origin_mcp.models import PlotKind
+
 from ._shared import (
     _export_inspection,
     _mcp_tool,
@@ -13,8 +15,20 @@ from ._shared import (
 from .plotting_shared import (
     MATRIX_PLOT_TYPE_ID_ROUTES,
     PLOT_TYPE_ID_ROUTES,
+    _plot_csv,
     _plot_table_id,
 )
+
+BASIC_PLOT_KINDS = {
+    "line": PlotKind.line,
+    "scatter": PlotKind.scatter,
+    "line_symbol": PlotKind.line_symbol,
+    "column": PlotKind.column,
+}
+_DISTRIBUTION_PLOT_KINDS = {
+    "histogram": (219, "hist"),
+    "box": (206, "box"),
+}
 
 
 @_mcp_tool()
@@ -471,20 +485,62 @@ def origin_plot(
 ) -> dict[str, Any]:
     """Create a table-based plot selected by ``kind``.
 
-    A single parameterized entry point for the table plot kinds that each also
-    have a dedicated ``origin_plot_*`` tool, so the compact tool profile can
-    reach every kind without enabling the full profile. ``kind`` must be one of:
-    area, stack_area, fill_area, bar, stack_bar, floating_bar, column_stack,
-    pie, ternary, ternary_contour, bubble, bubble_color_mapped, color_mapped,
-    vector_xyam, vector_xyxy, vector_3d, high_low_close, candlestick, waterfall,
-    ribbon_3d, bars_3d, errorbar_3d, polar_xr_ytheta, smith, dendrogram. For
-    line/scatter/column/histogram/box use the dedicated tools; for matrix-range
-    plots use origin_plot_matrix_id.
+    A single parameterized entry point for common table plots and the Plot Type
+    ID routes that each also have a dedicated ``origin_plot_*`` tool. For the
+    common line/scatter/line_symbol/column routes, ``selected_cols`` uses the
+    first column as X and the remaining columns as Y. A one-column selection is
+    treated as Y-only. Matrix-range plots still use ``origin_plot_matrix_id``.
     """
 
     def run() -> dict[str, Any]:
+        if kind in BASIC_PLOT_KINDS:
+            x_col = selected_cols[0] if selected_cols and len(selected_cols) > 1 else None
+            y_cols = (
+                selected_cols[1:] if selected_cols and len(selected_cols) > 1 else selected_cols
+            )
+            return _plot_csv(
+                kind=BASIC_PLOT_KINDS[kind],
+                path=path,
+                x_col=x_col,
+                y_cols=y_cols,
+                book_name=None,
+                sheet_name=None,
+                excel_sheet=0,
+                delimiter=None,
+                encoding=None,
+                header=0,
+                skiprows=None,
+                nrows=None,
+                na_values=None,
+                graph_name=graph_name,
+                template=None,
+                title=title,
+                x_label=None,
+                y_label=None,
+                show_legend=True,
+                style_mode=style_mode,
+                export_path=export_path,
+            )
+        if kind in _DISTRIBUTION_PLOT_KINDS:
+            plot_type_id, template = _DISTRIBUTION_PLOT_KINDS[kind]
+            return _plot_table_id(
+                path=path,
+                plot_type_id=plot_type_id,
+                template=template,
+                selected_cols=selected_cols,
+                graph_name=graph_name,
+                title=title,
+                style_mode=style_mode,
+                export_path=export_path,
+            )
         if kind not in PLOT_TYPE_ID_ROUTES:
-            valid = ", ".join(sorted(PLOT_TYPE_ID_ROUTES))
+            valid = ", ".join(
+                sorted(
+                    PLOT_TYPE_ID_ROUTES.keys()
+                    | BASIC_PLOT_KINDS.keys()
+                    | _DISTRIBUTION_PLOT_KINDS.keys()
+                )
+            )
             raise ValueError(f"Unknown plot kind: {kind!r}. Valid kinds: {valid}.")
         return _pti(path, kind, selected_cols, graph_name, title, export_path, style_mode)
 

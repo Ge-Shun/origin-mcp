@@ -97,8 +97,8 @@ class BridgeTaskManager:
             )
         task = BridgeTask(task_id=str(uuid.uuid4()), method=method, params=params)
         with self._lock:
+            self._make_room_locked()
             self._tasks[task.task_id] = task
-            self._prune_locked()
         self._queue.put(task.task_id)
         return {"task": task.as_dict(include_result=False)}
 
@@ -331,3 +331,24 @@ class BridgeTaskManager:
         )
         for task in removable[:overflow]:
             self._tasks.pop(task.task_id, None)
+
+    def _make_room_locked(self) -> None:
+        """Make room for one task while keeping the configured hard bound."""
+
+        if len(self._tasks) < self._max_tasks:
+            return
+        removable = min(
+            (task for task in self._tasks.values() if task.status in TERMINAL_TASK_STATUSES),
+            key=lambda task: task.submitted_at,
+            default=None,
+        )
+        if removable is not None:
+            self._tasks.pop(removable.task_id, None)
+            return
+        raise OriginOperationError(
+            (
+                f"Bridge task capacity ({self._max_tasks}) is full with queued or running "
+                "tasks; wait for a task to finish or cancel a queued task."
+            ),
+            error_code="bridge_task_capacity_reached",
+        )

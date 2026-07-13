@@ -17,7 +17,7 @@ import origin_mcp.server as mcp_server
 import origin_mcp.tools.bridge as bridge_tools
 from origin_mcp.bridge import OriginBridgeServer, OriginEmbeddedBridgeServer
 from origin_mcp.bridge_client import OriginBridgeClient, OriginBridgeConfig, OriginBridgeProxy
-from origin_mcp.errors import OriginBridgeError
+from origin_mcp.errors import OriginBridgeError, OriginOperationError
 from origin_mcp.origin_client import GraphRef, WorksheetRef
 
 
@@ -25,11 +25,12 @@ class FakeOriginClient:
     def __init__(self) -> None:
         self.detached = False
         self.force_closed = False
+        self.labtalk_calls = 0
 
     def connect(self, show: bool = True) -> dict[str, Any]:
         return {"connected": True, "visible": show, "origin_version": 10.3}
 
-    def capabilities(self, show: bool = False, refresh: bool = False) -> dict[str, Any]:
+    def capabilities(self, show: bool | None = None, refresh: bool = False) -> dict[str, Any]:
         return {"connected": True, "visible": show, "refresh": refresh}
 
     def new_project(self, show: bool = True) -> dict[str, Any]:
@@ -76,6 +77,7 @@ class FakeOriginClient:
         }
 
     def run_labtalk(self, script: str) -> dict[str, Any]:
+        self.labtalk_calls += 1
         return {"result": script == "type ok;", "script": script}
 
     def detach(self) -> dict[str, Any]:
@@ -195,6 +197,27 @@ def test_bridge_client_pings_bridge() -> None:
     assert result["max_tasks"] == 200
 
 
+def test_bridge_server_rejects_non_loopback_binding() -> None:
+    with pytest.raises(OriginOperationError) as excinfo:
+        OriginBridgeServer(("0.0.0.0", 0))
+
+    assert excinfo.value.error_code == "invalid_bridge_host"
+
+
+def test_doctor_prefers_status_path_published_in_handshake(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current = tmp_path / "current-status.json"
+    current.write_text('{"running": true, "message": "current"}', encoding="utf-8")
+    monkeypatch.setattr(bridge_tools, "read_handshake", lambda: {"status_path": str(current)})
+
+    result = bridge_tools._read_bridge_status()
+
+    assert result["path"] == str(current.resolve())
+    assert result["data"]["message"] == "current"
+
+
 def test_bridge_rejects_non_object_json_request_cleanly() -> None:
     with running_bridge() as server:
         host, port = server.server_address
@@ -251,6 +274,101 @@ def test_request_does_not_retry_after_read_timeout() -> None:
 
     assert excinfo.value.error_code == "origin_bridge_timeout"
     assert stream.writes == 1  # no retry
+
+
+def test_bridge_replays_response_without_reexecuting_request() -> None:
+    fake_client = FakeOriginClient()
+    request = {
+        "id": "stable-request-id",
+        "method": "run_labtalk",
+        "params": {"script": "type ok;"},
+    }
+
+    with running_bridge(fake_client=fake_client) as server:
+        host, port = server.server_address
+        responses = []
+        for _ in range(2):
+            raw = bridge_client_module.socket.create_connection((host, port), timeout=2.0)
+            try:
+                stream = raw.makefile("rwb")
+                stream.write(json.dumps(request).encode("utf-8") + b"\n")
+                stream.flush()
+                responses.append(json.loads(stream.readline().decode("utf-8")))
+            finally:
+                raw.close()
+
+    assert fake_client.labtalk_calls == 1
+    assert responses[0] == responses[1]
+    assert responses[0]["ok"] is True
+
+
+def test_bridge_coalesces_in_flight_duplicate_requests() -> None:
+    class ReplayBlockingClient(FakeOriginClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = threading.Event()
+            self.release = threading.Event()
+
+        def run_labtalk(self, script: str) -> dict[str, Any]:
+            self.labtalk_calls += 1
+            self.started.set()
+            self.release.wait(timeout=2.0)
+            return {"result": True, "script": script}
+
+    fake_client = ReplayBlockingClient()
+    request = {"id": "in-flight-id", "method": "run_labtalk", "params": {"script": "slow"}}
+    responses: list[dict[str, Any]] = []
+
+    with running_bridge(fake_client=fake_client) as server:
+        host, port = server.server_address
+
+        def send() -> None:
+            raw = bridge_client_module.socket.create_connection((host, port), timeout=2.0)
+            try:
+                stream = raw.makefile("rwb")
+                stream.write(json.dumps(request).encode("utf-8") + b"\n")
+                stream.flush()
+                responses.append(json.loads(stream.readline().decode("utf-8")))
+            finally:
+                raw.close()
+
+        first = threading.Thread(target=send)
+        second = threading.Thread(target=send)
+        first.start()
+        assert fake_client.started.wait(timeout=1.0)
+        second.start()
+        time.sleep(0.05)
+        fake_client.release.set()
+        first.join(timeout=2.0)
+        second.join(timeout=2.0)
+
+    assert fake_client.labtalk_calls == 1
+    assert len(responses) == 2
+    assert responses[0] == responses[1]
+
+
+def test_bridge_rejects_request_id_reuse_with_different_content() -> None:
+    fake_client = FakeOriginClient()
+    first = {"id": "reused-id", "method": "run_labtalk", "params": {"script": "first"}}
+    second = {"id": "reused-id", "method": "run_labtalk", "params": {"script": "second"}}
+
+    with running_bridge(fake_client=fake_client) as server:
+        host, port = server.server_address
+        responses = []
+        for request in (first, second):
+            raw = bridge_client_module.socket.create_connection((host, port), timeout=2.0)
+            try:
+                stream = raw.makefile("rwb")
+                stream.write(json.dumps(request).encode("utf-8") + b"\n")
+                stream.flush()
+                responses.append(json.loads(stream.readline().decode("utf-8")))
+            finally:
+                raw.close()
+
+    assert fake_client.labtalk_calls == 1
+    assert responses[0]["ok"] is True
+    assert responses[1]["ok"] is False
+    assert responses[1]["error_code"] == "bridge_request_id_conflict"
 
 
 def test_embedded_bridge_server_handles_request_without_handler_threads() -> None:
@@ -330,6 +448,16 @@ def test_bridge_client_calls_origin_methods() -> None:
     assert ping["connected"] is True
     assert ping["visible"] is False
     assert labtalk["result"] is True
+
+
+def test_bridge_capabilities_preserves_visibility_by_default() -> None:
+    with running_bridge() as server:
+        client = bridge_client(server)
+        unchanged = client.request("origin_capabilities")
+        hidden = client.request("origin_capabilities", {"show": False, "refresh": True})
+
+    assert unchanged["visible"] is None
+    assert hidden["visible"] is False
 
 
 def test_bridge_client_calls_project_methods() -> None:
@@ -786,6 +914,28 @@ def test_bridge_task_cancel_queued_task() -> None:
     assert second_task["current_step"] == "Cancelled before start"
 
 
+def test_bridge_task_capacity_rejects_unbounded_active_queue() -> None:
+    fake_client = BlockingOriginClient()
+    with running_bridge(fake_client=fake_client, max_tasks=1) as server:
+        client = bridge_client(server)
+        first = client.request(
+            "submit_task",
+            {"method": "run_labtalk", "params": {"script": "block"}},
+        )
+        assert fake_client.started.wait(timeout=2.0)
+        try:
+            with pytest.raises(OriginBridgeError) as excinfo:
+                client.request(
+                    "submit_task",
+                    {"method": "run_labtalk", "params": {"script": "overflow"}},
+                )
+        finally:
+            fake_client.release.set()
+        wait_for_status(client, first["task"]["task_id"], "completed")
+
+    assert excinfo.value.error_code == "bridge_task_capacity_reached"
+
+
 def test_bridge_task_rejects_unsupported_method() -> None:
     with running_bridge() as server:
         with pytest.raises(OriginBridgeError) as excinfo:
@@ -964,6 +1114,35 @@ def test_origin_doctor_reports_unavailable_bridge(
     assert result["data"]["bridge"]["error_code"] == "origin_bridge_unavailable"
     assert result["data"]["status_file"]["data"]["last_error"] == "missing pandas"
     assert any("last_error" in item for item in result["data"]["recommendations"])
+
+
+def test_origin_doctor_accepts_embedded_api_without_originpro(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "origin-bridge.status.txt"
+    status_path.write_text(
+        json.dumps(
+            {
+                "running": True,
+                "runtime_probe": {
+                    "inside_origin": True,
+                    "embedded_api_available": True,
+                    "originpro_available": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        bridge_tools,
+        "request_bridge",
+        lambda *_args, **_kwargs: {"bridge": "origin-mcp-bridge"},
+    )
+
+    result = mcp_server.origin_doctor(status_path=str(status_path))
+
+    assert result["data"]["recommendations"] == []
 
 
 def test_origin_doctor_recommends_origin_embedded_python_for_external_status(

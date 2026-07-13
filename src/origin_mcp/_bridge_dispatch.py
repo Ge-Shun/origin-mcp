@@ -183,8 +183,9 @@ def call_origin_method(
             return result
         if method == "origin_capabilities":
             report(0.35, "Collecting capabilities", "Collecting Origin capabilities.")
+            requested_show = params.get("show")
             result = client.capabilities(
-                show=bool(params.get("show", False)),
+                show=requested_show if isinstance(requested_show, bool) else None,
                 refresh=bool(params.get("refresh", False)),
             )
             report(0.95, "Capabilities collected", "Origin capabilities collected.")

@@ -24,10 +24,29 @@ class _LifecycleMixin(_OriginClientBase):
             **show_result,
         }
 
-    def capabilities(self, show: bool = False, refresh: bool = False) -> dict[str, Any]:
+    def capabilities(
+        self,
+        show: bool | None = None,
+        refresh: bool = False,
+    ) -> dict[str, Any]:
         if self._capabilities is not None and not refresh:
+            if show is None:
+                return self._capabilities
+            self._capabilities = {
+                **self._capabilities,
+                **self.connect(show=show),
+            }
             return self._capabilities
-        connection = self.connect(show=show)
+        if show is None:
+            connection = {
+                "connected": True,
+                "visible": None,
+                "visibility_unchanged": True,
+                "show_set": False,
+                "origin_version": self._safe_eval("@V"),
+            }
+        else:
+            connection = self.connect(show=show)
         self._capabilities = {
             **connection,
             **collect_capabilities(self.op, connection.get("origin_version")),
@@ -37,7 +56,7 @@ class _LifecycleMixin(_OriginClientBase):
     def plot_type_coverage(
         self,
         origin_version: float | int | None = None,
-        show: bool = False,
+        show: bool | None = None,
         refresh: bool = False,
     ) -> dict[str, Any]:
         if origin_version is None:
@@ -45,7 +64,7 @@ class _LifecycleMixin(_OriginClientBase):
         return plot_type_coverage(origin_version)
 
     def ensure_feature(self, feature: str, operation: str) -> None:
-        caps = self.capabilities(show=False)
+        caps = self.capabilities()
         if feature_available(caps, feature):
             return
         info = caps.get("features", {}).get(feature, {})

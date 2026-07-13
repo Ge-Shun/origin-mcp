@@ -131,9 +131,11 @@ are in [docs/mcp-config.md](docs/mcp-config.md).
 The bridge runs inside Origin's own Python so `originpro` stays on Origin's UI
 thread. There is nothing to configure — start it once per Origin session:
 
-**Origin Apps (recommended for daily use).** Build and install the two bridge
-Apps once with the steps in
-[docs/origin-ui-buttons.md](docs/origin-ui-buttons.md). After that, click
+**Origin Apps (recommended for daily use).** After installing the Python
+package, stage the two self-contained App sources with
+`origin-mcp install-origin-app --force`, then complete the short Origin
+registration steps in [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md).
+After that, click
 **Origin MCP Bridge Start** in the Apps gallery to start the bridge and
 **Origin MCP Bridge Stop** to stop it.
 

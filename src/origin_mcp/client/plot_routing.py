@@ -421,7 +421,7 @@ class _PlotRoutingMixin(_OriginClientBase):
     ) -> dict[str, Any]:
         if max_templates < 1:
             raise OriginOperationError("max_templates must be at least 1.")
-        capabilities = self.capabilities(show=False)
+        capabilities = self.capabilities()
         origin_paths = self._origin_template_paths()
         search_dirs = [Path(path) for path in origin_paths.values() if path]
         if template_dir is not None:

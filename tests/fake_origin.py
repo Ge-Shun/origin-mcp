@@ -53,6 +53,8 @@ class FakeWorksheet:
         self.activated = 0
         self.label_calls: list[tuple[list[str], str, int]] = []
         self.designation_calls: list[tuple[str, int, int, bool]] = []
+        self.from_df_calls = 0
+        self.to_df_calls = 0
 
     # -- Properties originpro exposes -------------------------------------
     @property
@@ -65,9 +67,11 @@ class FakeWorksheet:
 
     # -- DataFrame round trip ---------------------------------------------
     def to_df(self, **_: Any) -> pd.DataFrame:
+        self.to_df_calls += 1
         return self._df.copy()
 
     def from_df(self, df: pd.DataFrame, c1: int | str = 0) -> None:
+        self.from_df_calls += 1
         if str(c1) in ("0", ""):
             self._df = df.reset_index(drop=True).copy()
             return
@@ -76,6 +80,20 @@ class FakeWorksheet:
         kept = self._df.iloc[:, :offset]
         appended = df.reset_index(drop=True).copy()
         self._df = pd.concat([kept.reset_index(drop=True), appended], axis=1)
+
+    def to_list2(self, r1: int = 0, r2: int = -1, c1: int = 0, c2: int = -1) -> list[list[Any]]:
+        r2 = self.rows - 1 if r2 < 0 else r2
+        c2 = self.cols - 1 if c2 < 0 else c2
+        return [self._df.iloc[r1 : r2 + 1, col].tolist() for col in range(c1, c2 + 1)]
+
+    def from_list2(self, data: list[list[Any]], row: int = 0, col: int | str = 0) -> None:
+        start = int(col) if not isinstance(col, str) else list(self._df.columns).index(col)
+        for col_offset, values in enumerate(data):
+            for row_offset, value in enumerate(values):
+                self._df.iat[row + row_offset, start + col_offset] = value
+
+    def cell(self, row: int, col: int) -> Any:
+        return self._df.iat[row, col]
 
     # -- Metadata ----------------------------------------------------------
     def get_book(self) -> WBook:

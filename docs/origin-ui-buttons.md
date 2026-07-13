@@ -4,7 +4,21 @@ Origin can run LabTalk from toolbar buttons, custom menus, and the built-in
 Custom Routine button. `origin-mcp` can use those entry points so bridge startup
 and shutdown no longer require pasting `addon.py` into the Python Console.
 
-## OPX Installer
+## Installed-package workflow
+
+The Python wheel includes `addon.py` and the Origin App sources. Stage the two
+self-contained App folders without a source checkout:
+
+```powershell
+origin-mcp install-origin-app --force
+```
+
+The command copies them to `%LOCALAPPDATA%\OriginLab\Apps`, prints the exact
+`mkOPX` commands, and vendors the matching `origin_mcp` package under the Start
+App. Run the printed commands in Origin's Command Window, then drag both
+generated OPX files into Origin to register the Apps.
+
+## Source-checkout / OPX workflow
 
 Build the Origin App source folder and install it into Origin's per-user Apps
 folder in one step:
@@ -14,10 +28,9 @@ python scripts\build_origin_app.py --force --install
 ```
 
 This creates `build\origin-app\Origin MCP Bridge Start` and
-`build\origin-app\Origin MCP Bridge Stop`, then copies both folders to
-`%LOCALAPPDATA%\OriginLab\Apps`. After restarting Origin, the two Apps are
-already installed and usable from the Apps gallery — no OPX needed for your own
-machine.
+`build\origin-app\Origin MCP Bridge Stop`, then copies both source folders to
+`%LOCALAPPDATA%\OriginLab\Apps`. As with the installed-package workflow, pack
+and install both OPX files to register the Apps.
 
 To create a **distributable** OPX, pack the installed App with `mkOPX` in its
 canonical `app:=` form from Origin's Command Window:

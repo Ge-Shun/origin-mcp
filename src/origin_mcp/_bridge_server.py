@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import hmac
 import importlib
+import ipaddress
 import json
 import os
 import socketserver
 import threading
 import time
 import traceback
+from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from . import __version__
@@ -33,6 +38,114 @@ def _keep_external_origin() -> bool:
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 47631
+DEFAULT_REPLAY_CACHE_SIZE = 512
+
+
+def validate_bridge_host(host: str) -> None:
+    """Reject network-exposed bridge bindings; the protocol is localhost-only."""
+
+    normalized = str(host).strip().lower()
+    if normalized == "localhost":
+        return
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError as exc:
+        raise OriginOperationError(
+            f"Origin bridge host must be a loopback address, got {host!r}.",
+            error_code="invalid_bridge_host",
+        ) from exc
+    if not address.is_loopback:
+        raise OriginOperationError(
+            f"Origin bridge host must be a loopback address, got {host!r}.",
+            error_code="invalid_bridge_host",
+        )
+
+
+@dataclass
+class _ReplayEntry:
+    fingerprint: str
+    ready: threading.Event = field(default_factory=threading.Event)
+    response: dict[str, Any] | None = None
+
+
+class _RequestReplayCache:
+    """Coordinate duplicate request ids so Origin operations run at most once.
+
+    A transport can disappear after Origin has accepted a request but before the
+    response reaches the client. The client must reconnect in that situation for
+    the embedded one-request-per-connection bridge, so the server owns the
+    at-most-once boundary. Duplicate callers either receive the completed cached
+    response or wait for the first caller to finish.
+    """
+
+    def __init__(self, max_entries: int = DEFAULT_REPLAY_CACHE_SIZE) -> None:
+        self._max_entries = max(1, int(max_entries))
+        self._entries: OrderedDict[str, _ReplayEntry] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def execute(
+        self,
+        request: Any,
+        callback: Callable[[], dict[str, Any]],
+        error_factory: Callable[[Any, Exception], dict[str, Any]],
+    ) -> tuple[dict[str, Any], str | None, bool]:
+        request_id = request.get("id") if isinstance(request, dict) else None
+        if not isinstance(request_id, str) or not request_id:
+            return self._execute_uncached(request_id, callback, error_factory)
+
+        fingerprint = json.dumps(request, sort_keys=True, separators=(",", ":"))
+        with self._lock:
+            entry = self._entries.get(request_id)
+            if entry is None:
+                entry = _ReplayEntry(fingerprint=fingerprint)
+                self._entries[request_id] = entry
+                owner = True
+            else:
+                if not hmac.compare_digest(entry.fingerprint, fingerprint):
+                    exc = OriginOperationError(
+                        f"Bridge request id was reused with different content: {request_id}",
+                        error_code="bridge_request_id_conflict",
+                    )
+                    return error_factory(request_id, exc), None, True
+                owner = False
+                self._entries.move_to_end(request_id)
+
+        if not owner:
+            entry.ready.wait()
+            # The owner always publishes a response before setting ready.
+            assert entry.response is not None
+            return entry.response, None, True
+
+        response, error_traceback, _ = self._execute_uncached(
+            request_id,
+            callback,
+            error_factory,
+        )
+        with self._lock:
+            entry.response = response
+            entry.ready.set()
+            self._entries.move_to_end(request_id)
+            self._prune_locked()
+        return response, error_traceback, False
+
+    @staticmethod
+    def _execute_uncached(
+        request_id: Any,
+        callback: Callable[[], dict[str, Any]],
+        error_factory: Callable[[Any, Exception], dict[str, Any]],
+    ) -> tuple[dict[str, Any], str | None, bool]:
+        try:
+            return callback(), None, False
+        except Exception as exc:
+            return error_factory(request_id, exc), traceback.format_exc(), False
+
+    def _prune_locked(self) -> None:
+        overflow = len(self._entries) - self._max_entries
+        if overflow <= 0:
+            return
+        removable = [key for key, entry in self._entries.items() if entry.ready.is_set()]
+        for key in removable[:overflow]:
+            self._entries.pop(key, None)
 
 
 if TYPE_CHECKING:
@@ -66,6 +179,7 @@ class _OriginBridgeServerState(_StateBase):
         )
         self.max_tasks = max(1, max_tasks)
         self.shutdown_requested = threading.Event()
+        self.request_replay = _RequestReplayCache()
 
     def request_shutdown(self) -> None:
         self.shutdown_requested.set()
@@ -107,6 +221,7 @@ class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServ
         client: OriginClient | None = None,
         max_tasks: int = DEFAULT_MAX_TASKS,
     ) -> None:
+        validate_bridge_host(server_address[0])
         super().__init__(server_address, OriginBridgeHandler)
         self._init_bridge_state(token=token, client=client, max_tasks=max_tasks)
 
@@ -128,6 +243,7 @@ class OriginEmbeddedBridgeServer(_OriginBridgeServerState, socketserver.TCPServe
         client: OriginClient | None = None,
         max_tasks: int = DEFAULT_MAX_TASKS,
     ) -> None:
+        validate_bridge_host(server_address[0])
         super().__init__(server_address, OriginBridgeHandler)
         self._init_bridge_state(token=token, client=client, max_tasks=max_tasks)
 
@@ -152,12 +268,15 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                     raw_method = request.get("method")
                     if isinstance(raw_method, str) and raw_method:
                         method_for_log = raw_method
-                response = self._dispatch(request)
+                response, error_traceback, _replayed = self.server.request_replay.execute(
+                    request,
+                    partial(self._dispatch, request),
+                    self._error_response,
+                )
             except Exception as exc:
                 response = self._error_response(request_id, exc)
-                # Capture the stack here, while the exception is live. The
-                # response intentionally omits it (never leak internals to the
-                # client); it is logged locally below only when debug is on.
+                # JSON decoding and other failures outside replay execution are
+                # still captured locally without exposing the traceback.
                 error_traceback = traceback.format_exc()
             duration_ms = (time.monotonic() - started_at) * 1000.0
             ok = bool(response.get("ok"))

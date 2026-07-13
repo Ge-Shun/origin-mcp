@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+MAX_RESPONSE_ROWS = 10_000
+
 
 class PlotKind(str, Enum):
     line = "line"
@@ -46,13 +48,18 @@ class TableImportRequest(BaseModel):
     encoding: str | None = Field(default=None, description="Optional text file encoding.")
     header: int | None = Field(
         default=0,
+        ge=0,
         description="Zero-based row number to use as column names.",
     )
     skiprows: int | list[int] | None = Field(
         default=None,
         description="Rows to skip while reading.",
     )
-    nrows: int | None = Field(default=None, description="Maximum number of data rows to read.")
+    nrows: int | None = Field(
+        default=None,
+        ge=0,
+        description="Maximum number of data rows to read.",
+    )
     na_values: str | list[str] | None = Field(
         default=None,
         description="Additional missing value markers.",
@@ -70,9 +77,27 @@ class TableImportRequest(BaseModel):
             raise ValueError(f"Unsupported data file extension: {value.suffix}")
         return value
 
+    @field_validator("skiprows")
+    @classmethod
+    def skipped_rows_must_be_non_negative(
+        cls,
+        value: int | list[int] | None,
+    ) -> int | list[int] | None:
+        values = [value] if isinstance(value, int) else value or []
+        if any(item < 0 for item in values):
+            raise ValueError("skiprows values must be non-negative.")
+        return value
+
 
 class CsvImportRequest(TableImportRequest):
     path: Path = Field(description="Absolute path to a CSV file.")
+
+    @field_validator("path")
+    @classmethod
+    def path_must_be_csv(cls, value: Path) -> Path:
+        if value.suffix.lower() != ".csv":
+            raise ValueError(f"Expected a CSV file, got: {value.suffix}")
+        return value
 
 
 class PlotTableRequest(TableImportRequest):
@@ -132,40 +157,72 @@ class GraphFormatRequest(BaseModel):
 
 class AxisSettingsRequest(BaseModel):
     graph_name: str | None = Field(default=None, description="Optional graph page name.")
-    layer_index: int = Field(default=0, description="Zero-based graph layer index.")
-    axis: str = Field(default="x", description="Axis name: x, y, x2, y2, z, or z2.")
+    layer_index: int = Field(default=0, ge=0, description="Zero-based graph layer index.")
+    axis: Literal["x", "y", "x2", "y2", "z", "z2"] = Field(
+        default="x",
+        description="Axis name: x, y, x2, y2, z, or z2.",
+    )
     scale: str | int | None = Field(
         default=None,
         description="Axis scale, such as linear or log10.",
     )
     start: float | None = Field(default=None, description="Axis start value.")
     end: float | None = Field(default=None, description="Axis end value.")
-    step: float | None = Field(default=None, description="Axis major tick step.")
+    step: float | None = Field(default=None, gt=0, description="Axis major tick step.")
     title: str | None = Field(default=None, description="Axis title.")
 
 
 class PlotStyleRequest(BaseModel):
     graph_name: str | None = Field(default=None, description="Optional graph page name.")
-    layer_index: int = Field(default=0, description="Zero-based graph layer index.")
+    layer_index: int = Field(default=0, ge=0, description="Zero-based graph layer index.")
     plot_index: int | None = Field(
         default=None,
+        ge=0,
         description="Zero-based plot index. Applies to all plots if omitted.",
     )
     color: str | tuple[int, int, int] | None = Field(default=None, description="Plot color.")
-    line_width: float | None = Field(default=None, description="Line width in points.")
+    line_width: float | None = Field(default=None, gt=0, description="Line width in points.")
     bar_gap: float | None = Field(
         default=None,
         description="Bar/column gap percent (-vg). Larger values make bars narrower.",
     )
     line_style: int | None = Field(default=None, description="Origin line style integer.")
     symbol_kind: int | None = Field(default=None, description="Origin symbol kind integer.")
-    symbol_size: float | None = Field(default=None, description="Symbol size.")
-    transparency: float | None = Field(default=None, description="Transparency percent, 0 to 100.")
+    symbol_size: float | None = Field(default=None, gt=0, description="Symbol size.")
+    transparency: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Transparency percent, 0 to 100.",
+    )
+
+    @field_validator("color")
+    @classmethod
+    def rgb_components_must_be_bytes(
+        cls,
+        value: str | tuple[int, int, int] | None,
+    ) -> str | tuple[int, int, int] | None:
+        if isinstance(value, tuple) and any(
+            component < 0 or component > 255 for component in value
+        ):
+            raise ValueError("RGB components must be between 0 and 255.")
+        return value
 
 
 class ProjectObjectRequest(BaseModel):
     name: str = Field(description="Origin page or object name.")
-    object_type: str = Field(
+    object_type: Literal[
+        "graph",
+        "g",
+        "workbook",
+        "book",
+        "w",
+        "matrixbook",
+        "matrix",
+        "m",
+        "worksheet",
+        "sheet",
+    ] = Field(
         default="graph",
         description="graph, workbook, matrixbook, or worksheet.",
     )
@@ -190,6 +247,8 @@ class AnalysisRequest(BaseModel):
     )
     output_max_rows: int = Field(
         default=100,
+        ge=1,
+        le=MAX_RESPONSE_ROWS,
         description="Maximum rows to read from an output worksheet.",
     )
 
@@ -218,9 +277,9 @@ class FigureDataSpec(BaseModel):
     excel_sheet: str | int | None = 0
     delimiter: str | None = None
     encoding: str | None = None
-    header: int | None = 0
+    header: int | None = Field(default=0, ge=0)
     skiprows: int | list[int] | None = None
-    nrows: int | None = None
+    nrows: int | None = Field(default=None, ge=0)
     na_values: str | list[str] | None = None
 
     @field_validator("source")
@@ -235,20 +294,66 @@ class FigureDataSpec(BaseModel):
             raise ValueError(f"Unsupported data file extension: {value.suffix}")
         return value
 
+    @field_validator("skiprows")
+    @classmethod
+    def skipped_rows_must_be_non_negative(
+        cls,
+        value: int | list[int] | None,
+    ) -> int | list[int] | None:
+        values = [value] if isinstance(value, int) else value or []
+        if any(item < 0 for item in values):
+            raise ValueError("skiprows values must be non-negative.")
+        return value
+
 
 class FigureAxisSpec(BaseModel):
     title: str | None = None
     scale: str | int | None = None
     limits: Literal["auto"] | list[float | None] | None = "auto"
-    step: float | None = None
+    step: float | None = Field(default=None, gt=0)
+
+    @field_validator("limits")
+    @classmethod
+    def limits_must_be_a_pair(
+        cls,
+        value: Literal["auto"] | list[float | None] | None,
+    ) -> Literal["auto"] | list[float | None] | None:
+        if isinstance(value, list) and len(value) != 2:
+            raise ValueError("axis limits require exactly two values.")
+        return value
 
 
 class FigurePageSpec(BaseModel):
     id: str = Field(default="page_main")
     layout: Literal["single", "grid", "custom"] = Field(default="single")
-    size_mm: list[float] | None = None
+    size_mm: list[float] | None = Field(default=None, min_length=2, max_length=2)
     margins_mm: list[float] | None = None
     panel_spacing_mm: list[float] | None = None
+
+    @field_validator("size_mm")
+    @classmethod
+    def page_size_must_be_positive(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and any(item <= 0 for item in value):
+            raise ValueError("page.size_mm values must be positive.")
+        return value
+
+    @field_validator("margins_mm")
+    @classmethod
+    def margins_must_have_supported_shape(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and len(value) not in {1, 2, 4}:
+            raise ValueError("page.margins_mm requires 1, 2, or 4 values.")
+        if value is not None and any(item < 0 for item in value):
+            raise ValueError("page.margins_mm values must be non-negative.")
+        return value
+
+    @field_validator("panel_spacing_mm")
+    @classmethod
+    def spacing_must_have_supported_shape(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and len(value) not in {1, 2}:
+            raise ValueError("page.panel_spacing_mm requires 1 or 2 values.")
+        if value is not None and any(item < 0 for item in value):
+            raise ValueError("page.panel_spacing_mm values must be non-negative.")
+        return value
 
 
 class FigureLayerSpec(BaseModel):
@@ -262,14 +367,43 @@ class FigureLayerSpec(BaseModel):
             "height as page percentages."
         ),
     )
-    grid_cell: list[int] | None = None
-    grid_span: list[int] | None = None
+    grid_cell: list[int] | None = Field(default=None, min_length=2, max_length=2)
+    grid_span: list[int] | None = Field(default=None, min_length=2, max_length=2)
     title: str | None = None
     panel_tag: str | None = None
     data_ref: str | None = None
     x: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
     y: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
     frame: dict[str, bool] = Field(default_factory=dict)
+
+    @field_validator("grid_cell")
+    @classmethod
+    def grid_cell_must_be_non_negative(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and any(item < 0 for item in value):
+            raise ValueError("layers.grid_cell values must be non-negative.")
+        return value
+
+    @field_validator("grid_span")
+    @classmethod
+    def grid_span_must_be_positive(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and any(item < 1 for item in value):
+            raise ValueError("layers.grid_span values must be positive.")
+        return value
+
+    @field_validator("position")
+    @classmethod
+    def absolute_position_must_be_page_percent(
+        cls,
+        value: dict[str, float],
+    ) -> dict[str, float]:
+        allowed = {"left", "top", "width", "height"}
+        unknown = sorted(set(value) - allowed)
+        if unknown:
+            raise ValueError(f"Unsupported layers.position keys: {unknown}")
+        for key, item in value.items():
+            if item < 0 or item > 100 or (key in {"width", "height"} and item == 0):
+                raise ValueError(f"layers.position.{key} must be within page percent bounds.")
+        return value
 
 
 class FigurePlotSpec(BaseModel):
@@ -302,7 +436,7 @@ class FigureStyleSpec(BaseModel):
     theme: Literal["origin_default", "template", "theme", "none", "nature"] = "origin_default"
     template: str | None = None
     font_family: str | None = None
-    annotation_font_size: int | None = None
+    annotation_font_size: int | None = Field(default=None, gt=0)
     palette_role: str | None = None
     palette_name: str | None = None
 
@@ -310,7 +444,7 @@ class FigureStyleSpec(BaseModel):
 class FigureExportFormatSpec(BaseModel):
     enabled: bool = False
     path: Path | None = None
-    width_px: int | None = None
+    width_px: int | None = Field(default=None, gt=0)
 
 
 class FigureExportSpec(BaseModel):
@@ -398,6 +532,7 @@ class SaveGraphTemplateRequest(BaseModel):
     )
     n_columns: int | None = Field(
         default=None,
+        ge=1,
         description="Number of data columns the source plot used. Improves search matching.",
     )
     graph_name: str | None = Field(

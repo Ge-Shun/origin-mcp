@@ -1,6 +1,6 @@
 """Behavioural tests for ``_WorksheetMixin`` against the in-memory fake Origin.
 
-These exercise the pandas round-trip logic (read/write/sort/cells/transforms)
+These exercise bounded reads, direct cell writes, and pandas-backed transforms
 that previously only ran under live Origin validation.
 """
 
@@ -28,6 +28,8 @@ def test_read_worksheet_windows_rows(fake_client: OriginClient, sample_df: pd.Da
     assert result["returned_rows"] == 2
     assert result["columns"] == ["x", "y"]
     assert [row["x"] for row in result["rows"]] == [2, 3]
+    sheet = fake_client.op.find_sheet("w", "Data")
+    assert sheet is not None and sheet.to_df_calls == 0
 
 
 def test_read_worksheet_selects_columns(fake_client: OriginClient, sample_df: pd.DataFrame) -> None:
@@ -39,7 +41,10 @@ def test_read_worksheet_selects_columns(fake_client: OriginClient, sample_df: pd
     assert all(set(row) == {"y"} for row in result["rows"])
 
 
-@pytest.mark.parametrize("kwargs", [{"start_row": -1}, {"max_rows": 0}])
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"start_row": -1}, {"max_rows": 0}, {"max_rows": 10_001}],
+)
 def test_read_worksheet_validates_bounds(
     fake_client: OriginClient, sample_df: pd.DataFrame, kwargs: dict[str, int]
 ) -> None:
@@ -112,6 +117,7 @@ def test_set_cell_value_writes(fake_client: OriginClient, sample_df: pd.DataFram
 
     sheet = fake_client.op.find_sheet("w", "Data")
     assert sheet is not None and sheet.to_df()["x"].tolist()[0] == 999
+    assert sheet is not None and sheet.from_df_calls == 0
 
 
 def test_get_cell_value_returns_none_for_nan(fake_client: OriginClient) -> None:

@@ -531,6 +531,7 @@ class FakeWorksheet:
         self.df = df if df is not None else pd.DataFrame()
         self.rows = len(self.df)
         self.cols = len(self.df.columns)
+        self.from_df_calls = 0
 
     def get_book(self) -> FakeBook:
         return FakeBook()
@@ -539,10 +540,25 @@ class FakeWorksheet:
         return self.df.copy()
 
     def from_df(self, df: pd.DataFrame, c1: str | int = 0) -> None:
+        self.from_df_calls += 1
         self.df = df.copy()
         self.rows = len(df)
         self.cols = len(df.columns)
         self.start_col = c1
+
+    def to_list2(self, r1: int = 0, r2: int = -1, c1: int = 0, c2: int = -1) -> list[list[Any]]:
+        r2 = self.rows - 1 if r2 < 0 else r2
+        c2 = self.cols - 1 if c2 < 0 else c2
+        return [self.df.iloc[r1 : r2 + 1, col].tolist() for col in range(c1, c2 + 1)]
+
+    def from_list2(self, data: list[list[Any]], row: int = 0, col: int | str = 0) -> None:
+        start = int(col) if not isinstance(col, str) else list(self.df.columns).index(col)
+        for col_offset, values in enumerate(data):
+            for row_offset, value in enumerate(values):
+                self.df.iat[row + row_offset, start + col_offset] = value
+
+    def cell(self, row: int, col: int) -> Any:
+        return self.df.iat[row, col]
 
     def get_labels(self, label_type: str) -> list[str]:
         if label_type == "L":
@@ -709,6 +725,7 @@ def test_get_set_cell_and_delete_columns(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert client.get_cell_value(1, "force")["value"] == 3
     updated = client.set_cell_value(0, "force", 5)
+    assert wks.from_df_calls == 0
     deleted = client.delete_columns(["drop"])
 
     assert updated["value"] == 5

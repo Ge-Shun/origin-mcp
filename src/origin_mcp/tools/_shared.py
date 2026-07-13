@@ -18,14 +18,13 @@ from origin_mcp.models import ToolResult
 mcp = FastMCP(
     "origin-mcp",
     instructions=(
-        "Origin/OriginPro MCP server. The default compact tool profile exposes "
-        "high-level diagnostics, knowledge, plotting, worksheet, analysis, export, "
-        "LabTalk, and task tools. Set ORIGIN_MCP_TOOL_PROFILE=full to expose every "
-        "specialized worksheet, graph, analysis, and plot-type wrapper."
+        "Origin/OriginPro MCP server. The default compact profile exposes a focused "
+        "high-level surface. Use data, plot, analysis, or standard for a broader "
+        "workflow-specific surface, and full for every specialized wrapper."
     ),
 )
 
-COMPACT_TOOL_NAMES = frozenset(
+STANDARD_TOOL_NAMES = frozenset(
     {
         "origin_doctor",
         "origin_ping",
@@ -80,7 +79,7 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_format_graph",
         "origin_export_graph",
         "origin_view_graph",
-        # Analysis: the compact profile exposes the generic dispatcher plus the
+        # Analysis: the standard profile exposes the generic dispatcher plus the
         # two structured fits whose typed signatures are awkward to express
         # through run_analysis options. Every other named analysis
         # (polynomial_fit, smooth, descriptive_stats, differentiate, integrate,
@@ -100,6 +99,85 @@ COMPACT_TOOL_NAMES = frozenset(
         "origin_bridge_list_tasks",
     }
 )
+COMPACT_TOOL_NAMES = frozenset(
+    {
+        "origin_doctor",
+        "origin_ping",
+        "origin_capabilities",
+        "origin_browse_knowledge",
+        "origin_query_knowledge",
+        "origin_plan_figure_spec",
+        "origin_execute_figure_spec",
+        "origin_import_table",
+        "origin_read_worksheet",
+        "origin_write_worksheet",
+        "origin_diagnose_worksheet",
+        "origin_recommend_chart",
+        "origin_plot",
+        "origin_plot_auto",
+        "origin_get_graph_info",
+        "origin_format_graph",
+        "origin_export_graph",
+        "origin_view_graph",
+        "origin_run_analysis",
+        "origin_run_labtalk",
+        "origin_bridge_shutdown",
+        "origin_bridge_submit_task",
+        "origin_bridge_task_status",
+        "origin_bridge_cancel_task",
+        "origin_bridge_list_tasks",
+    }
+)
+DATA_TOOL_NAMES = COMPACT_TOOL_NAMES | frozenset(
+    {
+        "origin_add_calculated_columns",
+        "origin_filter_rows",
+        "origin_drop_duplicates",
+        "origin_fill_missing",
+        "origin_transpose_worksheet",
+        "origin_merge_worksheets",
+        "origin_concat_worksheets",
+        "origin_pivot_worksheet",
+        "origin_melt_worksheet",
+    }
+)
+PLOT_TOOL_NAMES = COMPACT_TOOL_NAMES | frozenset(
+    name
+    for name in STANDARD_TOOL_NAMES
+    if name.startswith("origin_plot_")
+    or name
+    in {
+        "origin_add_inset",
+        "origin_add_plot_to_graph",
+        "origin_delete_template",
+        "origin_get_layer_info",
+        "origin_list_user_templates",
+        "origin_palette_catalog",
+        "origin_rename_template",
+        "origin_save_graph_template",
+        "origin_search_templates",
+        "origin_set_axis",
+        "origin_set_axis_break",
+        "origin_set_plot_property",
+        "origin_set_plot_style",
+        "origin_update_template_metadata",
+    }
+)
+ANALYSIS_TOOL_NAMES = COMPACT_TOOL_NAMES | frozenset(
+    {
+        "origin_linear_fit",
+        "origin_list_fit_functions",
+        "origin_nonlinear_fit_structured",
+    }
+)
+PROFILE_TOOL_NAMES = {
+    "compact": COMPACT_TOOL_NAMES,
+    "data": DATA_TOOL_NAMES,
+    "plot": PLOT_TOOL_NAMES,
+    "analysis": ANALYSIS_TOOL_NAMES,
+    "standard": STANDARD_TOOL_NAMES,
+    "legacy": STANDARD_TOOL_NAMES,
+}
 FULL_TOOL_PROFILE_VALUES = {"full", "expert", "all"}
 
 
@@ -109,7 +187,9 @@ def _tool_profile() -> str:
 
 def _should_register_tool(name: str) -> bool:
     profile = _tool_profile()
-    return profile in FULL_TOOL_PROFILE_VALUES or name in COMPACT_TOOL_NAMES
+    if profile in FULL_TOOL_PROFILE_VALUES:
+        return True
+    return name in PROFILE_TOOL_NAMES.get(profile, COMPACT_TOOL_NAMES)
 
 
 def _mcp_tool(**tool_kwargs: Any) -> Any:

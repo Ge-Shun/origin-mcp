@@ -45,12 +45,14 @@ origin = [
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
-  "ruff>=0.8",
+  # Keep CI and pre-commit on the same formatter release. Formatter output can
+  # change between Ruff versions even when lint rules do not.
+  "ruff==0.15.15",
   "mypy>=1.8",
 ]
 
 [project.scripts]
-origin-mcp = "origin_mcp.server:main"
+origin-mcp = "origin_mcp.cli:main"
 
 [tool.hatch.version]
 # Single source of truth: the version lives in src/origin_mcp/__init__.py
@@ -63,6 +65,9 @@ packages = ["src/origin_mcp"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/origin_mcp/py.typed" = "origin_mcp/py.typed"
+"addon.py" = "origin_mcp/app_assets/addon.py"
+"docs/assets/origin-mcp-start-icon.png" = "origin_mcp/app_assets/origin-mcp-start-icon.png"
+"docs/assets/origin-mcp-stop-icon.png" = "origin_mcp/app_assets/origin-mcp-stop-icon.png"
 
 [tool.ruff]
 line-length = 100
