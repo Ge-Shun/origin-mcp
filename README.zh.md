@@ -3,6 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
 [![Downloads](https://static.pepy.tech/badge/origin-mcp)](https://pepy.tech/projects/origin-mcp)
 [![Python versions](https://img.shields.io/pypi/pyversions/origin-mcp)](https://pypi.org/project/origin-mcp/)
+[![origin-mcp MCP server](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md)
