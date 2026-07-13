@@ -272,7 +272,7 @@ def origin_view_graph(graph_name: str | None = None, max_width: int = 1600) -> l
     return [summary, Image(data=png, format="png")]
 
 
-@_mcp_tool()
+@_mcp_tool(schema_model=GraphFormatRequest)
 def origin_format_graph(
     graph_name: str | None = None,
     title: str | None = None,

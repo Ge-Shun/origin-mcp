@@ -76,7 +76,7 @@ def origin_import_csv(
     return _wrap(run)
 
 
-@_mcp_tool()
+@_mcp_tool(schema_model=TableImportRequest)
 def origin_import_table(
     path: str,
     book_name: str | None = None,
@@ -420,7 +420,13 @@ def origin_read_worksheet(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    parameter_descriptions={
+        "columns": (
+            "Column names for object rows. For array rows, these names define the array order."
+        ),
+    },
+)
 def origin_write_worksheet(
     rows: list[dict[str, Any]] | list[list[Any]],
     columns: list[str] | None = None,
@@ -603,7 +609,14 @@ def origin_clear_worksheet(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    parameter_descriptions={
+        "high_missing_threshold": (
+            "Missing-value fraction from 0 through 1 that triggers a high_missing warning."
+        ),
+    },
+    parameter_constraints={"high_missing_threshold": {"ge": 0, "le": 1}},
+)
 def origin_diagnose_worksheet(
     book_name: str | None = None,
     sheet_name: str | None = None,

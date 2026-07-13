@@ -87,7 +87,7 @@ SUPPORTED_GROUP_STYLE_KEYS = {
 
 
 @_mcp_tool()
-def origin_plan_figure_spec(spec: dict[str, Any]) -> dict[str, Any]:
+def origin_plan_figure_spec(spec: FigureSpec) -> dict[str, Any]:
     """Validate a declarative FigureSpec and return the planned Origin operations."""
 
     return _wrap(
@@ -97,7 +97,7 @@ def origin_plan_figure_spec(spec: dict[str, Any]) -> dict[str, Any]:
 
 @_mcp_tool()
 def origin_execute_figure_spec(
-    spec: dict[str, Any],
+    spec: FigureSpec,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Execute a declarative FigureSpec.

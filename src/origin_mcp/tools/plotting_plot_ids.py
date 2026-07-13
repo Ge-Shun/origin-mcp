@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from origin_mcp.models import PlotKind
+from origin_mcp.models import PlotKind, PlotStyleMode
 
 from ._shared import (
     _export_inspection,
@@ -473,7 +473,23 @@ def _pti(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    parameter_descriptions={
+        "kind": (
+            "Table plot kind. The schema lists every compact-route kind supported by this tool."
+        ),
+    },
+    parameter_choices={
+        "kind": tuple(
+            sorted(
+                BASIC_PLOT_KINDS.keys()
+                | _DISTRIBUTION_PLOT_KINDS.keys()
+                | PLOT_TYPE_ID_ROUTES.keys()
+            )
+        ),
+        "style_mode": tuple(item.value for item in PlotStyleMode),
+    },
+)
 def origin_plot(
     path: str,
     kind: str,

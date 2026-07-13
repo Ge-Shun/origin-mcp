@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import math
 import os
+from inspect import signature
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, get_type_hints
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from origin_mcp.bridge_client import OriginBridgeConfig, OriginBridgeProxy
 from origin_mcp.errors import (
@@ -261,6 +262,108 @@ PROFILE_TOOL_NAMES = {
 FULL_TOOL_PROFILE_VALUES = {"full", "expert", "all"}
 
 
+_COMMON_PARAMETER_DESCRIPTIONS = {
+    "book_name": "Origin workbook name. Omit to use the active workbook or the tool default.",
+    "capture_log": "Whether to capture and return LabTalk output produced by the script.",
+    "close_origin": "Whether bridge shutdown should also force-close the Origin application.",
+    "collection": "Knowledge collection to browse or search. Omit to include all collections.",
+    "columns": "Column names or zero-based column indexes selected for this operation.",
+    "create": "Whether to create the target Origin object when it does not already exist.",
+    "delimiter": "Text-file delimiter. Omit to use the format default or automatic detection.",
+    "dry_run": "Validate and plan the operation without changing the Origin project.",
+    "encoding": "Text-file character encoding. Omit to use automatic/default decoding.",
+    "excel_sheet": "Excel sheet name or zero-based sheet index; ignored for text files.",
+    "export_path": "Optional output path for exporting the created graph.",
+    "graph_name": "Origin graph page name. Omit to use the active graph or create a new page.",
+    "header": "Zero-based input row to use as column names; null means no header row.",
+    "host": "Optional Origin bridge host override. Normally omit to use configured localhost.",
+    "include_logs": "Whether to include recent background-task log records in the response.",
+    "include_output": "Whether to read generated worksheet rows back into the tool response.",
+    "include_result": "Whether to include a completed background task's result payload.",
+    "intent": "Optional natural-language chart intent used to guide automatic routing.",
+    "limit": "Maximum number of matching or recent records to return.",
+    "log_limit": "Maximum number of recent background-task log records to return.",
+    "max_recommendations": "Maximum number of ranked chart recommendations to return.",
+    "max_rows": "Maximum number of worksheet rows to return.",
+    "max_width": "Maximum rendered image width in pixels.",
+    "method": "Allowlisted Origin bridge method to run as a background task.",
+    "na_values": "Additional string value or values to interpret as missing data.",
+    "nrows": "Maximum number of input data rows to read; omit to read all rows.",
+    "options": "Operation-specific options. Use only keys documented for the selected operation.",
+    "output_max_rows": "Maximum number of generated worksheet rows to include in the response.",
+    "output_sheet": "Optional Origin output worksheet name or range hint.",
+    "overwrite": "Whether an existing output file may be replaced.",
+    "palette_name": "Optional registered color palette name used by the selected style mode.",
+    "params": "Keyword arguments passed to the selected allowlisted bridge method.",
+    "path": "Filesystem path consumed or produced by this tool; see the tool description.",
+    "ping_origin": "Whether diagnostics should also make a live request to Origin.",
+    "port": "Optional Origin bridge TCP port override. Normally omit to use the handshake value.",
+    "query": "Keyword query matched against local knowledge titles, summaries, and bodies.",
+    "refresh": "Whether to bypass cached capability data and query Origin again.",
+    "release_origin": "Whether bridge shutdown should release its Origin automation connection.",
+    "rescale": "Whether to rescale graph axes after applying formatting.",
+    "rows": "Rows to write, as objects keyed by column name or arrays matching columns.",
+    "script": "LabTalk script text to execute inside the connected Origin application.",
+    "selected_cols": "Column names or zero-based indexes to include in the plot.",
+    "sheet_name": "Origin worksheet name. Omit to use the active sheet or the tool default.",
+    "show": "Whether Origin should be visible after connecting or querying capabilities.",
+    "show_legend": "Whether the graph legend should be shown; null leaves it unchanged.",
+    "skiprows": "Zero-based input row index or indexes to skip while reading the file.",
+    "spec": "Declarative FigureSpec describing data, layout, plots, style, export, and QA.",
+    "start_col": "Column name or zero-based column index at which writing begins.",
+    "start_row": "Zero-based worksheet row at which reading begins.",
+    "status_path": "Optional bridge status-file path override used by diagnostics.",
+    "style_mode": (
+        "Graph styling policy: origin_default preserves the Origin template; nature applies "
+        "the origin-mcp scientific preset."
+    ),
+    "task_id": "Background task identifier returned by origin_bridge_submit_task.",
+    "timeout": "Bridge request timeout in seconds; null uses the configured default.",
+    "title": "Optional Origin page long name or graph title.",
+    "token": "Optional bridge authentication token override. Normally omit to use the handshake.",
+    "topic": "Knowledge entry path within the selected collection; omit to list its children.",
+    "version": "Optional Origin documentation version filter, such as 2026b.",
+    "width": "Export width in pixels; zero preserves Origin's default export width.",
+    "worksheet": "Origin worksheet range or book/sheet reference. Omit to use the active sheet.",
+    "x_col": "Column name or zero-based index to use as X data.",
+    "x_error_col": "Optional column name or zero-based index containing X errors.",
+    "x_label": "Optional X-axis title.",
+    "y_col": "Column name or zero-based index to use as Y data.",
+    "y_cols": "Column names or zero-based indexes to use as Y series.",
+    "y_error_col": "Optional column name or zero-based index containing Y errors.",
+    "y_label": "Optional Y-axis title.",
+    "z_col": "Optional column name or zero-based index to use as Z data.",
+}
+
+_JSON_SCHEMA_CONSTRAINTS = {
+    "minimum": "ge",
+    "exclusiveMinimum": "gt",
+    "maximum": "le",
+    "exclusiveMaximum": "lt",
+    "minLength": "min_length",
+    "maxLength": "max_length",
+    "minItems": "min_length",
+    "maxItems": "max_length",
+}
+
+
+def _model_schema_value(schema: dict[str, Any], key: str, root: dict[str, Any]) -> Any:
+    if key in schema:
+        return schema[key]
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        target = root.get("$defs", {}).get(reference.removeprefix("#/$defs/"), {})
+        value = _model_schema_value(target, key, root)
+        if value is not None:
+            return value
+    for branch_key in ("anyOf", "oneOf", "allOf"):
+        for branch in schema.get(branch_key, []):
+            value = _model_schema_value(branch, key, root)
+            if value is not None:
+                return value
+    return None
+
+
 def _tool_profile() -> str:
     return os.environ.get("ORIGIN_MCP_TOOL_PROFILE", "compact").strip().lower() or "compact"
 
@@ -272,9 +375,72 @@ def _should_register_tool(name: str) -> bool:
     return name in PROFILE_TOOL_NAMES.get(profile, COMPACT_TOOL_NAMES)
 
 
-def _mcp_tool(**tool_kwargs: Any) -> Any:
+def _enrich_tool_schema(
+    func: Any,
+    *,
+    schema_model: type[BaseModel] | None = None,
+    parameter_descriptions: dict[str, str] | None = None,
+    parameter_choices: dict[str, tuple[Any, ...] | list[Any] | set[Any]] | None = None,
+    parameter_constraints: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    """Attach MCP-facing field metadata without changing the flat call signature."""
+
+    descriptions = parameter_descriptions or {}
+    choices = parameter_choices or {}
+    constraints = parameter_constraints or {}
+    root_model_schema = schema_model.model_json_schema() if schema_model is not None else {}
+    model_properties = root_model_schema.get("properties", {})
+    try:
+        resolved_annotations = get_type_hints(func, include_extras=True)
+    except (NameError, TypeError):
+        resolved_annotations = dict(func.__annotations__)
+
+    for name in signature(func).parameters:
+        annotation = resolved_annotations.get(name)
+        if annotation is None:
+            continue
+        property_schema = model_properties.get(name, {})
+        description = (
+            descriptions.get(name)
+            or property_schema.get("description")
+            or _COMMON_PARAMETER_DESCRIPTIONS.get(name)
+        )
+        field_kwargs = {}
+        for source, target in _JSON_SCHEMA_CONSTRAINTS.items():
+            value = _model_schema_value(property_schema, source, root_model_schema)
+            if value is not None:
+                field_kwargs[target] = value
+        field_kwargs.update(constraints.get(name, {}))
+        if description:
+            field_kwargs["description"] = description
+
+        enum_values = choices.get(name) or _model_schema_value(
+            property_schema, "enum", root_model_schema
+        )
+        if enum_values:
+            field_kwargs["json_schema_extra"] = {"enum": list(enum_values)}
+        if not field_kwargs:
+            continue
+        func.__annotations__[name] = Annotated[annotation, Field(**field_kwargs)]
+
+
+def _mcp_tool(
+    *,
+    schema_model: type[BaseModel] | None = None,
+    parameter_descriptions: dict[str, str] | None = None,
+    parameter_choices: dict[str, tuple[Any, ...] | list[Any] | set[Any]] | None = None,
+    parameter_constraints: dict[str, dict[str, Any]] | None = None,
+    **tool_kwargs: Any,
+) -> Any:
     def decorate(func: Any) -> Any:
         if _should_register_tool(func.__name__):
+            _enrich_tool_schema(
+                func,
+                schema_model=schema_model,
+                parameter_descriptions=parameter_descriptions,
+                parameter_choices=parameter_choices,
+                parameter_constraints=parameter_constraints,
+            )
             return mcp.tool(**tool_kwargs)(func)
         return func
 

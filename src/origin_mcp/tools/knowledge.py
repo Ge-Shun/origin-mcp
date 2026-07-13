@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from origin_mcp.knowledge import browse_knowledge, query_knowledge
+from origin_mcp.knowledge import COLLECTIONS, browse_knowledge, query_knowledge
 
 from ._shared import (
     _mcp_tool,
@@ -32,13 +32,24 @@ def origin_plot_type_coverage(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    parameter_descriptions={
+        "collection": (
+            "Knowledge collection. Omit to list collections; allowed names are in the schema."
+        ),
+        "topic": (
+            "Slash-delimited entry path within the collection, for example analysis/workflow. "
+            "Omit to list the collection's immediate children."
+        ),
+    },
+    parameter_choices={"collection": tuple(sorted(COLLECTIONS))},
+)
 def origin_browse_knowledge(
     collection: str | None = None,
     topic: str | None = None,
     version: str | None = None,
 ) -> dict[str, Any]:
-    """Browse the local Origin knowledge base by collection and path."""
+    """List knowledge collections or browse one collection by slash-delimited path."""
 
     return _wrap(
         lambda: _ok(
@@ -48,7 +59,13 @@ def origin_browse_knowledge(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    parameter_descriptions={
+        "collection": "Optional knowledge collection filter; allowed names are in the schema.",
+    },
+    parameter_choices={"collection": tuple(sorted(COLLECTIONS))},
+    parameter_constraints={"limit": {"ge": 1, "le": 100}},
+)
 def origin_query_knowledge(
     query: str,
     collection: str | None = None,

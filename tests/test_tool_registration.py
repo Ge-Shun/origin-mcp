@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 
 import origin_mcp.server as server
+from origin_mcp.analysis_adapters import ANALYSIS_ADAPTERS
+from origin_mcp.knowledge import COLLECTIONS
 from origin_mcp.tools._shared import (
     ANALYSIS_TOOL_NAMES,
     DATA_TOOL_NAMES,
@@ -202,3 +204,70 @@ def test_compact_profile_stays_bounded() -> None:
     assert "origin_run_analysis" in names
     assert "origin_plot_line" not in names
     assert "origin_linear_fit" not in names
+
+
+def test_compact_tool_schemas_describe_every_top_level_parameter() -> None:
+    tools = asyncio.run(server.mcp.list_tools())
+    missing = {
+        tool.name: [
+            name
+            for name, schema in tool.inputSchema.get("properties", {}).items()
+            if not schema.get("description")
+        ]
+        for tool in tools
+    }
+
+    assert not {name: params for name, params in missing.items() if params}
+
+
+def test_compact_dispatchers_publish_finite_choices() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(server.mcp.list_tools())}
+
+    analysis_schema = tools["origin_run_analysis"].inputSchema["properties"]["analysis"]
+    assert set(analysis_schema["enum"]) == set(ANALYSIS_ADAPTERS)
+    assert (
+        "polynomial_fit uses order"
+        in tools["origin_run_analysis"].inputSchema["properties"]["options"]["description"]
+    )
+
+    plot_schema = tools["origin_plot"].inputSchema["properties"]
+    assert {"line", "scatter", "bar", "ternary", "vector_3d"} <= set(plot_schema["kind"]["enum"])
+    assert set(plot_schema["style_mode"]["enum"]) == {
+        "origin_default",
+        "template",
+        "theme",
+        "none",
+        "nature",
+    }
+
+    browse_schema = tools["origin_browse_knowledge"].inputSchema["properties"]
+    assert set(browse_schema["collection"]["enum"]) == set(COLLECTIONS)
+
+
+def test_figure_spec_tools_expose_the_nested_model_schema() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(server.mcp.list_tools())}
+
+    for name in ("origin_plan_figure_spec", "origin_execute_figure_spec"):
+        schema = tools[name].inputSchema
+        assert schema["properties"]["spec"]["$ref"] == "#/$defs/FigureSpec"
+        figure_properties = schema["$defs"]["FigureSpec"]["properties"]
+        assert {"figure", "data", "page", "layers", "plots", "style", "export"} <= set(
+            figure_properties
+        )
+
+
+def test_request_model_descriptions_and_constraints_reach_tool_schema() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(server.mcp.list_tools())}
+
+    import_schema = tools["origin_import_table"].inputSchema["properties"]
+    assert import_schema["path"]["description"].startswith("Absolute path")
+    assert import_schema["header"]["anyOf"][0]["minimum"] == 0
+    assert import_schema["nrows"]["anyOf"][0]["minimum"] == 0
+
+    analysis_schema = tools["origin_run_analysis"].inputSchema["properties"]
+    assert analysis_schema["output_max_rows"]["minimum"] == 1
+    assert analysis_schema["output_max_rows"]["maximum"] == 10_000
+
+    diagnose_schema = tools["origin_diagnose_worksheet"].inputSchema["properties"]
+    assert diagnose_schema["high_missing_threshold"]["minimum"] == 0
+    assert diagnose_schema["high_missing_threshold"]["maximum"] == 1

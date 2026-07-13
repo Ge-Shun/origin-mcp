@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from origin_mcp.models import PlotStyleMode, PlotTableRequest
+
 from ._shared import (
     _export_inspection,
     _mcp_tool,
@@ -70,7 +72,13 @@ def origin_batch_plot_from_template(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    schema_model=PlotTableRequest,
+    parameter_descriptions={
+        "max_recommendations": "Maximum number of ranked chart recommendations to return.",
+    },
+    parameter_constraints={"max_recommendations": {"ge": 1, "le": 20}},
+)
 def origin_recommend_chart(
     path: str,
     intent: str | None = None,
@@ -114,7 +122,10 @@ def origin_recommend_chart(
     )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    schema_model=PlotTableRequest,
+    parameter_choices={"style_mode": tuple(item.value for item in PlotStyleMode)},
+)
 def origin_plot_auto(
     path: str,
     intent: str | None = None,
@@ -140,7 +151,13 @@ def origin_plot_auto(
     palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
-    """Choose a chart route from table data and create the plot."""
+    """Inspect table columns, select a suitable chart route, and create the plot.
+
+    Provide ``intent`` when the desired comparison or relationship is known.
+    Otherwise the router uses column types, cardinality, and selected X/Y/Z or
+    error columns. Use ``origin_recommend_chart`` first when no graph should be
+    created yet.
+    """
 
     return _wrap(
         lambda: _ok(

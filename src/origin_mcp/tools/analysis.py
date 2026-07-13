@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from origin_mcp.analysis_adapters import ANALYSIS_ADAPTERS
 from origin_mcp.models import (
     AnalysisRequest,
 )
@@ -14,7 +15,22 @@ from ._shared import (
 )
 
 
-@_mcp_tool()
+@_mcp_tool(
+    schema_model=AnalysisRequest,
+    parameter_descriptions={
+        "analysis": (
+            "Canonical analysis name. Supported values are listed in the schema; common "
+            "choices include linear_fit, polynomial_fit, smooth, peak_find, fft, and "
+            "correlation."
+        ),
+        "options": (
+            "Analysis-specific options. Examples: polynomial_fit uses order; smooth uses "
+            "method and points; peak_find uses direction, threshold, and smooth_points; "
+            "t-tests use tail and alpha; fft/ifft use window and sampling_interval."
+        ),
+    },
+    parameter_choices={"analysis": tuple(sorted(ANALYSIS_ADAPTERS))},
+)
 def origin_run_analysis(
     analysis: str,
     worksheet: str | None = None,
@@ -25,7 +41,12 @@ def origin_run_analysis(
     include_output: bool = False,
     output_max_rows: int = 100,
 ) -> dict[str, Any]:
-    """Run a named Origin analysis X-Function through LabTalk."""
+    """Run a supported Origin analysis and return structured metrics or output rows.
+
+    Use ``include_output=True`` with ``output_sheet`` for analyses that create a
+    worksheet. The ``analysis`` schema lists canonical names; aliases remain
+    accepted for backward compatibility.
+    """
 
     def run() -> dict[str, Any]:
         if analysis.strip().lower().replace("-", "_") in {"linear_fit", "fitlr"}:
