@@ -47,7 +47,9 @@ Apply this MCP launch contract in the client's native config format:
 - args: `["-m", "origin_mcp"]`
 - working directory: the `origin-mcp` checkout, if the client supports it
 - environment: include `ORIGIN_MCP_TOOL_PROFILE=compact` only when an explicit
-  profile is required; compact is already the default
+  profile is required; compact is already the default. Use `data`, `plot`, or
+  `analysis` for a focused larger surface, and `full` only when every wrapper is
+  needed
 
 Example stdio server object:
 

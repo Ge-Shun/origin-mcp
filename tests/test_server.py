@@ -15,6 +15,7 @@ import origin_mcp.tools.plotting as plotting_tools
 import origin_mcp.tools.plotting_basic as plotting_basic_tools
 import origin_mcp.tools.plotting_plot_ids as plotting_plot_ids_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
+from origin_mcp.models import PlotKind
 from origin_mcp.origin_client import GraphRef, WorksheetRef
 from origin_mcp.server import _error, _json_safe
 
@@ -57,12 +58,10 @@ def test_default_mcp_tool_profile_is_compact() -> None:
 
     assert len(names) == len(server.COMPACT_TOOL_NAMES)
     assert names == server.COMPACT_TOOL_NAMES
-    assert "origin_plot_line" in names
-    assert "origin_palette_catalog" in names
-    assert "origin_plot_style_capabilities" in names
-    assert "origin_plot_style_setter_coverage" in names
-    assert "origin_set_plot_property" in names
-    assert "origin_set_axis" in names
+    assert "origin_plot" in names
+    assert "origin_run_analysis" in names
+    assert "origin_plot_line" not in names
+    assert "origin_set_axis" not in names
 
 
 def test_full_mcp_tool_profile_registers_more_than_compact() -> None:
@@ -482,6 +481,31 @@ def test_origin_plot_routes_kind_through_plot_type_id(monkeypatch, tmp_path: Pat
     assert calls[0]["template"] == "bar"
     assert calls[0]["selected_cols"] == ["x", "y"]
     assert calls[0]["graph_name"] == "Bar"
+
+
+def test_origin_plot_routes_common_kind_through_table_plot(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y\n0,1\n", encoding="utf-8")
+    calls = []
+
+    def fake_plot_csv(**kwargs):
+        calls.append(kwargs)
+        return {"ok": True, "message": "ok", "data": {}}
+
+    monkeypatch.setattr(plotting_plot_ids_tools, "_plot_csv", fake_plot_csv)
+
+    result = server.origin_plot(
+        path=str(path),
+        kind="line",
+        selected_cols=["x", "y"],
+        graph_name="Line",
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["kind"] is PlotKind.line
+    assert calls[0]["x_col"] == "x"
+    assert calls[0]["y_cols"] == ["y"]
+    assert calls[0]["graph_name"] == "Line"
 
 
 def test_origin_plot_rejects_unknown_kind(tmp_path: Path) -> None:

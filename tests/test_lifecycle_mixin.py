@@ -31,6 +31,18 @@ def test_capabilities_are_cached(fake_client: OriginClient) -> None:
     # The fake exposes lt_exec and pages, so those features read as available.
     assert first["features"]["labtalk"]["available"] is True
     assert first["features"]["pages"]["available"] is True
+    assert first["visibility_unchanged"] is True
+    assert first["visible"] is None
+    assert fake_client.op.show is None
+
+
+def test_capabilities_changes_visibility_only_when_requested(fake_client: OriginClient) -> None:
+    unchanged = fake_client.capabilities()
+    result = fake_client.capabilities(show=False)
+
+    assert unchanged["visible"] is None
+    assert result["visible"] is False
+    assert fake_client.op.show is False
 
 
 def test_capabilities_refresh_recomputes(fake_client: OriginClient) -> None:

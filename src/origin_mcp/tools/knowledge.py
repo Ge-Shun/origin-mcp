@@ -15,7 +15,7 @@ from ._shared import (
 @_mcp_tool()
 def origin_plot_type_coverage(
     origin_version: float | None = None,
-    show: bool = False,
+    show: bool | None = None,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Report documented Origin plot type coverage by Origin version and MCP support."""

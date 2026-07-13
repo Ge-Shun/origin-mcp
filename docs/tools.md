@@ -13,14 +13,16 @@ of parsing the message text.
 
 ## Tool Profiles
 
-The default profile is `compact`, which registers a small set of high-level
-tools (listed in `COMPACT_TOOL_NAMES` and reported by `origin_doctor`). It keeps
-the common workflow surface small while preserving the specialized wrappers as
-internal Python functions.
+The default profile is `compact`, which registers 25 high-level tools (listed
+in `COMPACT_TOOL_NAMES` and reported by `origin_doctor`). It keeps the common
+workflow surface small while preserving specialized wrappers as internal
+Python functions.
 
-Set `ORIGIN_MCP_TOOL_PROFILE=full` before starting the MCP server to expose all
-specialized worksheet, plotting, graph editing, analysis, and lifecycle tools.
-The aliases `expert` and `all` behave the same as `full`.
+Set `ORIGIN_MCP_TOOL_PROFILE` before starting the MCP server to select a larger
+surface: `data` adds worksheet transforms, `plot` adds specialized plot/graph/
+template tools, `analysis` adds typed fitting tools, and `standard` restores the
+previous curated surface. `full` exposes every wrapper; `expert` and `all` are
+aliases for it. Unknown values safely fall back to `compact`.
 
 ## Default Compact Tools
 
@@ -53,13 +55,15 @@ without enabling `ORIGIN_MCP_TOOL_PROFILE=full`. `kind` must be one of:
 `column_stack`, `pie`, `ternary`, `ternary_contour`, `bubble`,
 `bubble_color_mapped`, `color_mapped`, `vector_xyam`, `vector_xyxy`,
 `vector_3d`, `high_low_close`, `candlestick`, `waterfall`, `ribbon_3d`,
-`bars_3d`, `errorbar_3d`, `polar_xr_ytheta`, `smith`, or `dendrogram`. An
-unknown `kind` returns `ok=false` with `error_code=invalid_request` and lists
-the valid kinds. For `line`, `scatter`, `column`, `histogram`, and `box` use the
-dedicated tools; for matrix-range plots use `origin_plot_matrix_id`. It accepts
-the shared `selected_cols`, `graph_name`, `title`, `export_path`, and
-`style_mode` arguments and follows the same idempotent `graph_name` behavior
-described above.
+`bars_3d`, `errorbar_3d`, `polar_xr_ytheta`, `smith`, or `dendrogram`, plus the
+common `line`, `scatter`, `line_symbol`, `column`, `histogram`, and `box` kinds.
+For common XY plots, the first selected column is X and the remainder are Y; a
+single selected column is treated as Y-only. An unknown `kind` returns
+`ok=false` with `error_code=invalid_request` and lists the valid kinds. For
+matrix-range plots use `origin_plot_matrix_id` from the `plot`/`full` profile.
+The entry point accepts the shared `selected_cols`, `graph_name`, `title`,
+`export_path`, and `style_mode` arguments and follows the same idempotent
+`graph_name` behavior described above.
 
 ```json
 {"path": "data/processed/sales.csv", "kind": "bar", "graph_name": "Sales"}
@@ -113,8 +117,9 @@ back to Origin's built-in templates and explicit file paths.
 
 Searching, listing, and deleting operate purely on the local library files and
 do not require Origin to be running; only saving a template drives Origin. The
-exact tool names live in `COMPACT_TOOL_NAMES` and the generated `mcp_tools`
-knowledge collection; discover them with `origin_query_knowledge`.
+template management tools live in the `plot`, `standard`, and `full` profiles.
+Their exact names are available in the generated `mcp_tools` knowledge
+collection; discover them with `origin_query_knowledge`.
 
 ## FigureSpec Tools
 

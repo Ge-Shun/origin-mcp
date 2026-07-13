@@ -8,6 +8,8 @@ import pandas as pd
 from ..errors import OriginDependencyError, OriginOperationError
 from .base import WorksheetRef, _OriginClientBase
 
+MAX_WORKSHEET_READ_ROWS = 10_000
+
 
 class _WorksheetMixin(_OriginClientBase):
     """Worksheet import, mutation, and serialization methods."""
@@ -147,22 +149,34 @@ class _WorksheetMixin(_OriginClientBase):
             raise OriginOperationError("start_row must be non-negative.")
         if max_rows < 1:
             raise OriginOperationError("max_rows must be at least 1.")
+        if max_rows > MAX_WORKSHEET_READ_ROWS:
+            raise OriginOperationError(
+                f"max_rows must not exceed {MAX_WORKSHEET_READ_ROWS}.",
+                error_code="invalid_request",
+            )
         wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
-        df = self._worksheet_to_df(wks)
+        available = self._worksheet_column_names(wks)
         if columns:
-            available = [str(col) for col in df.columns]
             selected = [self._resolve_column(available, col, default_index=0) for col in columns]
-            df = df[selected]
-        total_rows = len(df)
-        window = df.iloc[start_row : start_row + max_rows]
+        else:
+            selected = available
+        selected_indexes = [available.index(name) for name in selected]
+        total_rows = self._worksheet_row_count(wks)
+        window = self._worksheet_window_df(
+            wks,
+            start_row=start_row,
+            end_row=min(total_rows, start_row + max_rows),
+            column_indexes=selected_indexes,
+            column_names=selected,
+        )
         rows = self._dataframe_records(window)
         worksheet = self._worksheet_ref(
             wks,
-            columns=[str(col) for col in df.columns],
+            columns=selected,
         ).as_dict()
         return {
             "worksheet": worksheet,
-            "columns": [str(col) for col in df.columns],
+            "columns": selected,
             "start_row": start_row,
             "returned_rows": len(rows),
             "total_rows": total_rows,
@@ -289,11 +303,19 @@ class _WorksheetMixin(_OriginClientBase):
         if row < 0:
             raise OriginOperationError("row must be non-negative.")
         wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
-        df = self._worksheet_to_df(wks)
-        column_name = self._resolve_column([str(col) for col in df.columns], column, 0)
-        if row >= len(df):
+        available = self._worksheet_column_names(wks)
+        column_name = self._resolve_column(available, column, 0)
+        if row >= self._worksheet_row_count(wks):
             raise OriginOperationError(f"row is out of range: {row}")
-        value = df.iloc[row][column_name]
+        column_index = available.index(column_name)
+        window = self._worksheet_window_df(
+            wks,
+            start_row=row,
+            end_row=row + 1,
+            column_indexes=[column_index],
+            column_names=[column_name],
+        )
+        value = window.iloc[0, 0]
         return {
             "row": row,
             "column": column_name,
@@ -311,12 +333,25 @@ class _WorksheetMixin(_OriginClientBase):
         if row < 0:
             raise OriginOperationError("row must be non-negative.")
         wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
-        df = self._worksheet_to_df(wks)
-        column_name = self._resolve_column([str(col) for col in df.columns], column, 0)
-        if row >= len(df):
+        available = self._worksheet_column_names(wks)
+        column_name = self._resolve_column(available, column, 0)
+        if row >= self._worksheet_row_count(wks):
             raise OriginOperationError(f"row is out of range: {row}")
-        df.at[df.index[row], column_name] = value
-        self._write_dataframe_to_worksheet(wks, df)
+        column_index = available.index(column_name)
+        from_list2 = getattr(wks, "from_list2", None)
+        if callable(from_list2):
+            from_list2([[value]], row=row, col=column_index)
+        else:
+            from_list = getattr(wks, "from_list", None)
+            if callable(from_list):
+                from_list(column_index, [value], start=row)
+            else:
+                # Compatibility fallback for older/test worksheet adapters. The
+                # supported Origin 2026 API provides from_list2/from_list, so
+                # normal operation never rewrites the entire worksheet here.
+                df = self._worksheet_to_df(wks)
+                df.at[df.index[row], column_name] = value
+                self._write_dataframe_to_worksheet(wks, df)
         return {"row": row, "column": column_name, "value": value}
 
     def delete_columns(
@@ -958,6 +993,92 @@ class _WorksheetMixin(_OriginClientBase):
                         f"Could not rename worksheet to {sheet_name!r}."
                     ) from exc
         return wks
+
+    @staticmethod
+    def _worksheet_row_count(wks: Any) -> int:
+        rows = getattr(wks, "rows", 0)
+        if callable(rows):
+            rows = rows()
+        return max(0, int(rows or 0))
+
+    def _worksheet_column_names(self, wks: Any) -> list[str]:
+        cols = getattr(wks, "cols", 0)
+        if callable(cols):
+            cols = cols()
+        count = max(0, int(cols or 0))
+        get_labels = getattr(wks, "get_labels", None)
+        labels: list[Any] = []
+        if callable(get_labels):
+            labels = list(get_labels("L") or [])
+        names = [
+            str(labels[index]) if index < len(labels) and labels[index] else f"Col{index + 1}"
+            for index in range(count)
+        ]
+        return self._dedupe_headers(names)
+
+    def _worksheet_window_df(
+        self,
+        wks: Any,
+        *,
+        start_row: int,
+        end_row: int,
+        column_indexes: list[int],
+        column_names: list[str],
+    ) -> pd.DataFrame:
+        """Read a bounded worksheet window without materializing the whole sheet."""
+
+        row_count = max(0, end_row - start_row)
+        if row_count == 0 or not column_indexes:
+            return pd.DataFrame(columns=column_names)
+
+        first_col = min(column_indexes)
+        last_col = max(column_indexes)
+        to_list2 = getattr(wks, "to_list2", None)
+        if callable(to_list2):
+            block = to_list2(start_row, end_row - 1, first_col, last_col)
+            matrix = self._worksheet_block_rows(
+                block,
+                row_count=row_count,
+                column_count=last_col - first_col + 1,
+            )
+            relative = [index - first_col for index in column_indexes]
+            selected_rows = [[row[index] for index in relative] for row in matrix]
+            return pd.DataFrame(selected_rows, columns=column_names)
+
+        cell = getattr(wks, "cell", None)
+        if callable(cell):
+            data = [
+                [cell(row, column) for column in column_indexes]
+                for row in range(start_row, end_row)
+            ]
+            return pd.DataFrame(data, columns=column_names)
+
+        # Compatibility fallback for worksheet adapters predating Origin's
+        # bounded to_list2/cell APIs.
+        df = self._worksheet_to_df(wks)
+        return df.iloc[start_row:end_row, column_indexes].set_axis(column_names, axis=1)
+
+    @staticmethod
+    def _worksheet_block_rows(
+        block: Any,
+        *,
+        row_count: int,
+        column_count: int,
+    ) -> list[list[Any]]:
+        values = [list(item) for item in list(block or [])]
+        # Origin's to_list2 returns one list per column (the paired from_list2
+        # API uses the same layout). Prefer that interpretation when a square
+        # block would otherwise be ambiguous.
+        if len(values) == column_count and all(len(column) == row_count for column in values):
+            return [
+                [values[column][row] for column in range(column_count)] for row in range(row_count)
+            ]
+        if len(values) == row_count and all(len(row) == column_count for row in values):
+            return values
+        raise OriginOperationError(
+            "Origin returned an unexpected worksheet block shape.",
+            error_code="worksheet_block_shape_invalid",
+        )
 
     def _worksheet_to_df(self, wks: Any) -> pd.DataFrame:
         to_df = getattr(wks, "to_df", None)

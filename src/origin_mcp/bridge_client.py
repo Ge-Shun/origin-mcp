@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import socket
 import threading
@@ -24,22 +25,34 @@ DEFAULT_BRIDGE_TIMEOUT = 30.0
 
 def _parse_bridge_port(value: Any, source: str) -> int:
     try:
-        return int(value)
+        port = int(value)
     except (TypeError, ValueError) as exc:
         raise OriginBridgeError(
             f"Invalid {source}: expected an integer port, got {value!r}.",
             "invalid_bridge_config",
         ) from exc
+    if not 1 <= port <= 65535:
+        raise OriginBridgeError(
+            f"Invalid {source}: port must be between 1 and 65535, got {value!r}.",
+            "invalid_bridge_config",
+        )
+    return port
 
 
 def _parse_bridge_timeout(value: Any, source: str) -> float:
     try:
-        return float(value)
+        timeout = float(value)
     except (TypeError, ValueError) as exc:
         raise OriginBridgeError(
             f"Invalid {source}: expected a numeric timeout, got {value!r}.",
             "invalid_bridge_config",
         ) from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise OriginBridgeError(
+            f"Invalid {source}: timeout must be a positive finite number, got {value!r}.",
+            "invalid_bridge_config",
+        )
+    return timeout
 
 
 @dataclass(frozen=True)
@@ -48,6 +61,15 @@ class OriginBridgeConfig:
     port: int = DEFAULT_BRIDGE_PORT
     token: str | None = None
     timeout: float = DEFAULT_BRIDGE_TIMEOUT
+
+    def __post_init__(self) -> None:
+        if not str(self.host).strip():
+            raise OriginBridgeError(
+                "Invalid bridge host: expected a non-empty host.",
+                "invalid_bridge_config",
+            )
+        _parse_bridge_port(self.port, "bridge port")
+        _parse_bridge_timeout(self.timeout, "bridge timeout")
 
     @classmethod
     def from_env(

@@ -92,7 +92,7 @@ def main() -> None:
         "--max-tasks",
         type=int,
         default=int(os.environ.get("ORIGIN_MCP_BRIDGE_MAX_TASKS", DEFAULT_MAX_TASKS)),
-        help="Maximum number of bridge task records to retain.",
+        help="Maximum number of queued, running, and retained bridge task records.",
     )
     args = parser.parse_args()
     serve(host=args.host, port=args.port, token=args.token, max_tasks=args.max_tasks)

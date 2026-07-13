@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from origin_mcp.bridge_client import OriginBridgeConfig, request_bridge
+from origin_mcp.bridge_handshake import read_handshake
 from origin_mcp.errors import OriginBridgeError
 from origin_mcp.logging_config import active_log_path, tail_log
 
 from ._shared import (
     COMPACT_TOOL_NAMES,
+    PROFILE_TOOL_NAMES,
     _mcp_tool,
     _ok,
     _tool_profile,
@@ -31,7 +33,12 @@ def _dedupe_strings(values: list[str]) -> list[str]:
 
 def _status_file_candidates(status_path: str | None = None) -> list[Path]:
     candidates: list[Path] = []
-    for value in (status_path, os.environ.get("ORIGIN_MCP_BRIDGE_STATUS")):
+    handshake = read_handshake() or {}
+    for value in (
+        status_path,
+        os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
+        handshake.get("status_path"),
+    ):
         if value:
             candidates.append(Path(value).expanduser())
     candidates.extend(
@@ -100,7 +107,15 @@ def _status_runtime_recommendations(status_data: dict[str, Any]) -> list[str]:
             "Start addon.py from Origin's Python Console or the Origin MCP Bridge Start App, "
             "not from a normal terminal Python."
         )
-    if probe.get("originpro_available") is False:
+    inside_origin = probe.get("inside_origin", probe.get("likely_origin_embedded_python")) is True
+    embedded_api = (
+        probe.get(
+            "embedded_api_available",
+            probe.get("origin_host_api_available"),
+        )
+        is True
+    )
+    if probe.get("originpro_available") is False and not (inside_origin and embedded_api):
         recommendations.append(
             "originpro was not importable when addon.py wrote the status file. Start the "
             "bridge inside Origin, or allow addon.py to install missing runtime dependencies."
@@ -174,8 +189,8 @@ def origin_ping(show: bool = True) -> dict[str, Any]:
 
 
 @_mcp_tool()
-def origin_capabilities(show: bool = False, refresh: bool = False) -> dict[str, Any]:
-    """Report Origin/originpro versions and runtime feature availability."""
+def origin_capabilities(show: bool | None = None, refresh: bool = False) -> dict[str, Any]:
+    """Report runtime capabilities; set ``show`` only to change Origin visibility."""
 
     return _wrap(
         lambda: _ok(
@@ -327,6 +342,10 @@ def origin_doctor(
                 "tool_profile": _tool_profile(),
                 "compact_tool_count": len(COMPACT_TOOL_NAMES),
                 "compact_tools": sorted(COMPACT_TOOL_NAMES),
+                "profile_tool_counts": {
+                    name: len(tools) for name, tools in PROFILE_TOOL_NAMES.items()
+                },
+                "full_profile_aliases": ["full", "expert", "all"],
                 "env": {
                     "ORIGIN_MCP_BRIDGE_HOST": os.environ.get("ORIGIN_MCP_BRIDGE_HOST"),
                     "ORIGIN_MCP_BRIDGE_PORT": os.environ.get("ORIGIN_MCP_BRIDGE_PORT"),
@@ -371,7 +390,7 @@ def origin_bridge_ping_origin(
 
 @_mcp_tool()
 def origin_bridge_capabilities(
-    show: bool = False,
+    show: bool | None = None,
     refresh: bool = False,
     host: str | None = None,
     port: int | None = None,

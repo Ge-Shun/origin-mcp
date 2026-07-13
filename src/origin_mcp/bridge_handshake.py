@@ -53,6 +53,7 @@ def write_handshake(
     token: str,
     *,
     path: Path | None = None,
+    status_path: Path | None = None,
 ) -> Path:
     """Atomically write the bridge handshake file and return its path.
 
@@ -71,6 +72,8 @@ def write_handshake(
         "pid": os.getpid(),
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    if status_path is not None:
+        payload["status_path"] = str(status_path.expanduser().resolve())
     tmp = target.with_name(target.name + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     try:

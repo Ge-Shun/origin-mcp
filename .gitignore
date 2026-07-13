@@ -3,7 +3,6 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-uv.lock
 .pytest_cache/
 .pytest-tmp/
 pytest-tmp-*/

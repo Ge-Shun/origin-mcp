@@ -1,0 +1,36 @@
+name: Real Origin validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_smoke:
+        description: Run the file-to-figure smoke test after the health gate
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: real-origin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  origin:
+    name: Origin bridge gate
+    runs-on: [self-hosted, Windows, origin]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install package and validation dependencies
+        run: python -m pip install --upgrade -e ".[dev]"
+      - name: Run release checks and real-Origin health gate
+        run: python scripts\release_check.py --real-origin-health --keep-origin-open
+      - name: Run real-Origin smoke gate
+        if: ${{ inputs.run_smoke }}
+        run: python scripts\real_origin_smoke.py --keep-origin-open
+      - name: Upload real-Origin reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: real-origin-${{ github.run_id }}
+          path: output
+          if-no-files-found: ignore

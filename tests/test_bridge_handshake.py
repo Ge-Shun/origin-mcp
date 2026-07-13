@@ -47,13 +47,20 @@ def test_generate_token_is_random_and_nonempty() -> None:
 
 
 def test_write_read_clear_roundtrip(isolated_handshake: Path) -> None:
-    bridge_handshake.write_handshake("127.0.0.1", 47631, "tok-123")
+    status_path = isolated_handshake.parent / "status.json"
+    bridge_handshake.write_handshake(
+        "127.0.0.1",
+        47631,
+        "tok-123",
+        status_path=status_path,
+    )
 
     data = bridge_handshake.read_handshake()
     assert data is not None
     assert data["host"] == "127.0.0.1"
     assert data["port"] == 47631
     assert data["token"] == "tok-123"
+    assert data["status_path"] == str(status_path.resolve())
     assert bridge_handshake.read_handshake_token() == "tok-123"
 
     bridge_handshake.clear_handshake()
@@ -149,6 +156,22 @@ def test_from_env_rejects_invalid_env_timeout(
 
     assert excinfo.value.error_code == "invalid_bridge_config"
     assert "ORIGIN_MCP_BRIDGE_TIMEOUT" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("port", [0, -1, 65536])
+def test_bridge_config_rejects_out_of_range_port(port: int) -> None:
+    with pytest.raises(OriginBridgeError) as excinfo:
+        OriginBridgeConfig(port=port)
+
+    assert excinfo.value.error_code == "invalid_bridge_config"
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
+def test_bridge_config_rejects_invalid_timeout(timeout: float) -> None:
+    with pytest.raises(OriginBridgeError) as excinfo:
+        OriginBridgeConfig(timeout=timeout)
+
+    assert excinfo.value.error_code == "invalid_bridge_config"
 
 
 def test_handshake_token_authenticates_against_running_bridge(isolated_handshake: Path) -> None:

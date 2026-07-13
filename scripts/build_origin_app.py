@@ -18,8 +18,6 @@ import configparser
 import os
 import re
 import shutil
-import struct
-import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -116,7 +114,14 @@ def _message(text: str) -> None:
 def _load_addon():
     module = sys.modules.get("origin_mcp_addon")
     if module is not None:
-        return module
+        try:
+            if module.origin_mcp_bridge_status().get("running"):
+                return module
+        except Exception:
+            pass
+        # A stopped bridge may leave its control module cached for the lifetime
+        # of Origin. Drop it so App upgrades take effect on the next Start click.
+        sys.modules.pop("origin_mcp_addon", None)
     spec = importlib.util.spec_from_file_location("origin_mcp_addon", ADDON_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {ADDON_PATH}")
@@ -287,37 +292,6 @@ def _copy_tree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, ignore=ignore)
 
 
-def _png_chunk(kind: bytes, data: bytes) -> bytes:
-    payload = kind + data
-    checksum = zlib.crc32(payload) & 0xFFFFFFFF
-    return struct.pack(">I", len(data)) + payload + struct.pack(">I", checksum)
-
-
-def _write_icon(path: Path) -> None:
-    width = height = 32
-    rows = []
-    for y in range(height):
-        row = bytearray([0])
-        for x in range(width):
-            border = x in {0, width - 1} or y in {0, height - 1}
-            accent = 7 <= x <= 24 and 7 <= y <= 24 and (x - y) % 5 == 0
-            if border:
-                row.extend((34, 40, 49, 255))
-            elif accent:
-                row.extend((19, 116, 209, 255))
-            else:
-                row.extend((242, 245, 248, 255))
-        rows.append(bytes(row))
-    raw = b"".join(rows)
-    png = (
-        b"\x89PNG\r\n\x1a\n"
-        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-        + _png_chunk(b"IDAT", zlib.compress(raw, 9))
-        + _png_chunk(b"IEND", b"")
-    )
-    path.write_bytes(png)
-
-
 def _copy_app_icon(app_dir: Path, specific_icon: Path) -> None:
     fallback_icon = ROOT / "docs" / "assets" / "origin-mcp-app-icon.png"
     if specific_icon.is_file():
@@ -325,7 +299,7 @@ def _copy_app_icon(app_dir: Path, specific_icon: Path) -> None:
     elif fallback_icon.is_file():
         shutil.copy2(fallback_icon, app_dir / "AppIcon.png")
     else:
-        _write_icon(app_dir / "AppIcon.png")
+        raise FileNotFoundError(f"Missing Origin App icon: {specific_icon}")
 
 
 def _labtalk_path(path: Path) -> str:

@@ -25,6 +25,12 @@ import sys
 from pathlib import Path
 
 import origin_mcp.server as server
+from origin_mcp.tools._shared import (
+    ANALYSIS_TOOL_NAMES,
+    DATA_TOOL_NAMES,
+    PLOT_TOOL_NAMES,
+    STANDARD_TOOL_NAMES,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _TOOLS_DIR = _REPO_ROOT / "src" / "origin_mcp" / "tools"
@@ -122,10 +128,22 @@ def test_compact_profile_registers_exactly_the_compact_allow_list() -> None:
     assert names == set(server.COMPACT_TOOL_NAMES)
 
 
-def test_compact_profile_includes_template_tools() -> None:
-    """The user template library tools are part of the compact surface."""
+def test_focused_profiles_register_their_declared_allow_lists() -> None:
+    expected = {
+        "data": DATA_TOOL_NAMES,
+        "plot": PLOT_TOOL_NAMES,
+        "analysis": ANALYSIS_TOOL_NAMES,
+        "standard": STANDARD_TOOL_NAMES,
+    }
 
-    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    for profile, names in expected.items():
+        assert _registered_tool_names(profile) == set(names)
+
+
+def test_plot_profile_includes_template_tools() -> None:
+    """The focused plot profile includes the user template library."""
+
+    names = _registered_tool_names("plot")
     assert {
         "origin_save_graph_template",
         "origin_search_templates",
@@ -136,15 +154,15 @@ def test_compact_profile_includes_template_tools() -> None:
     } <= names
 
 
-def test_compact_profile_includes_analysis_wrappers() -> None:
-    """Compact mode exposes the generic analysis dispatcher plus the structured fits.
+def test_analysis_profile_includes_analysis_wrappers() -> None:
+    """Analysis mode exposes the generic dispatcher plus the structured fits.
 
     The other named analyses (polynomial_fit, smooth, the t-tests, fft, ...) are
     reachable via origin_run_analysis(analysis=...) and live in the full profile
     only, so the compact surface stays small.
     """
 
-    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    names = _registered_tool_names("analysis")
 
     assert {
         "origin_run_analysis",
@@ -174,3 +192,13 @@ def test_compact_profile_includes_analysis_wrappers() -> None:
         }
         & names
     )
+
+
+def test_compact_profile_stays_bounded() -> None:
+    names = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+
+    assert len(names) == 25
+    assert "origin_plot" in names
+    assert "origin_run_analysis" in names
+    assert "origin_plot_line" not in names
+    assert "origin_linear_fit" not in names

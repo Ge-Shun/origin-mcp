@@ -85,6 +85,7 @@ def test_build_origin_app_sources() -> None:
     assert "origin_mcp_bridge_status()" in starter
     assert "start_origin_mcp_bridge(background=False)" in starter
     assert "Bridge is already running." in starter
+    assert 'sys.modules.pop("origin_mcp_addon", None)' in starter
     assert "background=True" not in starter
 
     stop_powershell = (stop_app_dir / "stop_bridge.ps1").read_text(encoding="utf-8")

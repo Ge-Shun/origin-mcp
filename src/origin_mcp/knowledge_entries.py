@@ -97,12 +97,12 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         body=(
             "In the default compact MCP tool profile, start with origin_recommend_chart when "
             "the chart type is unclear and origin_plot_auto when the assistant should inspect "
-            "columns and create the graph. Use origin_plot_chart_atlas for semantic intents "
-            "such as correlation, distribution, composition, matrix, image_plate, and "
-            "time_series. Use origin_plot_table_id for a specific Origin Plot Type ID. "
-            "Core direct wrappers such as origin_plot_line and origin_plot_scatter are "
-            "available in the compact profile; specialized matrix/3D wrappers remain in "
-            "the full/expert profile. Named table plotting calls are idempotent where Origin "
+            "columns and create the graph. Use the parameterized origin_plot entry point "
+            "when the chart kind is known; it covers common line, scatter, line-symbol, "
+            "column, histogram, and box plots plus the table Plot Type ID routes. The plot "
+            "profile adds origin_plot_chart_atlas, origin_plot_table_id, direct wrappers, "
+            "matrix/3D routes, and graph/template editing. Named table plotting calls are "
+            "idempotent where Origin "
             "exposes an output graph layer target: when graph_name points to an existing graph, "
             "origin-mcp clears that page's plots and draws into the same graph instead of "
             "creating another GraphN page. If book_name is omitted, graph_name also anchors a "
@@ -127,16 +127,14 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="reference",
         path="plotting/recommended-entrypoints",
         title="Recommended plotting entry points",
-        summary="Compact-profile plotting tools to prefer before direct origin_plot_* wrappers.",
+        summary="Recommended plotting tools to prefer before direct origin_plot_* wrappers.",
         body=(
             "Prefer origin_plot_auto for file-backed table data because it profiles columns, "
             "routes to a suitable chart, and can export the result. Use origin_recommend_chart "
-            "when you only need a recommendation. Use origin_plot_chart_atlas when the user "
-            "states a semantic intent rather than a chart type. Use origin_plot_table_id when "
-            "the user gives a concrete Origin Plot Type ID or template route. Core direct "
-            "wrappers like origin_plot_line, origin_plot_scatter, and origin_plot_column are "
-            "also available in compact mode. Specialized matrix/3D wrappers are expert/"
-            "full-profile tools."
+            "when you only need a recommendation. In compact mode, use origin_plot when the "
+            "chart kind is already known. The plot profile adds origin_plot_chart_atlas for "
+            "semantic intents, plus origin_plot_table_id, direct plot wrappers, graph "
+            "editing, template management, and specialized matrix/3D routes."
         ),
         keywords=(
             "plot",
@@ -150,14 +148,10 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         metadata={
             "compact_tools": [
                 "origin_recommend_chart",
+                "origin_plot",
                 "origin_plot_auto",
-                "origin_plot_chart_atlas",
-                "origin_plot_table_id",
-                "origin_plot_line",
-                "origin_plot_scatter",
-                "origin_plot_line_symbol",
-                "origin_plot_column",
             ],
+            "plot_profile": "ORIGIN_MCP_TOOL_PROFILE=plot",
             "expert_profile": "ORIGIN_MCP_TOOL_PROFILE=full",
         },
     ),
@@ -172,14 +166,15 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "origin-mcp defaults to ORIGIN_MCP_TOOL_PROFILE=compact, which exposes a small "
             "high-level tool surface for diagnostics, knowledge search, worksheet import/read/"
             "write, plotting, export, analysis, LabTalk, and bridge tasks. Set "
-            "ORIGIN_MCP_TOOL_PROFILE=full, expert, or all before starting the MCP server to "
+            "ORIGIN_MCP_TOOL_PROFILE=data, plot, or analysis for a focused workflow surface; "
+            "standard restores the previous curated surface. Use full, expert, or all to "
             "register every specialized worksheet, graph editing, analysis, and origin_plot_* "
-            "wrapper. Functions remain in the Python module even when they are not registered "
-            "as MCP tools in compact mode."
+            "wrapper. Functions remain importable when not registered as MCP tools."
         ),
         keywords=("tool profile", "compact", "full", "expert", "origin_plot", "mcp tools"),
         metadata={
             "default_profile": "compact",
+            "workflow_profiles": ["data", "plot", "analysis", "standard"],
             "full_profile_env": "ORIGIN_MCP_TOOL_PROFILE=full",
         },
     ),
@@ -441,7 +436,8 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "set. Common environment variables are ORIGIN_MCP_BRIDGE_HOST, "
             "ORIGIN_MCP_BRIDGE_PORT, ORIGIN_MCP_BRIDGE_TOKEN, ORIGIN_MCP_BRIDGE_TIMEOUT, "
             "ORIGIN_MCP_BRIDGE_MAX_TASKS, ORIGIN_MCP_INSTALL_MISSING, "
-            "ORIGIN_MCP_BRIDGE_BACKGROUND, and ORIGIN_MCP_SRC."
+            "ORIGIN_MCP_BRIDGE_BACKGROUND, and ORIGIN_MCP_SRC. The host must be localhost or "
+            "a loopback IP literal; broad or remote bindings are rejected before startup."
         ),
         keywords=("bridge", "addon", "startup", "status file", "environment variables"),
         metadata={
@@ -471,8 +467,9 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
             "running, completed, failed, and cancelled. Cancellation is cooperative: queued "
             "tasks can be cancelled, while running Origin calls can only be marked "
             "cancel_requested because Python cannot safely terminate the active Origin "
-            "automation call. The bridge keeps bounded task history controlled by "
-            "ORIGIN_MCP_BRIDGE_MAX_TASKS."
+            "automation call. ORIGIN_MCP_BRIDGE_MAX_TASKS is a hard bound across queued, "
+            "running, and retained task records; new submissions fail with "
+            "bridge_task_capacity_reached when all retained slots are active."
         ),
         keywords=("bridge", "task", "queue", "cancel", "task_id", "taskable_methods"),
         metadata={

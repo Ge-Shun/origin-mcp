@@ -48,8 +48,8 @@ file location. The status includes the latest message, host, port, package
 source, Python executable/version, and `last_error` when startup fails.
 
 By default the addon attempts to install missing runtime packages into Origin's
-embedded Python. If `originpro`, `pandas`, `openpyxl`, or `xlrd` is missing, the
-addon runs `pip install` for the missing requirements before starting the
+embedded Python. If `originpro`, `pydantic`, `pandas`, `openpyxl`, or `xlrd` is
+missing, the addon runs `pip install` for the missing requirements before starting the
 bridge, adding `--user` automatically when Origin's global site-packages is not
 writable. Set `ORIGIN_MCP_INSTALL_MISSING=0` immediately before the launch snippet
 to disable automatic installation and fail fast instead. If automatic
@@ -60,6 +60,11 @@ behavior.
 
 Then run the MCP server from a separate terminal or MCP client. The MCP server
 connects to the same host and port through `OriginBridgeProxy`.
+
+The host is validated before binding and must be a loopback address such as
+`127.0.0.1`, `::1`, or `localhost`. Broad bindings such as `0.0.0.0` are
+rejected even when configured through `ORIGIN_MCP_BRIDGE_HOST`, because the
+protocol is intended only for local-process control.
 
 The easiest way to stop the foreground bridge is to ask your MCP assistant to
 shut the Origin bridge down. That calls the `origin_bridge_shutdown` tool with:
@@ -127,9 +132,10 @@ the tool modules so new public client calls must be added deliberately. Explicit
 `origin_bridge_*` functions remain available as diagnostics and bridge controls,
 with most of them exposed only in the full tool profile.
 
-The MCP server registers the compact tool profile by default. Specialized
-bridge and plotting wrappers remain available in Python and can be exposed to
-MCP clients by starting the server with `ORIGIN_MCP_TOOL_PROFILE=full`.
+The MCP server registers a 25-tool compact profile by default. Select
+`ORIGIN_MCP_TOOL_PROFILE=data`, `plot`, or `analysis` for a focused expanded
+surface, `standard` for the previous curated surface, or `full` for every
+specialized wrapper.
 
 ## MCP Tools
 
@@ -245,11 +251,16 @@ point, use:
 python scripts\release_check.py --real-origin-smoke --keep-origin-open
 ```
 
+The manual GitHub Actions workflow `.github/workflows/real-origin.yml` runs the
+same checks on a Windows self-hosted runner labeled `origin`. The runner must
+have Origin installed and its bridge running; an optional dispatch input adds
+the file-to-figure smoke gate and uploads its report artifacts.
+
 ## Current Limits
 
 The first bridge implementation intentionally uses the Python standard library
 and a single-request JSON-lines TCP protocol. It now includes a small task queue,
-lightweight task progress, and optional recent task logs. It does not yet
-provide live streaming logs, hard cancellation of running Origin calls, or a
-WebSocket transport. Those can be added after the bridge lifecycle is validated
-against a real Origin installation.
+lightweight task progress, bounded task retention, and optional recent task
+logs. It does not yet provide live streaming logs, hard cancellation of running
+Origin calls, or a WebSocket transport. Those can be added after the bridge
+lifecycle is validated against a real Origin installation.

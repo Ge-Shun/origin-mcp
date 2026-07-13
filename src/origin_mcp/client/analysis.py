@@ -130,7 +130,7 @@ class _AnalysisMixin(_OriginClientBase):
         include_output: bool = False,
         output_max_rows: int = 100,
     ) -> dict[str, Any]:
-        origin_version = self.capabilities(show=False).get("origin_version")
+        origin_version = self.capabilities().get("origin_version")
         adapter = resolve_analysis_adapter(analysis, origin_version)
         analysis_name = adapter.name
         options_for_script = dict(options or {})
@@ -373,7 +373,7 @@ class _AnalysisMixin(_OriginClientBase):
     ) -> dict[str, Any]:
         normalized_options = resolve_analysis_adapter(
             "polynomial_fit",
-            self.capabilities(show=False).get("origin_version"),
+            self.capabilities().get("origin_version"),
         ).normalize_options(options)
         try:
             order = int(normalized_options.get("polyorder", 2))
@@ -410,7 +410,7 @@ class _AnalysisMixin(_OriginClientBase):
         output_sheet: str | None,
         options: dict[str, Any],
     ) -> str:
-        origin_version = self.capabilities(show=False).get("origin_version")
+        origin_version = self.capabilities().get("origin_version")
         adapter = resolve_analysis_adapter(analysis, origin_version)
         range_expr = self._analysis_range(worksheet, x_col, y_col)
         if adapter.range_required and not range_expr:

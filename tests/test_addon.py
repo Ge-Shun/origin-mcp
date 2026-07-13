@@ -5,6 +5,8 @@ import inspect
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -284,6 +286,46 @@ def test_start_records_successful_start_diagnostics(monkeypatch) -> None:
     assert running_fields["install_phase"] == "running"
     assert running_fields["last_successful_start"]
     assert running_fields["last_error"] is None
+
+
+def test_start_aborts_when_generated_token_cannot_be_published(monkeypatch) -> None:
+    addon = load_addon_module()
+    import origin_mcp.bridge_handshake as bridge_handshake
+
+    class FakeServer:
+        server_address = ("127.0.0.1", 47631)
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.closed = False
+
+        def server_close(self) -> None:
+            self.closed = True
+
+    created: list[FakeServer] = []
+
+    def make_server(*args, **kwargs):
+        server = FakeServer(*args, **kwargs)
+        created.append(server)
+        return server
+
+    monkeypatch.delenv("ORIGIN_MCP_BRIDGE_NO_AUTH", raising=False)
+    monkeypatch.setattr(addon, "_emit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(addon, "_notify", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(addon, "_clear_origin_mcp_imports", lambda: None)
+    monkeypatch.setattr(addon, "_ensure_origin_mcp_importable", lambda _src=None: "source")
+    monkeypatch.setattr(addon, "_missing_runtime_packages", lambda: [])
+    monkeypatch.setattr(addon, "_load_bridge_server", lambda install_missing=True: make_server)
+    monkeypatch.setattr(
+        bridge_handshake,
+        "write_handshake",
+        lambda *_args: (_ for _ in ()).throw(OSError("read-only temp")),
+    )
+
+    with pytest.raises(RuntimeError, match="automatically generated"):
+        addon.start_origin_mcp_bridge(install_missing=False, background=True)
+
+    assert created[0].closed is True
+    assert addon._origin_mcp_bridge_server is None
 
 
 def test_user_install_flag_added_when_site_packages_not_writable(monkeypatch) -> None:
