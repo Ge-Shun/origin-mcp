@@ -22,6 +22,9 @@ def test_installer_creates_self_contained_origin_apps(tmp_path: Path) -> None:
     assert 'sys.modules.pop("origin_mcp_addon", None)' in starter
     assert (stop / "stop_bridge.ps1").is_file()
     assert (stop / "stop_bridge.vbs").is_file()
+    stop_script = (stop / "stop_bridge.ps1").read_text(encoding="utf-8")
+    assert "$env:ORIGIN_MCP_BRIDGE_HANDSHAKE" in stop_script
+    assert "GetTempPath" in stop_script
     assets = Path(__file__).resolve().parents[1] / "docs" / "assets"
     assert (start / "AppIcon.png").read_bytes() == (
         assets / "origin-mcp-start-icon.png"

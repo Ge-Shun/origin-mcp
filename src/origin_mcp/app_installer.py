@@ -96,7 +96,10 @@ $stream = $null
 $writer = $null
 $reader = $null
 try {
-    $handshakePath = Join-Path ([System.IO.Path]::GetTempPath()) "origin-mcp\bridge.json"
+    $handshakePath = $env:ORIGIN_MCP_BRIDGE_HANDSHAKE
+    if ([string]::IsNullOrWhiteSpace($handshakePath)) {
+        $handshakePath = Join-Path ([System.IO.Path]::GetTempPath()) "origin-mcp\bridge.json"
+    }
     if (-not (Test-Path -LiteralPath $handshakePath)) { throw "No bridge handshake file found." }
     $handshake = Get-Content -LiteralPath $handshakePath -Raw | ConvertFrom-Json
     $client = [System.Net.Sockets.TcpClient]::new()

@@ -41,6 +41,33 @@ def test_read_worksheet_selects_columns(fake_client: OriginClient, sample_df: pd
     assert all(set(row) == {"y"} for row in result["rows"])
 
 
+def test_blank_long_names_fall_back_to_origin_short_names(
+    fake_client: OriginClient,
+) -> None:
+    sheet = fake_client.op.add_book("Data", pd.DataFrame({"first": [1, 2], "second": [3, 4]}))
+    sheet.get_labels = lambda kind="L": ["", ""] if kind == "L" else ["A", "B"]
+
+    result = fake_client.read_worksheet(columns=["B"])
+    cell = fake_client.get_cell_value(row=0, column="A")
+    fake_client.set_cell_value(row=1, column="B", value=99)
+
+    assert result["columns"] == ["B"]
+    assert result["rows"] == [{"B": 3}, {"B": 4}]
+    assert cell["column"] == "A"
+    assert cell["value"] == 1
+    assert sheet.to_df().iloc[1, 1] == 99
+
+
+def test_duplicate_long_names_use_later_columns_short_name(fake_client: OriginClient) -> None:
+    sheet = fake_client.op.add_book("Data", pd.DataFrame({"first": [1], "second": [2]}))
+    sheet.get_labels = lambda kind="L": ["Signal", "Signal"] if kind == "L" else ["A", "B"]
+
+    result = fake_client.read_worksheet()
+
+    assert result["columns"] == ["Signal", "B"]
+    assert result["rows"] == [{"Signal": 1, "B": 2}]
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [{"start_row": -1}, {"max_rows": 0}, {"max_rows": 10_001}],

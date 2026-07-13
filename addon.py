@@ -19,7 +19,6 @@ DEFAULT_PORT = 47631
 DEFAULT_MAX_TASKS = 200
 RUNTIME_PACKAGES = {
     "originpro": "originpro>=1.1",
-    "pydantic": "pydantic>=2.0",
     "pandas": "pandas>=2.0",
     "openpyxl": "openpyxl>=3.1",
     "xlrd": "xlrd>=2.0",

@@ -43,6 +43,13 @@ def test_addon_installs_missing_dependencies_by_default(monkeypatch) -> None:
     assert signature.parameters["install_missing"].default is True
 
 
+def test_origin_side_runtime_dependencies_exclude_server_only_pydantic() -> None:
+    addon = load_addon_module()
+
+    assert "pydantic" not in addon.RUNTIME_PACKAGES
+    assert {"originpro", "pandas", "openpyxl", "xlrd"} <= set(addon.RUNTIME_PACKAGES)
+
+
 def test_addon_can_disable_dependency_install(monkeypatch) -> None:
     addon = load_addon_module()
     monkeypatch.setenv("ORIGIN_MCP_INSTALL_MISSING", "0")

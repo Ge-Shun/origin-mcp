@@ -1007,13 +1007,29 @@ class _WorksheetMixin(_OriginClientBase):
             cols = cols()
         count = max(0, int(cols or 0))
         get_labels = getattr(wks, "get_labels", None)
-        labels: list[Any] = []
+        long_names: list[Any] = []
+        short_names: list[Any] = []
         if callable(get_labels):
-            labels = list(get_labels("L") or [])
-        names = [
-            str(labels[index]) if index < len(labels) and labels[index] else f"Col{index + 1}"
-            for index in range(count)
-        ]
+            long_names = list(get_labels("L") or [])
+            try:
+                # ``G`` is Origin's column short-name label. It preserves the
+                # default A/B/... names as well as user-renamed short names.
+                short_names = list(get_labels("G") or [])
+            except (TypeError, ValueError):
+                # Older/test worksheet adapters may only expose label rows.
+                short_names = []
+
+        seen_long_names: set[str] = set()
+        names: list[str] = []
+        for index in range(count):
+            long_name = str(long_names[index]) if index < len(long_names) else ""
+            if long_name and long_name not in seen_long_names:
+                seen_long_names.add(long_name)
+                names.append(long_name)
+                continue
+
+            short_name = str(short_names[index]) if index < len(short_names) else ""
+            names.append(short_name or f"Col{index + 1}")
         return self._dedupe_headers(names)
 
     def _worksheet_window_df(
