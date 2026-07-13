@@ -591,6 +591,27 @@ def test_bridge_client_calls_high_level_origin_methods() -> None:
     assert analysis["executed"] is True
 
 
+def test_bridge_path_coercion_preserves_project_explorer_paths() -> None:
+    from origin_mcp.origin_client import OriginClient
+
+    client = OriginClient()
+    filesystem_args, filesystem_kwargs = bridge._coerce_path_args(
+        client.import_table,
+        ["data.csv"],
+        {},
+    )
+    project_args, project_kwargs = bridge._coerce_path_args(
+        client.list_project_folder,
+        [],
+        {"path": "/UNTITLED/FeatureFolder/"},
+    )
+
+    assert filesystem_args == [Path("data.csv")]
+    assert filesystem_kwargs == {}
+    assert project_args == []
+    assert project_kwargs == {"path": "/UNTITLED/FeatureFolder/"}
+
+
 def test_bridge_rejects_invalid_token() -> None:
     with running_bridge(token="secret") as server:
         with pytest.raises(OriginBridgeError) as excinfo:

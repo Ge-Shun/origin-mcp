@@ -13,6 +13,11 @@ def main() -> None:
     )
     parser.add_argument("--base", type=Path, required=True, help="Baseline generated index JSON.")
     parser.add_argument(
+        "--base-version",
+        default="2026b",
+        help="Version label represented by the baseline index.",
+    )
+    parser.add_argument(
         "--version-index",
         action="append",
         nargs=2,
@@ -33,8 +38,8 @@ def main() -> None:
 
     payload = {
         "schema_version": 1,
-        "base_version": "2026",
-        "versions": sorted({*versions, "2026"}),
+        "base_version": args.base_version,
+        "versions": sorted({*versions, args.base_version}),
         "diffs": diffs,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

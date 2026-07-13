@@ -218,7 +218,7 @@ def test_set_plot_property_rejects_unstructured_image_annotations(monkeypatch) -
     assert fake.calls == []
 
 
-def test_set_plot_property_reports_planned_capability_without_mutating(monkeypatch) -> None:
+def test_set_plot_property_applies_colormap(monkeypatch) -> None:
     fake = FakeGraphClient()
     monkeypatch.setattr(graph_tools, "client", fake)
 
@@ -229,11 +229,20 @@ def test_set_plot_property_reports_planned_capability_without_mutating(monkeypat
     )
 
     assert result["ok"] is True
-    assert result["data"]["applied"] is False
+    assert result["data"]["applied"] is True
     assert result["data"]["capability"]["name"] == "colormap"
-    assert result["data"]["capability"]["status"] == "planned"
-    assert result["data"]["alternatives"]
-    assert fake.calls == []
+    assert result["data"]["capability"]["status"] == "implemented"
+    assert fake.calls == [
+        (
+            "set_plot_style",
+            {
+                "graph_name": None,
+                "layer_index": 0,
+                "plot_index": None,
+                "colormap": "viridis",
+            },
+        )
+    ]
 
 
 def test_set_plot_property_rejects_unknown_property(monkeypatch) -> None:
@@ -295,13 +304,13 @@ def test_plot_style_capabilities_maps_all_catalog_plot_types() -> None:
     assert all(profile["chart_type"] for profile in profiles if profile is not None)
 
 
-def test_plot_style_capabilities_tool_reports_planned_image_controls() -> None:
+def test_plot_style_capabilities_tool_reports_implemented_colormap() -> None:
     result = server.origin_plot_style_capabilities(chart_type="热图", query="色带")
 
     assert result["ok"] is True
     assert result["data"]["loaded_sources"] == ["core.json", "field_color.json", "image.json"]
     assert result["data"]["capabilities"][0]["name"] == "colormap"
-    assert result["data"]["capabilities"][0]["status"] == "planned"
+    assert result["data"]["capabilities"][0]["status"] == "implemented"
 
 
 def test_plot_style_capabilities_tool_reports_specialized_profiles() -> None:

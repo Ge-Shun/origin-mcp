@@ -192,6 +192,16 @@ def test_browse_official_docs_has_versioned_labtalk_category() -> None:
     assert entry["metadata"]["official_url"].rstrip("/").endswith("/display-control")
 
 
+def test_browse_official_docs_uses_2026b_baseline() -> None:
+    result = browse_knowledge(
+        "official_docs",
+        "labtalk/commands/display-control",
+        version="2026b",
+    )
+
+    assert result["entry"]["metadata"]["versions"] == ["2026b"]
+
+
 def test_browse_official_docs_root_exposes_fine_grained_children() -> None:
     result = browse_knowledge("official_docs", "python/originpro-api")
 

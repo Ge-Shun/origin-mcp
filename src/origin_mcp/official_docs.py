@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urldefrag, urljoin, urlparse
 
-BASE_OFFICIAL_DOC_VERSION = "2026"
-SUPPORTED_OFFICIAL_DOC_VERSIONS = ("2024", "2025", "2026")
+BASE_OFFICIAL_DOC_VERSION = "2026b"
+SUPPORTED_OFFICIAL_DOC_VERSIONS = ("2024", "2025", "2026", "2026b")
 GENERATED_INDEX_PATH = Path(__file__).with_name("official_docs.generated.json")
 VERSION_DIFFS_PATH = Path(__file__).with_name("official_docs.version_diffs.json")
 ORIGINLAB_DOC_HOSTS = {"docs.originlab.com", "www.originlab.com"}
@@ -26,7 +26,7 @@ class OfficialDocRecord:
     doc_kind: str
     keywords: tuple[str, ...] = ()
     body: str | None = None
-    versions: tuple[str, ...] = ("2026",)
+    versions: tuple[str, ...] = ("2026b",)
     locale: str = "en"
     version_status: str | None = None
 
@@ -41,7 +41,7 @@ class OfficialDocRecord:
             doc_kind=str(data["doc_kind"]),
             keywords=tuple(str(item) for item in data.get("keywords", ())),
             body=data.get("body"),
-            versions=tuple(str(item) for item in data.get("versions", ("2026",))),
+            versions=tuple(str(item) for item in data.get("versions", ("2026b",))),
             locale=str(data.get("locale", "en")),
             version_status=data.get("version_status"),
         )
@@ -131,7 +131,7 @@ def classify_originlab_doc_url(
     url: str,
     text: str = "",
     *,
-    versions: tuple[str, ...] = ("2026",),
+    versions: tuple[str, ...] = ("2026b",),
 ) -> OfficialDocRecord | None:
     parsed = urlparse(url)
     if not is_originlab_doc_url(url):
@@ -166,7 +166,7 @@ def discover_records_from_html(
     html: str,
     base_url: str,
     *,
-    versions: tuple[str, ...] = ("2026",),
+    versions: tuple[str, ...] = ("2026b",),
 ) -> list[OfficialDocRecord]:
     records = []
     for url, text in extract_links(html, base_url):

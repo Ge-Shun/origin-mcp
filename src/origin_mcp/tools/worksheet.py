@@ -166,6 +166,170 @@ def origin_import_file(
 
 
 @_mcp_tool()
+def origin_connect_data_source(
+    source: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    keep_dc: bool = True,
+    dctype: str = "",
+    selection: str = "",
+    sparks: bool = False,
+) -> dict[str, Any]:
+    """Create an Origin Data Connector from a local path or remote source.
+
+    dctype selects a connector type such as CSV, Excel, JSON, or HTML when
+    Origin cannot infer it. selection chooses a table, sheet, or subresource.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Connected and imported an Origin data source.",
+            **client.connect_data_source(
+                source=source,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                keep_dc=keep_dc,
+                dctype=dctype,
+                selection=selection,
+                sparks=sparks,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_get_connector(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Inspect a worksheet's Data Connector source, selection, and settings."""
+
+    return _wrap(
+        lambda: _ok(
+            "Inspected Origin Data Connector.",
+            connector=client.connector_info(book_name=book_name, sheet_name=sheet_name),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_update_connector(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    source: str | None = None,
+    selection: str | None = None,
+    post_import_script: str | None = None,
+    import_options: str | None = None,
+    flags: int | None = None,
+    auto_refresh: bool | None = None,
+    refresh: bool = False,
+    sparks: bool = False,
+) -> dict[str, Any]:
+    """Update an existing Data Connector and optionally refresh its data."""
+
+    return _wrap(
+        lambda: _ok(
+            "Updated Origin Data Connector.",
+            **client.update_connector(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                source=source,
+                selection=selection,
+                post_import_script=post_import_script,
+                import_options=import_options,
+                flags=flags,
+                auto_refresh=auto_refresh,
+                refresh=refresh,
+                sparks=sparks,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_refresh_connector(
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    sparks: bool = False,
+) -> dict[str, Any]:
+    """Refresh one worksheet from its persistent Data Connector source."""
+
+    return _wrap(
+        lambda: _ok(
+            "Refreshed Origin Data Connector.",
+            **client.refresh_connector(
+                book_name=book_name,
+                sheet_name=sheet_name,
+                sparks=sparks,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_connect_selection(
+    selection: str,
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+    duplicate_analysis: bool = False,
+) -> dict[str, Any]:
+    """Import another connector selection into a new workbook sheet.
+
+    For multi-table, multi-sheet, or multi-file sources, selection names the
+    subresource. duplicate_analysis also copies analysis attached to the source
+    connector sheet.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Imported another Data Connector selection.",
+            **client.connect_selection(
+                selection=selection,
+                book_name=book_name,
+                sheet_name=sheet_name,
+                duplicate_analysis=duplicate_analysis,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_disconnect_connector(
+    mode: str = "sheet",
+    book_name: str | None = None,
+    sheet_name: str | None = None,
+) -> dict[str, Any]:
+    """Disconnect connector metadata (sheet/workbook) or only unlock data.
+
+    mode='sheet' disconnects the active sheet, 'workbook' removes all workbook
+    connectors, and 'unlock' leaves the connector but unlocks imported data.
+    """
+
+    return _wrap(
+        lambda: _ok(
+            "Changed Origin Data Connector attachment.",
+            **client.disconnect_connector(
+                mode=mode,
+                book_name=book_name,
+                sheet_name=sheet_name,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_refresh_all_connectors(scope: str = "project") -> dict[str, Any]:
+    """Refresh all Data Connectors in the project or active project folder."""
+
+    return _wrap(
+        lambda: _ok(
+            "Refreshed Origin Data Connectors.",
+            **client.refresh_all_connectors(scope=scope),
+        )
+    )
+
+
+@_mcp_tool()
 def origin_append_table(
     path: str,
     book_name: str | None = None,

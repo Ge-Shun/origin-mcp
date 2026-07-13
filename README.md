@@ -23,10 +23,14 @@ welcome.
 
 - Import CSV, TSV, TXT, DAT, XLS, and Excel data into Origin worksheets.
 - Read, write, sort, clear, and export worksheet data.
+- Manage Data Connector refresh/update/disconnect lifecycles, matrices, image
+  pages, Notes windows, and Project Explorer folders.
 - Create and refine common 2D, 3D, contour, statistical, and specialized plots.
 - Run Origin analyses such as fitting, smoothing, integration, peak finding,
   descriptive statistics, interpolation, normalization, t-tests, FFT/IFFT, and
   correlation.
+- Drive analysis templates, batch processing, Peak Analyzer, PCA, and a
+  validated catalog of signal-processing X-Functions.
 - Export figures and projects through a local Origin GUI bridge.
 - Save a finished graph as a reusable user template, then search/match and reapply
   it to same-type figures (see [docs/tools.md](docs/tools.md#user-template-library)).
@@ -47,8 +51,8 @@ style controls.
 
 - Windows
 - Origin or OriginPro installed and licensed
-- Origin/OriginPro 2026 is the primary tested target; other Origin versions are
-  not currently guaranteed
+- Origin/OriginPro 2026 and 2026b are the modern target family; the bundled
+  official-documentation index and capability baseline are aligned to 2026b (10.35)
 - Origin's embedded Python with the preinstalled `originpro` package
 
 ### Python version support

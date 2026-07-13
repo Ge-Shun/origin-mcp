@@ -178,12 +178,22 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
         symbol_kind: int | None = None,
         symbol_size: float | None = None,
         transparency: float | None = None,
+        colormap: str | None = None,
+        contour_levels: list[float] | None = None,
+        contour_minor_levels: int | None = None,
+        color_scale_limits: tuple[float, float] | None = None,
+        histogram_bin_width: float | None = None,
+        errorbar_cap: float | None = None,
+        box_width: float | None = None,
     ) -> dict[str, Any]:
         graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name or "")
         layer = self._graph_layer(graph, layer_index)
         plots = layer.plot_list()
-        selected = plots if plot_index is None else [plots[plot_index]]
-        for plot in selected:
+        selected_with_indexes = (
+            list(enumerate(plots)) if plot_index is None else [(plot_index, plots[plot_index])]
+        )
+        for selected_index, plot in selected_with_indexes:
             if color is not None:
                 plot.color = color
             if line_width is not None:
@@ -198,10 +208,52 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
                 plot.symbol_size = symbol_size
             if transparency is not None:
                 plot.transparency = transparency
+            if colormap is not None:
+                plot.colormap = colormap
+            if (
+                contour_levels is not None
+                or contour_minor_levels is not None
+                or color_scale_limits is not None
+            ):
+                self._set_plot_z_levels(
+                    plot,
+                    contour_levels=contour_levels,
+                    minor_levels=contour_minor_levels,
+                    color_scale_limits=color_scale_limits,
+                )
+            if histogram_bin_width is not None:
+                self._set_plot_command(plot, f"-hbs {histogram_bin_width:g}")
+            if errorbar_cap is not None:
+                self._set_plot_command(plot, f"-erwc {errorbar_cap:g}")
+            if box_width is not None:
+                self._set_box_chart_width(
+                    graph=graph,
+                    graph_name=graph_name_actual,
+                    layer_index=layer_index,
+                    plot_index=selected_index,
+                    width=box_width,
+                )
+        applied = {
+            "color": color,
+            "line_width": line_width,
+            "bar_gap": bar_gap,
+            "line_style": line_style,
+            "symbol_kind": symbol_kind,
+            "symbol_size": symbol_size,
+            "transparency": transparency,
+            "colormap": colormap,
+            "contour_levels": contour_levels,
+            "contour_minor_levels": contour_minor_levels,
+            "color_scale_limits": color_scale_limits,
+            "histogram_bin_width": histogram_bin_width,
+            "errorbar_cap": errorbar_cap,
+            "box_width": box_width,
+        }
         return {
-            "graph_name": self._object_name(graph, default=graph_name or ""),
+            "graph_name": graph_name_actual,
             "layer_index": layer_index,
-            "styled_plots": len(selected),
+            "styled_plots": len(selected_with_indexes),
+            "applied": {key: value for key, value in applied.items() if value is not None},
         }
 
     def add_plot_to_graph(

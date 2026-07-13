@@ -195,6 +195,40 @@ class PlotStyleRequest(BaseModel):
         le=100,
         description="Transparency percent, 0 to 100.",
     )
+    colormap: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Origin color-list or palette name, such as Fire or Maple.pal.",
+    )
+    contour_levels: list[float] | None = Field(
+        default=None,
+        min_length=2,
+        description="Strictly increasing color-map or contour Z levels.",
+    )
+    contour_minor_levels: int | None = Field(
+        default=None,
+        ge=0,
+        description="Number of minor levels between adjacent major contour levels.",
+    )
+    color_scale_limits: tuple[float, float] | None = Field(
+        default=None,
+        description="Color scale minimum and maximum. Existing level count is preserved.",
+    )
+    histogram_bin_width: float | None = Field(
+        default=None,
+        gt=0,
+        description="Histogram bin width (LabTalk set -hbs).",
+    )
+    errorbar_cap: float | None = Field(
+        default=None,
+        gt=0,
+        description="Error-bar cap width in points (LabTalk set -erwc).",
+    )
+    box_width: float | None = Field(
+        default=None,
+        gt=0,
+        description="Box-chart box width in points.",
+    )
 
     @field_validator("color")
     @classmethod
@@ -206,6 +240,28 @@ class PlotStyleRequest(BaseModel):
             component < 0 or component > 255 for component in value
         ):
             raise ValueError("RGB components must be between 0 and 255.")
+        return value
+
+    @field_validator("contour_levels")
+    @classmethod
+    def contour_levels_must_increase(
+        cls,
+        value: list[float] | None,
+    ) -> list[float] | None:
+        if value is not None and any(
+            right <= left for left, right in zip(value, value[1:], strict=False)
+        ):
+            raise ValueError("contour_levels must be strictly increasing.")
+        return value
+
+    @field_validator("color_scale_limits")
+    @classmethod
+    def color_scale_limits_must_increase(
+        cls,
+        value: tuple[float, float] | None,
+    ) -> tuple[float, float] | None:
+        if value is not None and value[1] <= value[0]:
+            raise ValueError("color_scale_limits maximum must be greater than minimum.")
         return value
 
 
@@ -306,11 +362,43 @@ class FigureDataSpec(BaseModel):
         return value
 
 
+class FigureAxisBreakSpec(BaseModel):
+    start: float | None = Field(default=None, description="Value immediately before the break.")
+    end: float | None = Field(default=None, description="Value immediately after the break.")
+    position: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Break position as an axis percentage.",
+    )
+    post_break_increment: float | None = Field(
+        default=None,
+        gt=0,
+        description="Major tick increment after the break.",
+    )
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_enabled_range(self) -> FigureAxisBreakSpec:
+        if not self.enabled:
+            return self
+        if self.start is None or self.end is None:
+            raise ValueError("Enabled axis breaks require start and end values.")
+        if self.start >= self.end:
+            raise ValueError("Axis break start must be less than end.")
+        return self
+
+
 class FigureAxisSpec(BaseModel):
     title: str | None = None
     scale: str | int | None = None
     limits: Literal["auto"] | list[float | None] | None = "auto"
     step: float | None = Field(default=None, gt=0)
+    breaks: list[FigureAxisBreakSpec] = Field(
+        default_factory=list,
+        max_length=1,
+        description="Optional axis break. The current executor supports one break per axis.",
+    )
 
     @field_validator("limits")
     @classmethod
@@ -325,7 +413,7 @@ class FigureAxisSpec(BaseModel):
 
 class FigurePageSpec(BaseModel):
     id: str = Field(default="page_main")
-    layout: Literal["single", "grid", "custom"] = Field(default="single")
+    layout: Literal["single", "grid", "custom", "inset", "dual_y"] = Field(default="single")
     size_mm: list[float] | None = Field(default=None, min_length=2, max_length=2)
     margins_mm: list[float] | None = None
     panel_spacing_mm: list[float] | None = None
@@ -374,6 +462,7 @@ class FigureLayerSpec(BaseModel):
     data_ref: str | None = None
     x: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
     y: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
+    z: FigureAxisSpec = Field(default_factory=FigureAxisSpec)
     frame: dict[str, bool] = Field(default_factory=dict)
 
     @field_validator("grid_cell")

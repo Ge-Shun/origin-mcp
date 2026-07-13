@@ -4,8 +4,9 @@
     "controls": "error bar cap width and cap style",
     "aliases": ["误差棒帽宽", "误差线帽", "error cap", "cap width"],
     "chart_types": ["errorbar", "line_symbol", "scatter"],
-    "status": "planned",
-    "origin_route": "Origin error-bar plot details; not yet exposed as a stable semantic tool"
+    "status": "implemented",
+    "setter": "origin_set_plot_style(errorbar_cap=...)",
+    "origin_route": "LabTalk set -erwc"
   },
   {
     "name": "errorbar_width",

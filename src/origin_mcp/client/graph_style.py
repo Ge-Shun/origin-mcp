@@ -604,6 +604,8 @@ class _GraphStyleMixin(_OriginClientBase):
         if not isinstance(limits, (list, tuple)) or len(limits) < 2:
             return []
         start, end = limits[0], limits[1]
+        if axis.get("scale") is None and axis.get("scale_name") is None:
+            return []
         if isinstance(start, bool) or isinstance(end, bool):
             return []
         if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):

@@ -134,8 +134,11 @@ the planned Origin operations without touching Origin. Planning reads the data
 file headers and verifies that mapped columns and column indexes exist before
 any Origin calls are made. Use `origin_execute_figure_spec(spec, dry_run=false)`
 to execute the current supported subset: worksheet-backed single-panel, grid,
-or custom grid/span multi-panel figures, common plot types, axis settings,
-panel/legend/reference annotations, exports, OPJU save, and graph diagnostics.
+custom grid/span, inset, and dual-Y figures; common plot types; X/Y/Z axis
+settings and one X/Y break per axis; panel/legend/reference annotations;
+exports, OPJU save, and graph diagnostics. Dual-Y specs use Origin's `doubleY`
+template and require two layers, one shared data source and X mapping, and one
+common line/scatter plot type without uncertainty mappings.
 Unsupported features are reported in the plan instead of being guessed.
 
 Minimal JSON shape:
@@ -187,6 +190,10 @@ layouts use `page.size_mm`, optional `page.margins_mm`, optional
 converts those values into Origin page size plus per-layer geometry. Absolute
 custom layouts use `position_mode="absolute"` plus `position.left`,
 `position.top`, `position.width`, and `position.height` as page percentages.
+For an inset, use `page.layout="inset"`; absolute positions are honored, while
+unspecified positions get a deterministic upper-right inset. Use
+`page.layout="dual_y"` with the first layer as the left axis and the second as
+the right axis.
 
 For Nature-style graph formatting, `origin_palette_catalog()` lists the built-in
 palette registry, including semantic roles, source links, color counts, and
@@ -211,14 +218,17 @@ annotations 18 pt. FigureSpec annotations use the same 18 pt default unless
 overrides it.
 
 For existing plots, `origin_set_plot_style` controls color, line width/style,
-symbols, transparency, and column/bar width on a zero-based `layer_index`.
+symbols, transparency, column/bar width, colormaps, contour levels and color
+scale limits, histogram bin width, error-bar cap width, and box-chart width on
+a zero-based `layer_index`.
 Pass `bar_gap` to set Origin's `-vg` gap value; larger `bar_gap` values make
 columns or bars narrower. FigureSpec plot `style` entries can use the same
 fields for supported plot primitives.
 
 FigureSpec plot `group_style` can apply safe per-series style sequences for
 multi-Y plots: `colors`, `line_widths`, `bar_gaps`, `line_styles`,
-`symbol_kinds`, `symbol_sizes`, and `transparencies`, or a `series` list of
+`symbol_kinds`, `symbol_sizes`, `transparencies`, `colormaps`, contour/color
+scale sequences, and histogram/error-bar/box width sequences, or a `series` list of
 per-series style objects. FigureSpec `uncertainty` supports error-bar mappings
 that route to the existing safe plotting path, for example
 `{"type": "errorbar", "y_error": "se"}` or `{"x_error": "xerr"}`. It also
@@ -258,6 +268,34 @@ routes, readable fields, and implementation status. Properties marked
 `implemented` have stable MCP entry points; properties marked `planned` are
 intentionally documented so the assistant can report that a semantic setter is
 not yet available instead of guessing a LabTalk flag.
+
+## Extended Origin Workflows
+
+The `standard` and `full` profiles expose the broader workflows added from the
+official originpro and X-Function surfaces:
+
+- Data Connectors can be created from local or remote sources, inspected,
+  updated, refreshed by sheet or project, expanded to another selection, and
+  disconnected while keeping imported data. `keep_dc=false` removes the
+  connector after the initial import.
+- Matrix tools create/read/write matrix objects, set XY mapping and view
+  controls, and transpose/rotate/flip them. Image tools import or create image
+  pages, inspect/read/process them, and convert images to matrices.
+- Analysis-template tools save/open OGW/OGWU templates. `origin_batch_process`
+  covers file, folder, existing XY/XYZ, worksheet, and range inputs;
+  `origin_clone_import` applies an existing connector/import structure to more
+  files.
+- Peak Analyzer tools expose theme/script/dialog execution, automatic baseline
+  generation, and multi-Y batch analysis. The expert analysis surface includes
+  typed FFT filtering, PCA, one-way ANOVA, and `origin_run_xfunction`, whose
+  allow-listed catalog validates every argument before generating LabTalk.
+
+Notes tools create, read, replace/append, load, export as HTML, and delete Notes
+windows. Syntax values are text, HTML, Markdown, or Origin rich text, with text
+or rendered view modes. Project-folder tools list, activate, create, move, and
+rename Project Explorer contents. Notes/folder deletion requires
+`confirm=true`; recursive folder deletion is explicit, the root folder is
+protected, and names/paths containing script delimiters are rejected.
 
 ## Knowledge Base Tools
 
@@ -306,11 +344,11 @@ pages, X-Function pages, and originpro API class pages into stable browse paths,
 then validates duplicate paths and required version metadata before writing the
 JSON index.
 
-Origin 2026 is the baseline index. Older supported versions use
+Origin 2026b is the baseline index. Older supported versions use
 `src/origin_mcp/official_docs.version_diffs.json`, which stores only `added`,
 `removed`, and `changed` records for each version. At query time, origin-mcp
-applies that delta in memory so `version="2024"` and `version="2025"` do not
-require duplicate full indexes.
+applies that delta in memory so `version="2024"`, `version="2025"`, and
+`version="2026"` do not require duplicate full indexes.
 
 To compare two generated indexes for Origin version drift:
 
@@ -322,7 +360,7 @@ To build a compact version-diff overlay from separately generated version
 indexes:
 
 ```powershell
-python scripts\build_official_docs_version_diffs.py --base origin2026.json --version-index 2025 origin2025.json --version-index 2024 origin2024.json --output src\origin_mcp\official_docs.version_diffs.json
+python scripts\build_official_docs_version_diffs.py --base origin2026b.json --base-version 2026b --version-index 2026 origin2026.json --version-index 2025 origin2025.json --version-index 2024 origin2024.json --output src\origin_mcp\official_docs.version_diffs.json
 ```
 
 Browse calls use a path-like topic. Examples:
@@ -347,7 +385,7 @@ and score. Examples:
 ```
 
 ```json
-{"collection": "official_docs", "topic": "labtalk/commands/display-control", "version": "2026"}
+{"collection": "official_docs", "topic": "labtalk/commands/display-control", "version": "2026b"}
 ```
 
 ## Single Source of Truth

@@ -249,6 +249,95 @@ def test_import_table_rejects_empty_file(fake_client: OriginClient, tmp_path: Pa
         fake_client.import_table(path=csv)
 
 
+def test_data_connector_lifecycle(fake_client: OriginClient, tmp_path: Path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text("x,y\n1,2\n", encoding="utf-8")
+
+    connected = fake_client.connect_data_source(
+        str(source),
+        book_name="Connected",
+        dctype="CSV",
+        selection="table-one",
+    )
+    assert connected["connector"]["connected"] is True
+    assert connected["connector"]["selection"] == "table-one"
+
+    updated = fake_client.update_connector(
+        book_name="Connected",
+        selection="table-two",
+        post_import_script="col(C)=col(A)+col(B)",
+        import_options="header:=1",
+        flags=3,
+        auto_refresh=True,
+        refresh=True,
+    )
+    assert updated["refreshed"] is True
+    assert updated["connector"]["selection"] == "table-two"
+    assert updated["connector"]["post_import_script"] == "col(C)=col(A)+col(B)"
+    assert updated["connector"]["import_options"] == "header:=1"
+    assert updated["connector"]["flags"] == 3
+    assert updated["connector"]["auto_refresh"] == 1
+
+    refreshed = fake_client.refresh_connector(book_name="Connected")
+    assert refreshed["refreshed"] is True
+
+    selected = fake_client.connect_selection("table-three", book_name="Connected")
+    assert selected["worksheet"]["sheet_name"] == "table-three"
+    assert selected["connector"]["selection"] == "table-three"
+
+    disconnected = fake_client.disconnect_connector(
+        mode="sheet", book_name="Connected", sheet_name="table-three"
+    )
+    assert disconnected["connected"] is False
+
+
+def test_connect_data_source_accepts_windows_file_uri(
+    fake_client: OriginClient, tmp_path: Path
+) -> None:
+    source = tmp_path / "source data.csv"
+    source.write_text("x,y\n1,2\n", encoding="utf-8")
+
+    connected = fake_client.connect_data_source(
+        source.resolve().as_uri(),
+        book_name="URI Connected",
+        dctype="CSV",
+    )
+
+    assert connected["connector"]["source"] == str(source.resolve())
+
+
+def test_connector_info_reports_unconnected_sheet(
+    fake_client: OriginClient, sample_df: pd.DataFrame
+) -> None:
+    fake_client.op.add_book("Data", sample_df)
+
+    info = fake_client.connector_info(book_name="Data")
+
+    assert info["connected"] is False
+
+
+def test_connector_operations_require_existing_connector(
+    fake_client: OriginClient, sample_df: pd.DataFrame
+) -> None:
+    fake_client.op.add_book("Data", sample_df)
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.refresh_connector(book_name="Data")
+
+    assert excinfo.value.error_code == "data_connector_not_found"
+
+
+def test_refresh_all_connectors_selects_scope(fake_client: OriginClient) -> None:
+    project = fake_client.refresh_all_connectors(scope="project")
+    folder = fake_client.refresh_all_connectors(scope="folder")
+
+    assert project["refreshed"] is True
+    assert folder["refreshed"] is True
+    scripts = [args[0] for name, args in fake_client.op.calls if name == "lt_exec"]
+    assert scripts[-2].startswith("doc -e LBC")
+    assert scripts[-1].startswith("doc -ef LBC")
+
+
 # -- worksheet_not_found path --------------------------------------------
 
 

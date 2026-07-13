@@ -48,7 +48,7 @@ COLLECTIONS: dict[str, str] = {
 }
 
 
-OFFICIAL_DOC_VERIFIED = "2026-05-28"
+OFFICIAL_DOC_VERIFIED = "2026-07-13"
 
 
 OFFICIAL_URLS = {
@@ -412,16 +412,24 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         collection="reference",
         path="compatibility/runtime",
         title="Runtime compatibility",
-        summary="Origin 2026 plus its embedded Python bridge is the primary automation target.",
+        summary="Origin 2026b documentation and its embedded Python bridge are the current target.",
         body=(
             "Use origin_capabilities after starting the Origin GUI bridge. The preferred route "
             "is to run addon.py from Origin's embedded Python console, "
             "then let the MCP server connect to that local bridge. External Python with "
             "OriginExt/originpro is more sensitive to Python version and Origin lifecycle "
             "mismatches. "
-            "Origin/OriginPro 2026 is the primary tested Origin target in this project."
+            "The official documentation index is aligned to Origin/OriginPro 2026b (10.35); "
+            "Origin 2026 (10.3) remains in the supported modern target family."
         ),
-        keywords=("compatibility", "python", "origin 2026", "originpro", "OriginExt"),
+        keywords=(
+            "compatibility",
+            "python",
+            "origin 2026",
+            "origin 2026b",
+            "originpro",
+            "OriginExt",
+        ),
     ),
     KnowledgeEntry(
         collection="reference",

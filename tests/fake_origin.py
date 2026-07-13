@@ -19,6 +19,7 @@ import base64
 import re
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 _NCOLS_RE = re.compile(r"wks\.ncols\s*=\s*(\d+)\s*;?", re.IGNORECASE)
@@ -27,6 +28,11 @@ _EXP_FILENAME_RE = re.compile(r'filename:="([^"]*)"')
 _EXP_TYPE_RE = re.compile(r"type:=(\w+)")
 _TEMPLATE_NAME_RE = re.compile(r'template:="([^"]*)"')
 _TEMPLATE_FILEPATH_RE = re.compile(r'filepath:="([^"]*)"')
+_DC_STRING_RE = re.compile(r'wks\.dc\.(sel|script|optn)\$="([^"]*)"', re.IGNORECASE)
+_DC_INT_RE = re.compile(r"wks\.dc\.(flags|auto)\s*=\s*(-?\d+)", re.IGNORECASE)
+_DC_NEW_SHEET_RE = re.compile(r'wbook\.dc\.newsheet\("([^"]*)"\s*,\s*1\s*\)', re.IGNORECASE)
+_DC_REMOVE_RE = re.compile(r"wbook\.dc\.remove\((\d+)\)", re.IGNORECASE)
+_SAVE_ANALYSIS_TEMPLATE_RE = re.compile(r'save\s+-ik\s+"([^"]+)"', re.IGNORECASE)
 
 
 class WBook:
@@ -42,6 +48,10 @@ class WBook:
     def __getitem__(self, index: int) -> FakeWorksheet:
         return self.sheets[index]
 
+    def activate(self) -> None:
+        if self.sheets:
+            self.op.active_sheet = self.sheets[0]
+
 
 class FakeWorksheet:
     def __init__(self, book: WBook, name: str, df: pd.DataFrame | None = None) -> None:
@@ -55,6 +65,7 @@ class FakeWorksheet:
         self.designation_calls: list[tuple[str, int, int, bool]] = []
         self.from_df_calls = 0
         self.to_df_calls = 0
+        self.dc: dict[str, Any] | None = None
 
     # -- Properties originpro exposes -------------------------------------
     @property
@@ -124,16 +135,241 @@ class FakeWorksheet:
     def cols_axis(self, spec: str, c1: int = 0, c2: int = -1, repeat: bool = True) -> None:
         self.designation_calls.append((spec, c1, c2, repeat))
 
+    # -- Data Connector ---------------------------------------------------
+    def from_file(
+        self,
+        path: str,
+        keep_dc: bool = True,
+        dctype: str = "",
+        sel: str = "",
+        sparks: bool = False,
+    ) -> None:
+        self.dc = {
+            "source": path,
+            "keep_dc": keep_dc,
+            "dctype": dctype,
+            "sel": sel,
+            "script": "",
+            "optn": "",
+            "flags": 0,
+            "auto": 0,
+            "imports": 1,
+            "sparks": sparks,
+        }
+
+    def has_DC(self) -> bool:
+        return self.dc is not None
+
+    def remove_DC(self) -> None:
+        self.dc = None
+
+    def get_str(self, prop: str) -> str:
+        if self.dc is None:
+            raise RuntimeError("no connector")
+        return str(self.dc[prop.split(".", 1)[-1].lower()])
+
+    def get_int(self, prop: str) -> int:
+        if self.dc is None:
+            raise RuntimeError("no connector")
+        return int(self.dc[prop.split(".", 1)[-1].lower()])
+
     # -- LabTalk execution -------------------------------------------------
     def activate(self) -> None:
         self.activated += 1
+        self.book.op.active_sheet = self
 
     def lt_exec(self, script: str) -> int:
         self.scripts.append(script)
         match = _NCOLS_RE.fullmatch(script.strip())
         if match:
             self._df = self._df.iloc[:, : int(match.group(1))]
+        if self.dc is not None:
+            for name, value in _DC_STRING_RE.findall(script):
+                self.dc[name.lower()] = value
+            for name, value in _DC_INT_RE.findall(script):
+                self.dc[name.lower()] = int(value)
+        new_sheet = _DC_NEW_SHEET_RE.search(script)
+        if new_sheet and self.dc is not None:
+            FakeConnector(self, "", True).new_sheet(new_sheet.group(1))
+        remove = _DC_REMOVE_RE.search(script)
+        if remove:
+            mode = int(remove.group(1))
+            if mode == 0:
+                for sheet in self.book.sheets:
+                    sheet.dc = None
+            elif mode == 1:
+                self.dc = None
         return 0
+
+
+class FakeMatrixSheet:
+    def __init__(self, book: WBook, name: str = "MSheet1") -> None:
+        self.book = book
+        self.name = name
+        self.lname = name
+        self._data = np.zeros((1, 1, 1), dtype=float)
+        self.xymap = (0.0, 1.0, 0.0, 1.0)
+        self.labels: list[str] = ["1"]
+        self.scripts: list[str] = []
+        self.image_view = False
+        self.thumbnails = False
+        self.slider = False
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return int(self._data.shape[1]), int(self._data.shape[2])
+
+    @property
+    def depth(self) -> int:
+        return int(self._data.shape[0])
+
+    def get_book(self) -> WBook:
+        return self.book
+
+    def from_np(self, arr: Any, dstack: bool = False, mv: Any = None) -> None:
+        data = np.asarray(arr).copy()
+        if data.ndim == 2:
+            data = data[np.newaxis, :, :]
+        elif dstack:
+            data = np.moveaxis(data, -1, 0)
+        self._data = data
+        self.labels = [str(index + 1) for index in range(self.depth)]
+
+    def from_np2d(self, arr: Any, index: int = 0) -> None:
+        self._data[index] = np.asarray(arr)
+
+    def to_np2d(self, index: int = 0, order: str = "C") -> Any:
+        return np.array(self._data[index], order=order, copy=True)
+
+    def to_np3d(self, dstack: bool = False, order: str = "C") -> Any:
+        data = np.array(self._data, order=order, copy=True)
+        return np.moveaxis(data, 0, -1) if dstack else data
+
+    def from_img(self, image: FakeImage) -> None:
+        data = np.asarray(image.to_np())
+        if data.ndim == 2:
+            self.from_np(data)
+        elif data.ndim == 3 and data.shape[-1] in {3, 4}:
+            self.from_np(np.moveaxis(data, -1, 0))
+        else:
+            self.from_np(data)
+
+    def get_labels(self, type_: str = "L") -> list[str]:
+        return list(self.labels) if type_ == "L" else []
+
+    def set_labels(self, labels: list[str], type_: str = "L", offset: int = 0) -> None:
+        if type_ != "L":
+            return
+        while len(self.labels) < offset:
+            self.labels.append("")
+        for index, label in enumerate(labels, start=offset):
+            if index < len(self.labels):
+                self.labels[index] = label
+            else:
+                self.labels.append(label)
+
+    def show_image(self, show: bool = True) -> None:
+        self.image_view = show
+
+    def show_thumbnails(self, show: bool = True) -> None:
+        self.thumbnails = show
+
+    def show_slider(self, show: bool = True) -> None:
+        self.slider = show
+
+    def lt_range(self, _flag: bool = False) -> str:
+        return f"[{self.book.name}]{self.name}"
+
+    def activate(self) -> None:
+        self.book.op.active_matrix = self
+
+    def lt_exec(self, script: str) -> int:
+        self.scripts.append(script)
+        clean = script.strip().lower()
+        if clean.startswith("matrix -t"):
+            self._data = np.transpose(self._data, (0, 2, 1))
+        elif clean.startswith("matrix -c r"):
+            self._data = np.rot90(self._data, axes=(1, 2))
+        elif clean.startswith("matrix -c h"):
+            self._data = np.flip(self._data, axis=2)
+        elif clean.startswith("matrix -c v"):
+            self._data = np.flip(self._data, axis=1)
+        return 0
+
+
+class FakeImage:
+    def __init__(self, op: FakeOp, name: str) -> None:
+        self.op = op
+        self.name = name
+        self.lname = name
+        self._data = np.zeros((1, 1), dtype=np.uint8)
+        self._channels = 1
+        self._multiframe = False
+        self._channel_type = -1
+
+    def setup(self, channels: int, multiframe: bool, channelType: int = -1) -> bool:
+        self._channels = channels
+        self._multiframe = multiframe
+        self._channel_type = channelType
+        return True
+
+    def from_file(self, fname: str) -> bool:
+        self._data = np.arange(12, dtype=np.uint8).reshape(2, 2, 3)
+        self._channels = 3
+        return True
+
+    def from_np(self, arr: Any, dstack: bool = False) -> None:
+        data = np.asarray(arr).copy()
+        if dstack and self._multiframe and data.ndim >= 3:
+            data = np.moveaxis(data, -1, 0)
+        self._data = data
+
+    def from_np2d(self, arr: Any, frame: int) -> bool:
+        self._data[frame] = np.asarray(arr)
+        return True
+
+    def to_np(self) -> Any:
+        return self._data.copy()
+
+    def to_np2d(self, frame: int) -> Any:
+        return self._data[frame].copy()
+
+    @property
+    def size(self) -> tuple[int, int]:
+        if self._multiframe and self._data.ndim >= 3:
+            height, width = self._data.shape[-2:]
+        else:
+            height, width = self._data.shape[:2]
+        return int(width), int(height)
+
+    @property
+    def channels(self) -> int:
+        return self._channels
+
+    @property
+    def frames(self) -> int:
+        return int(self._data.shape[0]) if self._multiframe else 1
+
+    @property
+    def type(self) -> int:
+        return 2 if self._multiframe else 1
+
+    def rgb2gray(self) -> None:
+        if self._data.ndim == 3 and self._data.shape[-1] in {3, 4}:
+            self._data = self._data[..., :3].mean(axis=-1)
+            self._channels = 1
+
+    def split(self) -> None:
+        if self._data.ndim == 3 and self._data.shape[-1] in {3, 4}:
+            self._data = np.moveaxis(self._data, -1, 0)
+            self._channels = 1
+            self._multiframe = True
+
+    def merge(self) -> None:
+        if self._multiframe and self._data.ndim == 3 and self._data.shape[0] in {3, 4}:
+            self._channels = int(self._data.shape[0])
+            self._data = np.moveaxis(self._data, 0, -1)
+            self._multiframe = False
 
 
 # A minimal valid 1x1 PNG, used by GPage.save_fig so export/inspect paths that
@@ -272,14 +508,75 @@ class FakeLinearFit:
         return ("FitReport", "FitCurves")
 
 
+class FakeConnector:
+    """Small in-memory stand-in for ``originpro.Connector``."""
+
+    def __init__(self, wks: FakeWorksheet, dctype: str = "", keep_dc: bool = True) -> None:
+        self.wks = wks
+        if wks.dc is None:
+            wks.dc = {
+                "source": "",
+                "keep_dc": keep_dc,
+                "dctype": dctype,
+                "sel": "",
+                "script": "",
+                "optn": "",
+                "flags": 0,
+                "auto": 0,
+                "imports": 0,
+                "sparks": False,
+            }
+
+    @property
+    def source(self) -> str:
+        assert self.wks.dc is not None
+        return str(self.wks.dc["source"])
+
+    @source.setter
+    def source(self, value: str) -> None:
+        assert self.wks.dc is not None
+        self.wks.dc["source"] = value
+
+    def settings(self) -> dict[str, Any]:
+        assert self.wks.dc is not None
+        return {
+            "dctype": self.wks.dc["dctype"],
+            "keep_dc": self.wks.dc["keep_dc"],
+        }
+
+    def imp(self, fname: str = "", sel: str = "", sparks: bool = False) -> None:
+        assert self.wks.dc is not None
+        if fname:
+            self.wks.dc["source"] = fname
+        if sel:
+            self.wks.dc["sel"] = sel
+        self.wks.dc["sparks"] = sparks
+        self.wks.dc["imports"] = int(self.wks.dc["imports"]) + 1
+
+    def new_sheet(self, name: str) -> FakeWorksheet:
+        assert self.wks.dc is not None
+        sheet = FakeWorksheet(self.wks.book, name)
+        sheet.dc = dict(self.wks.dc)
+        sheet.dc["sel"] = name
+        sheet.dc["imports"] = 1
+        self.wks.book.sheets.append(sheet)
+        self.wks.book.op.active_sheet = sheet
+        return sheet
+
+
 class FakeOp:
     """Fake ``originpro`` module exposing only what OriginClient calls."""
 
     def __init__(self) -> None:
         self.books: list[WBook] = []
+        self.matrix_books: list[WBook] = []
         self.graphs: list[GPage] = []
+        self.images: list[FakeImage] = []
         self._counter = 0
         self._graph_counter = 0
+        self.active_sheet: FakeWorksheet | None = None
+        self.active_matrix: FakeMatrixSheet | None = None
+        self.active_image: FakeImage | None = None
         self.lt_values: dict[str, Any] = {}
         # Records of lifecycle / LabTalk calls so tests can assert on side effects.
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
@@ -298,6 +595,7 @@ class FakeOp:
         wks = FakeWorksheet(book, sheet, df)
         book.sheets.append(wks)
         self.books.append(book)
+        self.active_sheet = wks
         return wks
 
     def add_graph(self, name: str, lname: str | None = None, layers: int = 1) -> GPage:
@@ -305,16 +603,28 @@ class FakeOp:
         self.graphs.append(page)
         return page
 
+    def add_matrix(self, name: str, sheet: str = "MSheet1") -> FakeMatrixSheet:
+        book = WBook(self, name)
+        msheet = FakeMatrixSheet(book, sheet)
+        book.sheets.append(msheet)  # type: ignore[arg-type]
+        self.matrix_books.append(book)
+        self.active_matrix = msheet
+        return msheet
+
     # -- originpro surface -------------------------------------------------
-    def new_sheet(self, _type: str = "w", book_name: str = "") -> FakeWorksheet:
+    def new_sheet(self, _type: str = "w", book_name: str = "") -> Any:
         self._counter += 1
+        if _type == "m":
+            return self.add_matrix(book_name or f"MBook{self._counter}")
         name = book_name or f"Book{self._counter}"
         return self.add_book(name)
 
-    def find_sheet(self, _type: str = "w", ref: str = "") -> FakeWorksheet | None:
+    def find_sheet(self, _type: str = "w", ref: str = "") -> Any:
         ref = (ref or "").strip()
+        if _type == "m":
+            return self._find_data_sheet(self.matrix_books, self.active_matrix, ref)
         if ref == "":
-            return self.books[-1].sheets[0] if self.books else None
+            return self.active_sheet
         if ref.startswith("[") and "]" in ref:
             book_name, rest = ref[1:].split("]", 1)
             sheet_name = rest.split("!", 1)[0].strip() or None
@@ -331,9 +641,26 @@ class FakeOp:
     def pages(self, _type: str = "") -> list[Any]:
         if _type == "w":
             return list(self.books)
+        if _type == "m":
+            return list(self.matrix_books)
         if _type == "g":
             return list(self.graphs)
-        return [*self.books, *self.graphs]
+        return [*self.books, *self.matrix_books, *self.graphs, *self.images]
+
+    def new_image(self, name: str = "") -> FakeImage:
+        image = FakeImage(self, name or f"Image{len(self.images) + 1}")
+        self.images.append(image)
+        self.active_image = image
+        return image
+
+    def find_image(self, name: str = "") -> FakeImage | None:
+        clean = name.strip()
+        if not clean:
+            return self.active_image
+        for image in self.images:
+            if clean in (image.name, image.lname):
+                return image
+        return None
 
     def new_graph(self, template: str = "", lname: str | None = None) -> GPage:
         self._graph_counter += 1
@@ -352,6 +679,22 @@ class FakeOp:
     def graph_list(self, _type: str = "p", _active_first: bool = True) -> list[GPage]:
         return list(self.graphs)
 
+    def Connector(
+        self,
+        wks: FakeWorksheet,
+        dctype: str = "",
+        keep_DC: bool = True,
+    ) -> FakeConnector:
+        return FakeConnector(wks, dctype=dctype, keep_dc=keep_DC)
+
+    def set_lt_str(self, name: str, value: str) -> bool:
+        self.lt_values[name.rstrip("$")] = value
+        self.calls.append(("set_lt_str", (name, value)))
+        return True
+
+    def get_lt_str(self, name: str) -> str:
+        return str(self.lt_values.get(name.rstrip("$"), ""))
+
     def lt_float(self, expression: str) -> Any:
         return self.lt_values.get(expression)
 
@@ -366,6 +709,13 @@ class FakeOp:
             self._emulate_export(script)
         if "template_saveas" in script:
             self._emulate_template_saveas(script)
+        analysis_template = _SAVE_ANALYSIS_TEMPLATE_RE.search(script)
+        if analysis_template:
+            from pathlib import Path
+
+            target = Path(analysis_template.group(1).replace("\\\\", "\\"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("fake-analysis-template", encoding="utf-8")
         return self.lt_exec_result
 
     @staticmethod
@@ -432,4 +782,27 @@ class FakeOp:
                         return sheet
                 return None
             return book.sheets[0] if book.sheets else None
+        return None
+
+    @staticmethod
+    def _find_data_sheet(books: list[WBook], active: Any, ref: str) -> Any:
+        if not ref:
+            return active
+        if ref.startswith("[") and "]" in ref:
+            book_name, rest = ref[1:].split("]", 1)
+            sheet_name = rest.split("!", 1)[0].strip() or None
+        else:
+            book_name, sheet_name = ref, None
+        for book in books:
+            if book_name in (book.name, book.lname):
+                if sheet_name:
+                    return next(
+                        (sheet for sheet in book.sheets if sheet_name in (sheet.name, sheet.lname)),
+                        None,
+                    )
+                return book.sheets[0] if book.sheets else None
+        for book in books:
+            for sheet in book.sheets:
+                if ref in (sheet.name, sheet.lname):
+                    return sheet
         return None

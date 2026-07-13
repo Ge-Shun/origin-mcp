@@ -25,6 +25,8 @@ def test_collect_capabilities_marks_missing_features() -> None:
     )
     assert data["features"]["origin_2024b_or_newer"]["available"] is True
     assert data["features"]["origin_2026_or_newer"]["available"] is True
+    assert data["features"]["origin_2026b_or_newer"]["available"] is False
+    assert data["features"]["notes_api"]["available"] is False
     assert "plot_type_coverage" in data
 
 
@@ -32,7 +34,7 @@ def test_plot_type_coverage_reports_direct_and_generic_support() -> None:
     coverage = plot_type_coverage(10.3)
 
     assert coverage["version_profile"]["recommended"] is True
-    assert coverage["version_profile"]["name"] == "Origin 2026 or newer"
+    assert coverage["version_profile"]["name"] == "Origin 2026"
     assert coverage["summary"]["direct_tool_count"] == coverage["summary"]["catalog_count"]
     assert coverage["summary"]["not_wrapped_count"] == 0
 
@@ -55,5 +57,32 @@ def test_plot_type_coverage_reports_direct_and_generic_support() -> None:
 def test_plot_type_coverage_marks_2024b_as_not_guaranteed() -> None:
     coverage = plot_type_coverage(10.15)
 
-    assert coverage["version_profile"]["name"] == "Origin 2024b to 2025"
+    assert coverage["version_profile"]["name"] == "Origin 2024b to 2025b"
     assert coverage["version_profile"]["recommended"] is False
+
+
+def test_collect_capabilities_and_profile_recognize_2026b() -> None:
+    pe = SimpleNamespace(
+        search=lambda: "/UNTITLED",
+        cd=lambda _path: "/UNTITLED",
+        mkdir=lambda _name: "/UNTITLED/New",
+        move=lambda _name, _path: None,
+    )
+    op = SimpleNamespace(
+        lt_exec=lambda _script: True,
+        new_sheet=lambda *_args, **_kwargs: None,
+        find_sheet=lambda *_args, **_kwargs: None,
+        new_image=lambda *_args, **_kwargs: None,
+        find_image=lambda *_args, **_kwargs: None,
+        new_notes=lambda *_args, **_kwargs: None,
+        find_notes=lambda *_args, **_kwargs: None,
+        pe=pe,
+    )
+
+    data = collect_capabilities(op, 10.35)
+    coverage = plot_type_coverage(10.35)
+
+    assert data["features"]["origin_2026b_or_newer"]["available"] is True
+    assert data["features"]["notes_api"]["available"] is True
+    assert data["features"]["project_folder_api"]["available"] is True
+    assert coverage["version_profile"]["name"] == "Origin 2026b or newer"

@@ -34,12 +34,33 @@ class FakeFigureSpecClient:
             {"plot_type_id": kwargs["plot_type_id"]},
         )
 
+    def plot_dual_y(self, **kwargs: Any) -> tuple[WorksheetRef, GraphRef]:
+        self.calls.append(("plot_dual_y", kwargs))
+        return (
+            WorksheetRef("Book1", "Sheet1", ["time", "left", "right"], 2),
+            GraphRef(
+                "Graph1",
+                export_path=str(kwargs["export_path"]) if kwargs.get("export_path") else None,
+                template="doubleY",
+                style_mode=kwargs.get("style_mode"),
+            ),
+        )
+
     def set_axis(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("set_axis", kwargs))
         return {
             "axis": kwargs["axis"],
             "graph_name": kwargs.get("graph_name"),
             "layer_index": kwargs.get("layer_index", 0),
+        }
+
+    def set_axis_break(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("set_axis_break", kwargs))
+        return {
+            "axis": kwargs["axis"],
+            "graph_name": kwargs.get("graph_name"),
+            "layer_index": kwargs.get("layer_index", 0),
+            "enabled": kwargs.get("enabled", True),
         }
 
     def run_labtalk(self, script: str) -> dict[str, Any]:
@@ -203,6 +224,10 @@ def test_origin_execute_figure_spec_runs_single_layer_mvp(
     assert "export_graph" in called
     assert "diagnose_graph" in called
     assert "save_project" in called
+    plot_call = next(kwargs for name, kwargs in fake.calls if name == "plot_table")
+    assert plot_call["export_path"] is None
+    assert called.index("export_graph") > called.index("set_axis")
+    assert called.index("export_graph") > called.index("format_legend")
     panel_tag_call = next(
         kwargs
         for name, kwargs in fake.calls
@@ -787,3 +812,178 @@ def test_origin_plan_figure_spec_rejects_named_symbol_kind(tmp_path: Path) -> No
             "expected": "Origin integer symbol code",
         }
     ]
+
+
+def test_origin_execute_figure_spec_routes_advanced_styles_and_axes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response\n0,1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["layers"][0]["x"]["breaks"] = [
+        {"start": 2, "end": 4, "position": 40, "post_break_increment": 2}
+    ]
+    spec["layers"][0]["z"] = {"title": "Intensity", "limits": [0, 10]}
+    spec["plots"][0]["style"] = {
+        "colormap": "Fire",
+        "contour_levels": [0, 5, 10],
+        "contour_minor_levels": 2,
+        "color_scale_limits": [0, 10],
+        "histogram_bin_width": 0.5,
+        "errorbar_cap": 6,
+        "box_width": 12,
+    }
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert result["ok"] is True
+    style_call = next(kwargs for name, kwargs in fake.calls if name == "set_plot_style")
+    assert style_call == {
+        "graph_name": "Graph1",
+        "layer_index": 0,
+        "plot_index": 0,
+        "colormap": "Fire",
+        "contour_levels": [0, 5, 10],
+        "contour_minor_levels": 2,
+        "color_scale_limits": (0, 10),
+        "histogram_bin_width": 0.5,
+        "errorbar_cap": 6,
+        "box_width": 12,
+    }
+    break_call = next(kwargs for name, kwargs in fake.calls if name == "set_axis_break")
+    assert break_call == {
+        "graph_name": "Graph1",
+        "layer_index": 0,
+        "axis": "x",
+        "break_from": 2.0,
+        "break_to": 4.0,
+        "position": 40.0,
+        "post_break_increment": 2.0,
+        "enabled": True,
+    }
+    z_call = next(
+        kwargs for name, kwargs in fake.calls if name == "set_axis" and kwargs["axis"] == "z"
+    )
+    assert z_call["start"] == 0.0
+    assert z_call["end"] == 10.0
+    assert z_call["title"] == "Intensity"
+
+
+def test_origin_execute_figure_spec_runs_inset_layout(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response,other\n0,1,2\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {"layout": "inset"}
+    spec["layers"].append(
+        {
+            "id": "inset",
+            "data_ref": "ds_line",
+            "x": {"title": "Time"},
+            "y": {"title": "Other"},
+        }
+    )
+    spec["plots"].append(
+        {
+            "id": "inset_plot",
+            "layer": "inset",
+            "type": "scatter",
+            "map": {"x": "time", "y": "other"},
+        }
+    )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    arrange_op = next(item for item in plan["data"]["operations"] if item["op"] == "arrange_layers")
+    assert arrange_op["rows"] == 1
+    assert arrange_op["columns"] == 1
+    assert arrange_op["layer_geometries"][1] == {
+        "layer_index": 1,
+        "left": 60.0,
+        "top": 12.0,
+        "width": 30.0,
+        "height": 30.0,
+    }
+    assert result["ok"] is True
+    arrange_call = next(kwargs for name, kwargs in fake.calls if name == "arrange_layers")
+    assert arrange_call["rows"] == 1
+    assert arrange_call["columns"] == 1
+    drawing_call = next(
+        kwargs
+        for name, kwargs in fake.calls
+        if name == "run_labtalk" and "page.cntrl" in kwargs["script"]
+    )
+    assert drawing_call["script"].endswith("page.cntrl=page.cntrl|4;")
+
+
+def test_origin_execute_figure_spec_runs_dual_y_without_duplicate_plots(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,left,right\n0,1,10\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {"layout": "dual_y"}
+    spec["data"][0]["roles"] = {"x": "time"}
+    spec["layers"][0]["y"] = {"title": "Left"}
+    spec["layers"].append(
+        {
+            "id": "right_axis",
+            "data_ref": "ds_line",
+            "x": {"title": "Time"},
+            "y": {"title": "Right"},
+        }
+    )
+    spec["plots"][0]["map"] = {"x": "time", "y": "left"}
+    spec["plots"].append(
+        {
+            "id": "right_plot",
+            "layer": "right_axis",
+            "type": "line",
+            "map": {"x": "time", "y": "right"},
+        }
+    )
+    fake = FakeFigureSpecClient()
+    monkeypatch.setattr(figurespec_tools, "client", fake)
+
+    plan = figurespec_tools.origin_plan_figure_spec(spec)
+    result = figurespec_tools.origin_execute_figure_spec(spec)
+
+    assert plan["ok"] is True
+    assert plan["data"]["executor_executable"] is True
+    dual_op = next(item for item in plan["data"]["operations"] if item["op"] == "create_dual_y")
+    assert dual_op["sides"][0]["y"] == ["left"]
+    assert dual_op["sides"][1]["y"] == ["right"]
+    assert result["ok"] is True
+    dual_call = next(kwargs for name, kwargs in fake.calls if name == "plot_dual_y")
+    assert dual_call["export_path"] is None
+    assert dual_call["y1_cols"] == ["left"]
+    assert dual_call["y2_cols"] == ["right"]
+    assert result["data"]["layer_setup"]["arranged"]["template"] == "doubleY"
+    called = [name for name, _kwargs in fake.calls]
+    assert "add_plot_to_graph" not in called
+    assert not any(
+        name == "run_labtalk" and "layadd" in kwargs["script"] for name, kwargs in fake.calls
+    )
+
+
+def test_origin_plan_figure_spec_rejects_invalid_dual_y_shape(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("time,response\n0,1\n", encoding="utf-8")
+    spec = _single_line_spec(data_path, tmp_path)
+    spec["page"] = {"layout": "dual_y"}
+
+    result = figurespec_tools.origin_plan_figure_spec(spec)
+
+    assert result["ok"] is True
+    assert result["data"]["executor_executable"] is False
+    assert "executor_dual_y_requires_two_layers" in result["data"]["warnings"]

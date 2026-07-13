@@ -618,6 +618,8 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
             "symbol_kind": self._safe_origin_attr(plot, "symbol_kind"),
             "symbol_size": self._safe_origin_attr(plot, "symbol_size"),
             "transparency": self._safe_origin_attr(plot, "transparency"),
+            "colormap": self._safe_origin_attr(plot, "colormap"),
+            "zlevels": self._safe_origin_attr(plot, "zlevels"),
         }
 
     @classmethod
@@ -749,6 +751,61 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         if not callable(set_cmd):
             raise OriginOperationError("Plot object does not support set_cmd().")
         set_cmd(command)
+
+    @staticmethod
+    def _set_plot_z_levels(
+        plot: Any,
+        *,
+        contour_levels: list[float] | None,
+        minor_levels: int | None,
+        color_scale_limits: tuple[float, float] | None,
+    ) -> None:
+        try:
+            current = getattr(plot, "zlevels", None)
+        except (RuntimeError, SystemError, ValueError, TypeError):
+            current = None
+        settings = dict(current) if isinstance(current, dict) else {}
+        levels = list(contour_levels) if contour_levels is not None else None
+        if color_scale_limits is not None:
+            lower, upper = color_scale_limits
+            if levels is None:
+                existing = settings.get("levels")
+                count = len(existing) if isinstance(existing, (list, tuple)) else 8
+                count = max(2, count)
+                step = (upper - lower) / (count - 1)
+                levels = [lower + step * index for index in range(count)]
+            else:
+                interior = [value for value in levels if lower < value < upper]
+                levels = [lower, *interior, upper]
+        if levels is not None:
+            settings["levels"] = levels
+        if minor_levels is not None:
+            settings["minors"] = minor_levels
+        try:
+            plot.zlevels = settings
+        except Exception as exc:
+            raise OriginOperationError(
+                "Plot does not support color-map or contour Z-level settings.",
+                error_code="unsupported_origin_feature",
+            ) from exc
+
+    def _set_box_chart_width(
+        self,
+        *,
+        graph: Any,
+        graph_name: str,
+        layer_index: int,
+        plot_index: int,
+        width: float,
+    ) -> None:
+        self._activate_graph(graph, graph_name)
+        script = f"layer -s {layer_index + 1}; layer.plot{plot_index + 1}.boxchart.width={width:g};"
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(
+                "Origin rejected the box-chart width setting.",
+                error_code="origin_operation_failed",
+            )
 
     def _set_plot_fill_area(
         self,

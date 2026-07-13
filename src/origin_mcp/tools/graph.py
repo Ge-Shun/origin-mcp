@@ -44,6 +44,12 @@ _SET_PLOT_STYLE_PROPERTIES = {
     "bar_border_width": "line_width",
     "errorbar_width": "line_width",
     "three_d_symbol_size": "symbol_size",
+    "colormap": "colormap",
+    "contour_levels": "contour_levels",
+    "color_scale_limits": "color_scale_limits",
+    "histogram_bin_width": "histogram_bin_width",
+    "errorbar_cap": "errorbar_cap",
+    "box_width": "box_width",
 }
 _IMAGE_PANEL_STYLE_PROPERTIES = {
     "panel_label",
@@ -378,8 +384,15 @@ def origin_set_plot_style(
     symbol_kind: int | None = None,
     symbol_size: float | None = None,
     transparency: float | None = None,
+    colormap: str | None = None,
+    contour_levels: list[float] | None = None,
+    contour_minor_levels: int | None = None,
+    color_scale_limits: tuple[float, float] | None = None,
+    histogram_bin_width: float | None = None,
+    errorbar_cap: float | None = None,
+    box_width: float | None = None,
 ) -> dict[str, Any]:
-    """Set line, color, symbol, column/bar gap, and transparency style on plots."""
+    """Set common, color-map, contour, histogram, error-bar, and box styles."""
 
     def run() -> dict[str, Any]:
         req = PlotStyleRequest(
@@ -393,6 +406,13 @@ def origin_set_plot_style(
             symbol_kind=symbol_kind,
             symbol_size=symbol_size,
             transparency=transparency,
+            colormap=colormap,
+            contour_levels=contour_levels,
+            contour_minor_levels=contour_minor_levels,
+            color_scale_limits=color_scale_limits,
+            histogram_bin_width=histogram_bin_width,
+            errorbar_cap=errorbar_cap,
+            box_width=box_width,
         )
         return _ok("Updated Origin plot style.", **client.set_plot_style(**req.model_dump()))
 

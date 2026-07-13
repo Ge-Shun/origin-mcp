@@ -1,3 +1,4 @@
+import math
 import os
 import struct
 import zlib
@@ -2193,6 +2194,40 @@ def test_set_plot_style_sets_column_bar_gap(monkeypatch: pytest.MonkeyPatch) -> 
     assert plot.bar_gap == 80.0
 
 
+def test_set_plot_style_sets_colormap_levels_and_specialized_widths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    plot.zlevels = {"levels": [0.0, 0.5, 1.0], "minors": 0}
+    graph = FakeGraph(FakeLayer([plot]))
+    scripts: list[str] = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script, capture_log=True: scripts.append(script) or {"result": True},
+    )
+
+    result = client.set_plot_style(
+        "Graph1",
+        colormap="Maple.pal",
+        contour_minor_levels=2,
+        color_scale_limits=(10.0, 20.0),
+        histogram_bin_width=0.5,
+        errorbar_cap=3.0,
+        box_width=24.0,
+    )
+
+    assert result["styled_plots"] == 1
+    assert result["applied"]["colormap"] == "Maple.pal"
+    assert plot.colormap == "Maple.pal"
+    assert plot.zlevels == {"levels": [10.0, 15.0, 20.0], "minors": 2}
+    assert "-hbs 0.5" in plot.commands
+    assert "-erwc 3" in plot.commands
+    assert scripts[-1] == "layer -s 1; layer.plot1.boxchart.width=24;"
+
+
 def test_set_plot_style_uses_zero_based_layer_index(monkeypatch: pytest.MonkeyPatch) -> None:
     client = OriginClient()
     first_plot = FakePlot()
@@ -3273,3 +3308,9 @@ def test_axis_range_issues_detects_silent_clipping() -> None:
     # z axis with no limits (common) must not be flagged
     empty_z = client._axis_range_issues(0, "z", {"scale_name": None, "limits": [None, None]})
     assert empty_z == []
+    inactive_z = client._axis_range_issues(
+        0,
+        "z",
+        {"scale": None, "scale_name": None, "limits": [math.nan, math.nan, math.nan]},
+    )
+    assert inactive_z == []

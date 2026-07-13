@@ -40,6 +40,49 @@ ALLOWED_CLIENT_METHODS = {
     "import_csv",
     "import_table",
     "import_file_connector",
+    "connect_data_source",
+    "connector_info",
+    "update_connector",
+    "refresh_connector",
+    "connect_selection",
+    "disconnect_connector",
+    "refresh_all_connectors",
+    "create_matrix",
+    "matrix_info",
+    "read_matrix",
+    "write_matrix",
+    "set_matrix_properties",
+    "transform_matrix",
+    "import_image",
+    "create_image",
+    "image_info",
+    "read_image",
+    "process_image",
+    "image_to_matrix",
+    "create_note",
+    "note_info",
+    "write_note",
+    "load_note",
+    "export_note_html",
+    "delete_note",
+    "list_project_folder",
+    "set_project_folder",
+    "create_project_folder",
+    "move_project_item",
+    "rename_project_item",
+    "delete_project_folder",
+    "save_analysis_template",
+    "open_analysis_template",
+    "batch_process",
+    "clone_import",
+    "peak_analyzer",
+    "peak_baseline",
+    "peak_analyzer_batch",
+    "list_xfunctions",
+    "run_xfunction",
+    "fft_filter",
+    "principal_component_analysis",
+    "one_way_anova",
     "append_table",
     "worksheet_info",
     "read_worksheet",
@@ -144,19 +187,37 @@ def coerce_path_args(
     kwargs: dict[str, Any],
 ) -> tuple[list[Any], dict[str, Any]]:
     signature = inspect.signature(func)
-    path_names = {"path", "output_dir", "template_dir", "export_path"}
     coerced_args = list(args)
     params = list(signature.parameters.values())
     for index, value in enumerate(coerced_args):
         if index >= len(params):
             break
-        if params[index].name in path_names and isinstance(value, str):
+        if _parameter_expects_path(params[index]) and isinstance(value, str):
             coerced_args[index] = Path(value)
     coerced_kwargs = dict(kwargs)
     for key, value in list(coerced_kwargs.items()):
-        if key in path_names and isinstance(value, str):
+        parameter = signature.parameters.get(key)
+        if parameter is not None and _parameter_expects_path(parameter) and isinstance(value, str):
             coerced_kwargs[key] = Path(value)
     return coerced_args, coerced_kwargs
+
+
+def _parameter_expects_path(parameter: inspect.Parameter) -> bool:
+    """Distinguish filesystem paths from non-filesystem values named ``path``.
+
+    Project Explorer APIs intentionally use slash-delimited Origin paths. The
+    older name-based coercion converted those strings to Windows ``Path``
+    objects and silently changed their separators before bridge dispatch.
+    Client annotations are postponed strings, so matching the ``Path`` token is
+    both explicit and compatible with ``Path | None`` / ``Path | str``.
+    """
+
+    annotation = parameter.annotation
+    if annotation is inspect.Parameter.empty:
+        return False
+    if annotation is Path:
+        return True
+    return "Path" in str(annotation).replace("pathlib.", "")
 
 
 def call_origin_method(

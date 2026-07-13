@@ -383,7 +383,9 @@ FEATURE_REQUIREMENTS = {
     "origin_2021b_or_newer": 10.1,
     "origin_2024_or_newer": 10.15,
     "origin_2024b_or_newer": 10.15,
+    "origin_2025b_or_newer": 10.25,
     "origin_2026_or_newer": 10.3,
+    "origin_2026b_or_newer": 10.35,
 }
 
 
@@ -445,6 +447,7 @@ def _origin_version_tuple(version: float | int | str | None) -> tuple[int, ...] 
 
 def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[str, Any]:
     runtime = python_runtime_profile()
+    pe = getattr(op, "pe", None)
     feature_checks = [
         FeatureCheck("labtalk", hasattr(op, "lt_exec"), note="Required for fallback commands."),
         FeatureCheck("project_open", hasattr(op, "open")),
@@ -456,6 +459,32 @@ def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[st
             note="Required for export all graphs.",
         ),
         FeatureCheck("data_connector", hasattr(op, "Connector"), 9.6),
+        FeatureCheck(
+            "data_connector_lifecycle",
+            hasattr(op, "Connector"),
+            9.6,
+            "Connector settings/source/import/new-sheet operations are checked at runtime.",
+        ),
+        FeatureCheck(
+            "matrix_api",
+            callable(getattr(op, "new_sheet", None)) and callable(getattr(op, "find_sheet", None)),
+            note="Matrix sheet methods are checked on the returned MSheet at runtime.",
+        ),
+        FeatureCheck(
+            "image_api",
+            callable(getattr(op, "new_image", None)) and callable(getattr(op, "find_image", None)),
+        ),
+        FeatureCheck(
+            "notes_api",
+            callable(getattr(op, "new_notes", None)) and callable(getattr(op, "find_notes", None)),
+        ),
+        FeatureCheck(
+            "project_folder_api",
+            pe is not None
+            and all(
+                callable(getattr(pe, name, None)) for name in ("search", "cd", "mkdir", "move")
+            ),
+        ),
         FeatureCheck(
             "worksheet_from_file",
             True,
@@ -482,9 +511,20 @@ def collect_capabilities(op: Any, origin_version: float | int | None) -> dict[st
             10.15,
         ),
         FeatureCheck(
+            "origin_2025b_or_newer",
+            is_origin_version_at_least(origin_version, 10.25),
+            10.25,
+        ),
+        FeatureCheck(
             "origin_2026_or_newer",
             is_origin_version_at_least(origin_version, 10.3),
             10.3,
+        ),
+        FeatureCheck(
+            "origin_2026b_or_newer",
+            is_origin_version_at_least(origin_version, 10.35),
+            10.35,
+            "Current official-documentation baseline.",
         ),
     ]
     return {
@@ -570,22 +610,25 @@ def _plot_version_profile(origin_version: float | int | None) -> dict[str, Any]:
                 "with Origin available."
             ),
         }
+    if is_origin_version_at_least(origin_version, 10.35):
+        return {
+            "name": "Origin 2026b or newer",
+            "recommended": True,
+            "note": ("Current official-documentation and compatibility target for origin-mcp."),
+        }
     if is_origin_version_at_least(origin_version, 10.3):
         return {
-            "name": "Origin 2026 or newer",
+            "name": "Origin 2026",
             "recommended": True,
-            "note": (
-                "Primary tested target for origin-mcp. Other Origin versions are "
-                "not currently guaranteed."
-            ),
+            "note": "Supported modern target; the documentation baseline is Origin 2026b.",
         }
     if is_origin_version_at_least(origin_version, 10.15):
         return {
-            "name": "Origin 2024b to 2025",
+            "name": "Origin 2024b to 2025b",
             "recommended": False,
             "note": (
                 "Detected as a modern Origin version, but origin-mcp currently "
-                "targets Origin/OriginPro 2026 for active testing."
+                "targets Origin/OriginPro 2026b documentation and APIs."
             ),
         }
     if is_origin_version_at_least(origin_version, 10.1):

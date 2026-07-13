@@ -25,6 +25,7 @@ def test_classify_xfunction_function_page() -> None:
     assert record.path == "x-function/plotting/plotxy"
     assert record.doc_family == "x_function"
     assert record.doc_kind == "xfunction"
+    assert record.versions == ("2026b",)
 
 
 def test_classify_xfunction_keeps_function_name_underscores() -> None:
@@ -252,7 +253,7 @@ def test_records_for_version_applies_delta_without_copying_base_index() -> None:
         versions=("2025",),
     )
     diff_data = {
-        "base_version": "2026",
+        "base_version": "2026b",
         "diffs": {
             "2025": {
                 "added": [added.as_json_dict()],

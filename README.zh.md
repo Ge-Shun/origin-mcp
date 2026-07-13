@@ -19,8 +19,11 @@ pull request。
 
 - 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
 - 读取、写入、排序、清空和导出工作表数据。
+- 管理 Data Connector 的更新、刷新和断开流程，以及矩阵、图像页、Notes 窗口和
+  Project Explorer 文件夹。
 - 创建并调整常见 2D、3D、等高线、统计和专用图形。
 - 运行拟合、平滑、积分、寻峰、描述统计、插值、归一化、t 检验、FFT/IFFT 和相关分析等 Origin 分析。
+- 驱动分析模板、批处理、Peak Analyzer、PCA 和经过参数校验的信号处理 X-Function。
 - 通过本地 Origin GUI bridge 导出图形和项目。
 - 将画好的图保存为可复用的用户模板，之后可搜索匹配并套用到同类型图形（见 [docs/tools.md](docs/tools.md#user-template-library)）。
 
@@ -37,7 +40,8 @@ pull request。
 
 - Windows
 - 已安装并授权的 Origin 或 OriginPro
-- 当前主要测试目标是 Origin/OriginPro 2026，其他 Origin 版本暂不保证兼容
+- Origin/OriginPro 2026 与 2026b 是当前现代目标版本；内置官方文档索引和能力基线
+  已对齐 2026b（10.35）
 - Origin 内嵌 Python 及其预装的 `originpro` 包
 
 ### Python 版本支持

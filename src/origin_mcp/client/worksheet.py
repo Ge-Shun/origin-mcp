@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import pandas as pd
 
@@ -78,12 +79,216 @@ class _WorksheetMixin(_OriginClientBase):
         if not callable(from_file):
             raise OriginOperationError("The worksheet object does not support from_file().")
         from_file(str(path), keep_dc, dctype, sel, sparks)
-        if book_name:
-            try:
-                wks.get_book().lname = book_name
-            except Exception:
-                pass
+        self._restore_import_names(wks, book_name=book_name, sheet_name=sheet_name)
         return self._worksheet_ref(wks)
+
+    def connect_data_source(
+        self,
+        source: str,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        keep_dc: bool = True,
+        dctype: str = "",
+        selection: str = "",
+        sparks: bool = False,
+    ) -> dict[str, Any]:
+        """Create a Data Connector and import a local file or remote source."""
+
+        normalized_source = self._normalize_connector_source(source)
+        self.ensure_feature("data_connector", "Origin Data Connector lifecycle")
+        wks = self._new_sheet(book_name=book_name, sheet_name=sheet_name)
+        connector = self._new_connector(wks, dctype=dctype, keep_dc=keep_dc)
+        importer = getattr(connector, "imp", None)
+        if not callable(importer):
+            raise OriginOperationError("The Origin Connector object does not support imp().")
+        try:
+            importer(normalized_source, selection, sparks)
+        except TypeError:
+            importer(fname=normalized_source, sel=selection, sparks=sparks)
+        self._restore_import_names(wks, book_name=book_name, sheet_name=sheet_name)
+        return {
+            "worksheet": self._worksheet_ref(wks).as_dict(),
+            "connector": self._connector_info_for_sheet(wks),
+        }
+
+    def connector_info(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the active worksheet's Data Connector state and settings."""
+
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        return self._connector_info_for_sheet(wks)
+
+    def update_connector(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        source: str | None = None,
+        selection: str | None = None,
+        post_import_script: str | None = None,
+        import_options: str | None = None,
+        flags: int | None = None,
+        auto_refresh: bool | None = None,
+        refresh: bool = False,
+        sparks: bool = False,
+    ) -> dict[str, Any]:
+        """Update persistent Data Connector properties, optionally refreshing it."""
+
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        connector = self._existing_connector(wks)
+        applied: dict[str, Any] = {}
+        if source is not None:
+            normalized_source = self._normalize_connector_source(source)
+            try:
+                connector.source = normalized_source
+            except Exception as exc:
+                raise OriginOperationError("Could not update the connector source.") from exc
+            applied["source"] = normalized_source
+
+        assignments: list[str] = []
+        if selection is not None:
+            assignments.append(f'wks.dc.sel$="{self._escape_labtalk(selection)}";')
+            applied["selection"] = selection
+        if post_import_script is not None:
+            assignments.append(f'wks.dc.script$="{self._escape_labtalk(post_import_script)}";')
+            applied["post_import_script"] = post_import_script
+        if import_options is not None:
+            assignments.append(f'wks.dc.optn$="{self._escape_labtalk(import_options)}";')
+            applied["import_options"] = import_options
+        if flags is not None:
+            assignments.append(f"wks.dc.flags={int(flags)};")
+            applied["flags"] = int(flags)
+        if auto_refresh is not None:
+            assignments.append(f"wks.dc.auto={1 if auto_refresh else 0};")
+            applied["auto_refresh"] = bool(auto_refresh)
+        if assignments:
+            self._execute_connector_labtalk(wks, "".join(assignments))
+
+        refreshed = False
+        if refresh:
+            preserved_sheet_name = sheet_name or self._object_name(wks, default="")
+            self._refresh_connector_object(connector, sparks=sparks)
+            self._restore_import_names(
+                wks,
+                book_name=book_name,
+                sheet_name=preserved_sheet_name,
+            )
+            refreshed = True
+        return {
+            "worksheet": self._worksheet_ref(wks).as_dict(),
+            "applied": applied,
+            "refreshed": refreshed,
+            "connector": self._connector_info_for_sheet(wks),
+        }
+
+    def refresh_connector(
+        self,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        sparks: bool = False,
+    ) -> dict[str, Any]:
+        """Re-import the source associated with an existing Data Connector."""
+
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        connector = self._existing_connector(wks)
+        preserved_sheet_name = sheet_name or self._object_name(wks, default="")
+        self._refresh_connector_object(connector, sparks=sparks)
+        self._restore_import_names(
+            wks,
+            book_name=book_name,
+            sheet_name=preserved_sheet_name,
+        )
+        return {
+            "worksheet": self._worksheet_ref(wks).as_dict(),
+            "refreshed": True,
+            "connector": self._connector_info_for_sheet(wks),
+        }
+
+    def connect_selection(
+        self,
+        selection: str,
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+        duplicate_analysis: bool = False,
+    ) -> dict[str, Any]:
+        """Import another connector selection as a new worksheet in the workbook."""
+
+        clean_selection = selection.strip()
+        if not clean_selection:
+            raise OriginOperationError("selection is empty.", error_code="invalid_request")
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        connector = self._existing_connector(wks)
+        new_wks: Any = None
+        if duplicate_analysis:
+            self._execute_connector_labtalk(
+                wks,
+                f'wbook.dc.newsheet("{self._escape_labtalk(clean_selection)}",1);',
+            )
+            try:
+                new_wks = self._find_sheet()
+            except OriginOperationError:
+                new_wks = None
+        else:
+            new_sheet = getattr(connector, "new_sheet", None)
+            if not callable(new_sheet):
+                raise OriginOperationError(
+                    "The Origin Connector object does not support new_sheet()."
+                )
+            new_wks = new_sheet(clean_selection)
+        if new_wks is None:
+            raise OriginOperationError("Origin did not return the new connector worksheet.")
+        return {
+            "worksheet": self._worksheet_ref(new_wks).as_dict(),
+            "selection": clean_selection,
+            "duplicate_analysis": duplicate_analysis,
+            "connector": self._connector_info_for_sheet(new_wks),
+        }
+
+    def disconnect_connector(
+        self,
+        mode: str = "sheet",
+        book_name: str | None = None,
+        sheet_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Disconnect a sheet/workbook connector, or only unlock its data."""
+
+        clean_mode = mode.strip().lower().replace("-", "_")
+        mode_values = {"book": 0, "workbook": 0, "sheet": 1, "unlock": 2}
+        if clean_mode not in mode_values:
+            raise OriginOperationError(
+                "mode must be one of: sheet, workbook, unlock.",
+                error_code="invalid_request",
+            )
+        wks = self._find_sheet(book_name=book_name, sheet_name=sheet_name)
+        self._existing_connector(wks)
+        if clean_mode == "sheet":
+            remove_dc = getattr(wks, "remove_DC", None)
+            if callable(remove_dc):
+                remove_dc()
+            else:
+                self._execute_connector_labtalk(wks, "wbook.dc.remove(1);")
+        else:
+            self._execute_connector_labtalk(wks, f"wbook.dc.remove({mode_values[clean_mode]});")
+        connected = self._worksheet_has_connector(wks)
+        return {
+            "worksheet": self._worksheet_ref(wks).as_dict(),
+            "mode": "workbook" if mode_values[clean_mode] == 0 else clean_mode,
+            "connected": connected,
+        }
+
+    def refresh_all_connectors(self, scope: str = "project") -> dict[str, Any]:
+        """Refresh every Data Connector in the project or active project folder."""
+
+        clean_scope = scope.strip().lower()
+        if clean_scope not in {"project", "folder"}:
+            raise OriginOperationError(
+                "scope must be 'project' or 'folder'.", error_code="invalid_request"
+            )
+        prefix = "doc -e" if clean_scope == "project" else "doc -ef"
+        result = self.run_labtalk(f"{prefix} LBC {{ wks.dc.import(); }};")
+        return {"scope": clean_scope, "refreshed": result.get("result") is not False, **result}
 
     def append_table(
         self,
@@ -993,6 +1198,144 @@ class _WorksheetMixin(_OriginClientBase):
                         f"Could not rename worksheet to {sheet_name!r}."
                     ) from exc
         return wks
+
+    def _normalize_connector_source(self, source: str) -> str:
+        clean_source = str(source).strip()
+        if not clean_source:
+            raise OriginOperationError("source is empty.", error_code="invalid_request")
+        parsed = urlparse(clean_source)
+        if parsed.scheme and parsed.scheme.lower() != "file":
+            return clean_source
+        if parsed.scheme.lower() == "file":
+            path_text = unquote(parsed.path)
+            if parsed.netloc and parsed.netloc.lower() != "localhost":
+                path_text = f"//{parsed.netloc}{path_text}"
+            elif len(path_text) >= 3 and path_text[0] == "/" and path_text[2] == ":":
+                path_text = path_text[1:]
+            local_source = Path(path_text)
+        else:
+            local_source = Path(clean_source)
+        normalized = self._normalize_user_path(local_source)
+        self._validate_file(normalized)
+        return str(normalized)
+
+    @staticmethod
+    def _restore_import_names(
+        wks: Any,
+        *,
+        book_name: str | None,
+        sheet_name: str | None,
+    ) -> None:
+        """Reapply caller labels that a Data Connector import may replace."""
+
+        if book_name:
+            try:
+                wks.get_book().lname = book_name
+            except Exception:
+                pass
+        if sheet_name:
+            try:
+                wks.name = sheet_name
+            except Exception:
+                try:
+                    wks.lname = sheet_name
+                except Exception as exc:
+                    raise OriginOperationError(
+                        f"Could not restore worksheet name {sheet_name!r} after import."
+                    ) from exc
+
+    def _new_connector(self, wks: Any, *, dctype: str, keep_dc: bool) -> Any:
+        connector_type = getattr(self.op, "Connector", None)
+        if not callable(connector_type):
+            raise OriginOperationError(
+                "originpro.Connector is not available in this environment.",
+                error_code="unsupported_origin_feature",
+            )
+        try:
+            return connector_type(wks, dctype, keep_dc)
+        except TypeError:
+            try:
+                return connector_type(wks, dctype=dctype, keep_DC=keep_dc)
+            except TypeError:
+                return connector_type(wks)
+
+    def _existing_connector(self, wks: Any) -> Any:
+        if not self._worksheet_has_connector(wks):
+            ref = self._worksheet_ref(wks)
+            raise OriginOperationError(
+                f"Worksheet [{ref.book_name}]{ref.sheet_name} has no Data Connector.",
+                error_code="data_connector_not_found",
+            )
+        return self._new_connector(wks, dctype="", keep_dc=True)
+
+    @staticmethod
+    def _worksheet_has_connector(wks: Any) -> bool:
+        has_dc = getattr(wks, "has_DC", None)
+        if callable(has_dc):
+            try:
+                return bool(has_dc())
+            except Exception:
+                return False
+        return bool(getattr(wks, "has_dc", False))
+
+    def _connector_info_for_sheet(self, wks: Any) -> dict[str, Any]:
+        worksheet = self._worksheet_ref(wks).as_dict()
+        if not self._worksheet_has_connector(wks):
+            return {"connected": False, "worksheet": worksheet}
+        connector = self._new_connector(wks, dctype="", keep_dc=True)
+        source: Any = None
+        try:
+            source = connector.source
+        except Exception:
+            source = self._worksheet_dc_property(wks, "source", string=True)
+        settings: Any = None
+        get_settings = getattr(connector, "settings", None)
+        if callable(get_settings):
+            try:
+                settings = get_settings()
+            except Exception:
+                settings = None
+        return {
+            "connected": True,
+            "worksheet": worksheet,
+            "source": source,
+            "selection": self._worksheet_dc_property(wks, "sel", string=True),
+            "post_import_script": self._worksheet_dc_property(wks, "script", string=True),
+            "import_options": self._worksheet_dc_property(wks, "optn", string=True),
+            "flags": self._worksheet_dc_property(wks, "flags", string=False),
+            "auto_refresh": self._worksheet_dc_property(wks, "auto", string=False),
+            "settings": settings,
+        }
+
+    @staticmethod
+    def _worksheet_dc_property(wks: Any, name: str, *, string: bool) -> Any:
+        getter = getattr(wks, "get_str" if string else "get_int", None)
+        if not callable(getter):
+            return None
+        for prop in (f"DC.{name}", f"dc.{name}"):
+            try:
+                return getter(prop)
+            except Exception:
+                continue
+        return None
+
+    def _execute_connector_labtalk(self, wks: Any, script: str) -> None:
+        result = self._execute_on_worksheet(wks, script).get("result")
+        if result is False:
+            raise OriginOperationError(
+                "Origin rejected the Data Connector operation.",
+                error_code="data_connector_operation_failed",
+            )
+
+    @staticmethod
+    def _refresh_connector_object(connector: Any, *, sparks: bool) -> None:
+        importer = getattr(connector, "imp", None)
+        if not callable(importer):
+            raise OriginOperationError("The Origin Connector object does not support imp().")
+        try:
+            importer(sparks=sparks)
+        except TypeError:
+            importer("", "", sparks)
 
     @staticmethod
     def _worksheet_row_count(wks: Any) -> int:

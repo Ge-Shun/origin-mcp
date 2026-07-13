@@ -94,6 +94,11 @@ def test_figurespec_rejects_malformed_grid_geometry(tmp_path: Path) -> None:
         {"line_width": 0},
         {"transparency": 101},
         {"color": (256, 0, 0)},
+        {"contour_levels": [0, 2, 1]},
+        {"color_scale_limits": (5, 5)},
+        {"histogram_bin_width": 0},
+        {"errorbar_cap": 0},
+        {"box_width": 0},
     ],
 )
 def test_plot_style_request_rejects_out_of_range_values(kwargs: dict[str, object]) -> None:

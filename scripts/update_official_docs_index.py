@@ -55,7 +55,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--version",
-        default="2026",
+        default="2026b",
         help="Origin documentation version label to attach to generated records.",
     )
     args = parser.parse_args()

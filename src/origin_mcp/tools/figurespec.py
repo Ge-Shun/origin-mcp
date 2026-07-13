@@ -19,7 +19,7 @@ SUPPORTED_PLOT_TYPES = {
     "contour",
     "heatmap",
 }
-SUPPORTED_LAYOUTS = {"single", "grid", "custom"}
+SUPPORTED_LAYOUTS = {"single", "grid", "custom", "inset", "dual_y"}
 SUPPORTED_UNCERTAINTY_KEYS = {
     "error",
     "y_error",
@@ -55,6 +55,13 @@ GROUP_STYLE_SEQUENCE_KEYS = {
     "symbol_kinds": "symbol_kind",
     "symbol_sizes": "symbol_size",
     "transparencies": "transparency",
+    "colormaps": "colormap",
+    "contour_level_sets": "contour_levels",
+    "contour_minor_level_counts": "contour_minor_levels",
+    "color_scale_ranges": "color_scale_limits",
+    "histogram_bin_widths": "histogram_bin_width",
+    "errorbar_caps": "errorbar_cap",
+    "box_widths": "box_width",
 }
 GROUP_STYLE_DIRECT_KEYS = {
     "color",
@@ -64,11 +71,18 @@ GROUP_STYLE_DIRECT_KEYS = {
     "symbol_kind",
     "symbol_size",
     "transparency",
+    "colormap",
+    "contour_minor_levels",
+    "histogram_bin_width",
+    "errorbar_cap",
+    "box_width",
 }
+GROUP_STYLE_VECTOR_DIRECT_KEYS = {"contour_levels", "color_scale_limits"}
 SUPPORTED_GROUP_STYLE_KEYS = {
     "series",
     *GROUP_STYLE_SEQUENCE_KEYS,
     *GROUP_STYLE_DIRECT_KEYS,
+    *GROUP_STYLE_VECTOR_DIRECT_KEYS,
 }
 
 
@@ -130,6 +144,9 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
             }
         )
 
+    if spec.page.layout == "dual_y":
+        operations.append(_dual_y_plan(spec))
+
     for layer in spec.layers:
         operations.append(
             {
@@ -138,6 +155,7 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
                 "data_ref": layer.data_ref,
                 "x": layer.x.model_dump(exclude_none=True),
                 "y": layer.y.model_dump(exclude_none=True),
+                "z": layer.z.model_dump(exclude_none=True),
                 "panel_tag": layer.panel_tag,
                 "grid_cell": layer.grid_cell,
                 "grid_span": layer.grid_span,
@@ -177,11 +195,11 @@ def _plan_figure(spec: FigureSpec) -> dict[str, Any]:
     if page_setup:
         operations.append({"op": "set_graph_page", **page_setup})
 
-    if spec.page.layout in {"grid", "custom"} and len(spec.layers) > 1:
+    if spec.page.layout in {"grid", "custom", "inset"} and len(spec.layers) > 1:
         rows, columns = _grid_shape(spec)
         arrange_op = {"op": "arrange_layers", "rows": rows, "columns": columns}
         arrange_op.update(_layout_spacing_plan(spec))
-        if spec.page.layout == "custom":
+        if spec.page.layout in {"custom", "inset"}:
             arrange_op["layer_geometries"] = _layer_geometries(spec, rows, columns)
         operations.append(arrange_op)
 
@@ -246,18 +264,27 @@ def _execute_figure(spec: FigureSpec, plan: dict[str, Any]) -> dict[str, Any]:
         if data.id not in worksheet_refs:
             worksheet_refs[data.id] = client.import_table(**_import_kwargs(data))
 
-    layer_setup = _ensure_layers_and_layout(spec, graph_name)
-    band_updates = _add_uncertainty_bands(
-        spec,
-        graph_name,
-        layer_indexes,
-        worksheet_refs,
-        base_plot,
-    )
-    added_plots, additional_band_updates = _add_remaining_plots(
-        spec, graph_name, layer_indexes, worksheet_refs, base_plot
-    )
-    band_updates.extend(additional_band_updates)
+    if spec.page.layout == "dual_y":
+        layer_setup = {
+            "page": _apply_page_setup(spec, graph_name),
+            "added_layers": 0,
+            "arranged": {"layout": "dual_y", "template": "doubleY"},
+        }
+        band_updates: list[dict[str, Any]] = []
+        added_plots = _dual_y_precreated_plots(spec)
+    else:
+        layer_setup = _ensure_layers_and_layout(spec, graph_name)
+        band_updates = _add_uncertainty_bands(
+            spec,
+            graph_name,
+            layer_indexes,
+            worksheet_refs,
+            base_plot,
+        )
+        added_plots, additional_band_updates = _add_remaining_plots(
+            spec, graph_name, layer_indexes, worksheet_refs, base_plot
+        )
+        band_updates.extend(additional_band_updates)
 
     axis_updates = []
     for layer in spec.layers:
@@ -295,8 +322,46 @@ def _create_base_graph(
 ) -> tuple[Any, Any, dict[str, Any] | None]:
     plot_type = _normalize_plot_type(plot.type)
     mapping = _plot_mapping(data, plot)
-    export_paths = _export_paths(spec)
-    first_export = export_paths[0] if export_paths else None
+
+    if spec.page.layout == "dual_y":
+        left_layer, right_layer = spec.layers
+        left_plots = [item for item in spec.plots if item.layer == left_layer.id]
+        right_plots = [item for item in spec.plots if item.layer == right_layer.id]
+        left_y = _mapped_y_columns(spec, left_plots)
+        right_y = _mapped_y_columns(spec, right_plots)
+        worksheet, graph = client.plot_dual_y(
+            path=data.source,
+            x_col=mapping.get("x"),
+            y1_cols=left_y,
+            y2_cols=right_y,
+            book_name=None,
+            sheet_name=None,
+            excel_sheet=data.excel_sheet,
+            delimiter=data.delimiter,
+            encoding=data.encoding,
+            header=data.header,
+            skiprows=data.skiprows,
+            nrows=data.nrows,
+            na_values=data.na_values,
+            graph_name=spec.figure.id,
+            title=spec.figure.title,
+            x_label=left_layer.x.title,
+            y1_label=left_layer.y.title,
+            y2_label=right_layer.y.title,
+            plot_type=plot_type,
+            style_mode=_style_mode(spec),
+            export_path=None,
+        )
+        return (
+            worksheet,
+            graph,
+            {
+                "layout": "dual_y",
+                "template": "doubleY",
+                "left_y": left_y,
+                "right_y": right_y,
+            },
+        )
 
     if plot_type == "heatmap":
         worksheet, graph, command = client.plot_table_by_id(
@@ -399,9 +464,55 @@ def _create_base_graph(
         show_legend=_show_legend(spec),
         style_mode=_style_mode(spec),
         palette_name=spec.style.palette_name,
-        export_path=first_export,
+        export_path=None,
     )
     return worksheet, graph, None
+
+
+def _mapped_y_columns(spec: FigureSpec, plots: list[Any]) -> list[str | int]:
+    columns: list[str | int] = []
+    for plot in plots:
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        columns.extend(_y_columns(_plot_mapping(data, plot)) or [])
+    return columns
+
+
+def _dual_y_precreated_plots(spec: FigureSpec) -> list[dict[str, Any]]:
+    results = []
+    for layer_index, layer in enumerate(spec.layers):
+        for plot in (item for item in spec.plots if item.layer == layer.id):
+            data = _data_by_id(spec, _plot_data_ref(spec, plot))
+            for y_col in _y_columns(_plot_mapping(data, plot)) or []:
+                results.append(
+                    {
+                        "plot_id": plot.id,
+                        "y_col": y_col,
+                        "layer_index": layer_index,
+                        "plot_type": _normalize_plot_type(plot.type),
+                        "precreated": True,
+                    }
+                )
+    return results
+
+
+def _dual_y_plan(spec: FigureSpec) -> dict[str, Any]:
+    layers = list(spec.layers[:2])
+    sides = []
+    for side, layer in zip(("left", "right"), layers, strict=False):
+        plots = [item for item in spec.plots if item.layer == layer.id]
+        sides.append(
+            {
+                "side": side,
+                "layer": layer.id,
+                "plots": [item.id for item in plots],
+                "y": _mapped_y_columns(spec, plots),
+            }
+        )
+    return {
+        "op": "create_dual_y",
+        "template": "doubleY",
+        "sides": sides,
+    }
 
 
 def _add_remaining_plots(
@@ -489,7 +600,7 @@ def _ensure_layers_and_layout(spec: FigureSpec, graph_name: str | None) -> dict[
             added_layers = layer_count - 1
 
     arranged = None
-    if spec.page.layout in {"grid", "custom"} and layer_count > 1:
+    if spec.page.layout in {"grid", "custom", "inset"} and layer_count > 1:
         rows, columns = _grid_shape(spec)
         arrange_kwargs: dict[str, Any] = {
             "graph_name": graph_name,
@@ -497,9 +608,13 @@ def _ensure_layers_and_layout(spec: FigureSpec, graph_name: str | None) -> dict[
             "columns": columns,
             **_layout_spacing_plan(spec),
         }
-        if spec.page.layout == "custom":
+        if spec.page.layout in {"custom", "inset"}:
             arrange_kwargs["layer_geometries"] = _layer_geometries(spec, rows, columns)
         arranged = client.arrange_layers(**arrange_kwargs)
+        if spec.page.layout == "inset":
+            graph_prefix = f'win -a "{_escape_labtalk(graph_name)}"; ' if graph_name else ""
+            drawing_order = client.run_labtalk(graph_prefix + "page.cntrl=page.cntrl|4;")
+            arranged["draw_layers_sequentially"] = drawing_order
     return {"page": page_setup, "added_layers": added_layers, "arranged": arranged}
 
 
@@ -677,6 +792,8 @@ def _executor_warnings_from_details(details: list[dict[str, Any]]) -> list[str]:
 
 def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
     warnings: list[dict[str, Any]] = []
+    if spec.page.layout == "dual_y":
+        warnings.extend(_dual_y_warning_details(spec))
     if any(item.object != "worksheet" for item in spec.data):
         warnings.append(
             {
@@ -768,13 +885,22 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
     if spec.page.layout not in SUPPORTED_LAYOUTS:
         warnings.append(
             {
-                "code": "executor_supports_only_single_grid_or_custom_layout",
+                "code": "executor_does_not_support_layout",
                 "field": "page.layout",
                 "value": spec.page.layout,
                 "supported_values": sorted(SUPPORTED_LAYOUTS),
             }
         )
     for layer in spec.layers:
+        if layer.z.breaks:
+            warnings.append(
+                {
+                    "code": "executor_axis_break_supports_only_x_or_y",
+                    "layer_id": layer.id,
+                    "field": "layers.z.breaks",
+                    "supported_values": ["x", "y"],
+                }
+            )
         if layer.position_mode == "absolute" and _missing_absolute_position_keys(layer):
             warnings.append(
                 {
@@ -805,6 +931,91 @@ def _executor_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
             {
                 "code": "executor_supports_histogram_only_as_first_plot",
                 "field": "plots.type",
+            }
+        )
+    return warnings
+
+
+def _dual_y_warning_details(spec: FigureSpec) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+    if len(spec.layers) != 2:
+        return [
+            {
+                "code": "executor_dual_y_requires_two_layers",
+                "field": "layers",
+                "value": len(spec.layers),
+                "required": 2,
+            }
+        ]
+
+    layer_plots = [[plot for plot in spec.plots if plot.layer == layer.id] for layer in spec.layers]
+    for side, layer, plots in zip(("left", "right"), spec.layers, layer_plots, strict=True):
+        if not plots:
+            warnings.append(
+                {
+                    "code": "executor_dual_y_requires_plots_on_both_axes",
+                    "field": "plots.layer",
+                    "side": side,
+                    "layer": layer.id,
+                }
+            )
+
+    plots = [plot for side_plots in layer_plots for plot in side_plots]
+    data_refs = {_plot_data_ref(spec, plot) for plot in plots}
+    if len(data_refs) > 1:
+        warnings.append(
+            {
+                "code": "executor_dual_y_requires_one_data_source",
+                "field": "plots.data_ref",
+                "values": sorted(data_refs),
+            }
+        )
+
+    mappings = [
+        _plot_mapping(_data_by_id(spec, _plot_data_ref(spec, plot)), plot) for plot in plots
+    ]
+    x_mappings = {str(mapping.get("x")) for mapping in mappings}
+    if len(x_mappings) > 1:
+        warnings.append(
+            {
+                "code": "executor_dual_y_requires_shared_x",
+                "field": "plots.map.x",
+                "values": sorted(x_mappings),
+            }
+        )
+    if any(not _y_columns(mapping) for mapping in mappings):
+        warnings.append(
+            {
+                "code": "executor_dual_y_requires_y_mapping",
+                "field": "plots.map.y",
+            }
+        )
+
+    plot_types = {_normalize_plot_type(plot.type) for plot in plots}
+    supported_types = {"line", "scatter", "line_symbol"}
+    if len(plot_types) > 1 or not plot_types.issubset(supported_types):
+        warnings.append(
+            {
+                "code": "executor_dual_y_requires_one_supported_plot_type",
+                "field": "plots.type",
+                "values": sorted(plot_types),
+                "supported_values": sorted(supported_types),
+            }
+        )
+    if any(plot.uncertainty for plot in plots):
+        warnings.append(
+            {
+                "code": "executor_dual_y_does_not_support_uncertainty",
+                "field": "plots.uncertainty",
+            }
+        )
+    if spec.style.template and spec.style.template.lower() != "doubley":
+        warnings.append(
+            {
+                "code": "executor_dual_y_requires_doubley_template",
+                "field": "style.template",
+                "value": spec.style.template,
+                "supported_values": ["doubleY"],
             }
         )
     return warnings
@@ -892,35 +1103,51 @@ def _apply_axis_specs(
     layer_index: int,
 ) -> list[dict[str, Any]]:
     updates = []
-    for axis_name, axis_spec in (("x", layer.x), ("y", layer.y)):
+    for axis_name, axis_spec in (("x", layer.x), ("y", layer.y), ("z", layer.z)):
         start = end = None
         limits = axis_spec.limits
         if isinstance(limits, list):
             start = limits[0] if len(limits) > 0 else None
             end = limits[1] if len(limits) > 1 else None
-        if (
+        has_axis_format = not (
             axis_spec.scale is None
             and start is None
             and end is None
             and axis_spec.step is None
             and axis_spec.title is None
-        ):
-            continue
-        updates.append(
-            {
-                "layer_index": layer_index,
-                **client.set_axis(
-                    graph_name=graph_name,
-                    layer_index=layer_index,
-                    axis=axis_name,
-                    scale=axis_spec.scale,
-                    start=start,
-                    end=end,
-                    step=axis_spec.step,
-                    title=axis_spec.title,
-                ),
-            }
         )
+        if has_axis_format:
+            updates.append(
+                {
+                    "layer_index": layer_index,
+                    **client.set_axis(
+                        graph_name=graph_name,
+                        layer_index=layer_index,
+                        axis=axis_name,
+                        scale=axis_spec.scale,
+                        start=start,
+                        end=end,
+                        step=axis_spec.step,
+                        title=axis_spec.title,
+                    ),
+                }
+            )
+        for axis_break in axis_spec.breaks:
+            updates.append(
+                {
+                    "layer_index": layer_index,
+                    **client.set_axis_break(
+                        graph_name=graph_name,
+                        layer_index=layer_index,
+                        axis=axis_name,
+                        break_from=axis_break.start,
+                        break_to=axis_break.end,
+                        position=axis_break.position,
+                        post_break_increment=axis_break.post_break_increment,
+                        enabled=axis_break.enabled,
+                    ),
+                }
+            )
     return updates
 
 
@@ -998,6 +1225,11 @@ def _plot_series_style(plot: Any, series_index: int) -> dict[str, Any]:
         if value is not None:
             style[key] = value
 
+    for key in GROUP_STYLE_VECTOR_DIRECT_KEYS:
+        value = group_style.get(key)
+        if value is not None:
+            style[key] = value
+
     return style
 
 
@@ -1016,16 +1248,26 @@ def _plot_style_kwargs(style: dict[str, Any]) -> dict[str, Any]:
         "symbol_kind",
         "symbol_size",
         "transparency",
+        "colormap",
+        "contour_levels",
+        "contour_minor_levels",
+        "color_scale_limits",
+        "histogram_bin_width",
+        "errorbar_cap",
+        "box_width",
     }
     kwargs = {key: value for key, value in style.items() if key in supported and value is not None}
     if "symbol_kind" in kwargs and not isinstance(kwargs["symbol_kind"], int):
         kwargs.pop("symbol_kind")
+    if isinstance(kwargs.get("color_scale_limits"), list):
+        kwargs["color_scale_limits"] = tuple(kwargs["color_scale_limits"])
     return kwargs
 
 
 def _unsupported_style_values(plot: Any) -> list[dict[str, Any]]:
     issues = []
-    symbol_kind = plot.style.get("symbol_kind")
+    style = plot.style
+    symbol_kind = style.get("symbol_kind")
     if symbol_kind is not None and not isinstance(symbol_kind, int):
         issues.append(
             {
@@ -1033,6 +1275,73 @@ def _unsupported_style_values(plot: Any) -> list[dict[str, Any]]:
                 "value": symbol_kind,
                 "expected": "Origin integer symbol code",
             }
+        )
+    contour_levels = style.get("contour_levels")
+    if contour_levels is not None and (
+        not isinstance(contour_levels, list)
+        or len(contour_levels) < 2
+        or not all(isinstance(item, (int, float)) for item in contour_levels)
+        or any(
+            right <= left for left, right in zip(contour_levels, contour_levels[1:], strict=False)
+        )
+    ):
+        issues.append(
+            {
+                "key": "contour_levels",
+                "value": contour_levels,
+                "expected": "at least two strictly increasing numbers",
+            }
+        )
+    color_limits = style.get("color_scale_limits")
+    if color_limits is not None and (
+        not isinstance(color_limits, (list, tuple))
+        or len(color_limits) != 2
+        or not all(isinstance(item, (int, float)) for item in color_limits)
+        or color_limits[0] >= color_limits[1]
+    ):
+        issues.append(
+            {
+                "key": "color_scale_limits",
+                "value": color_limits,
+                "expected": "two increasing numbers",
+            }
+        )
+    for key in (
+        "line_width",
+        "symbol_size",
+        "histogram_bin_width",
+        "errorbar_cap",
+        "box_width",
+    ):
+        value = style.get(key)
+        if value is not None and (not isinstance(value, (int, float)) or value <= 0):
+            issues.append({"key": key, "value": value, "expected": "a positive number"})
+    transparency = style.get("transparency")
+    if transparency is not None and (
+        not isinstance(transparency, (int, float)) or not 0 <= transparency <= 100
+    ):
+        issues.append(
+            {
+                "key": "transparency",
+                "value": transparency,
+                "expected": "a number from 0 to 100",
+            }
+        )
+    minor_levels = style.get("contour_minor_levels")
+    if minor_levels is not None and (
+        not isinstance(minor_levels, int) or isinstance(minor_levels, bool) or minor_levels < 0
+    ):
+        issues.append(
+            {
+                "key": "contour_minor_levels",
+                "value": minor_levels,
+                "expected": "a non-negative integer",
+            }
+        )
+    colormap = style.get("colormap")
+    if colormap is not None and (not isinstance(colormap, str) or not colormap.strip()):
+        issues.append(
+            {"key": "colormap", "value": colormap, "expected": "a non-empty palette name"}
         )
     return issues
 
@@ -1334,6 +1643,8 @@ def _page_setup_plan(spec: FigureSpec) -> dict[str, Any]:
 
 
 def _grid_shape(spec: FigureSpec) -> tuple[int, int]:
+    if spec.page.layout == "inset":
+        return 1, 1
     rows = 1
     columns = 1 if any(layer.grid_cell for layer in spec.layers) else max(1, len(spec.layers))
     for index, layer in enumerate(spec.layers):
@@ -1363,6 +1674,8 @@ def _layout_spacing_plan(spec: FigureSpec) -> dict[str, float]:
 
 
 def _layer_geometries(spec: FigureSpec, rows: int, columns: int) -> list[dict[str, float | int]]:
+    if spec.page.layout == "inset":
+        return _inset_layer_geometries(spec)
     width_mm, height_mm = _page_size_mm(spec)
     margins = _page_margins_mm(spec)
     spacing_x, spacing_y = _panel_spacing_mm(spec)
@@ -1401,6 +1714,39 @@ def _layer_geometries(spec: FigureSpec, rows: int, columns: int) -> list[dict[st
                 "top": top_mm / height_mm * 100.0,
                 "width": panel_width / width_mm * 100.0,
                 "height": panel_height / height_mm * 100.0,
+            }
+        )
+    return geometries
+
+
+def _inset_layer_geometries(spec: FigureSpec) -> list[dict[str, float | int]]:
+    geometries: list[dict[str, float | int]] = []
+    for index, layer in enumerate(spec.layers):
+        if layer.position_mode == "absolute":
+            position = layer.position
+            geometries.append(
+                {
+                    "layer_index": index,
+                    "left": float(position["left"]),
+                    "top": float(position["top"]),
+                    "width": float(position["width"]),
+                    "height": float(position["height"]),
+                }
+            )
+            continue
+        if index == 0:
+            geometries.append(
+                {"layer_index": 0, "left": 10.0, "top": 8.0, "width": 82.0, "height": 82.0}
+            )
+            continue
+        inset_offset = float((index - 1) * 4)
+        geometries.append(
+            {
+                "layer_index": index,
+                "left": max(12.0, 60.0 - inset_offset),
+                "top": min(54.0, 12.0 + inset_offset),
+                "width": 30.0,
+                "height": 30.0,
             }
         )
     return geometries
