@@ -25,6 +25,34 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 
 Replace `C:\path\to\origin-mcp` with the local checkout path.
 
+### Windows path and LabTalk launch pitfalls
+
+Prefer the Python Console snippet above for manual startup. It runs in pure
+Python mode and uses a raw string for the Windows path, so `C:\Users\...` is
+not parsed as a Python `\UXXXXXXXX` Unicode escape.
+
+If you launch from Origin's LabTalk Command Window instead, keep the command
+simple and use forward slashes for Windows paths that are passed into Python:
+
+```labtalk
+run -pyf "C:/path/to/origin-mcp/addon.py";
+```
+
+Avoid complex inline commands such as nested `Python -exec "exec(open(...))"`
+strings at the LabTalk `>>` prompt. Origin's LabTalk parser can treat the text
+as a worksheet formula before Python sees it, which may produce misleading
+messages such as `Math cannot be performed on Text column`. When you need to
+force Origin to read the current on-disk file during development, switch the
+Command Window to Python mode first by entering `Python`, then run:
+
+```python
+exec(open(r"C:\path\to\origin-mcp\addon.py", encoding="utf-8").read())
+```
+
+Use this reload form only for development or troubleshooting. For normal use,
+the Python Console launch snippet or the Origin MCP Bridge Start App is clearer
+and less fragile.
+
 `addon.py` does not hard-code the checkout directory. It first tries to import
 an installed `origin_mcp` package from Origin's embedded Python. If that is not
 available, it looks for a sibling `src\origin_mcp` directory next to `addon.py`.
@@ -195,6 +223,9 @@ workflow:
 ```json
 {"ping_origin": true}
 ```
+
+On Windows, `WinError 10061` usually means nothing is listening at the bridge
+host and port yet: start `addon.py` inside Origin, then retry `origin_doctor`.
 
 Search the knowledge base for `bridge diagnostics` when you need the canonical
 troubleshooting checklist.

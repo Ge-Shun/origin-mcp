@@ -62,7 +62,7 @@ Replace `C:\path\to\origin-mcp` with your checkout path.
 
 ```labtalk
 [OriginMCPStart]
-string addon_path$ = "C:\path\to\origin-mcp\addon.py";
+string addon_path$ = "C:/path/to/origin-mcp/addon.py";
 run -pyf "%(addon_path$)";
 
 [OriginMCPStop]
@@ -92,7 +92,7 @@ User Files Folder:
 
 ```labtalk
 [Start]
-string addon_path$ = "C:\path\to\origin-mcp\addon.py";
+string addon_path$ = "C:/path/to/origin-mcp/addon.py";
 run -pyf "%(addon_path$)";
 
 [Stop]

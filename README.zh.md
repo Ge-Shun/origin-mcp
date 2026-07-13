@@ -132,6 +132,7 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 关闭 Origin。
 
 若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
+该文档也说明了手动启动 `addon.py` 时常见的 Windows 路径转义和 LabTalk 命令解析问题。
 
 ## 安全性
 

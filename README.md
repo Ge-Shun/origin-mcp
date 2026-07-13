@@ -151,7 +151,8 @@ bridge down (it calls `origin_bridge_shutdown`), or double-click
 open either way.
 
 If a package is missing or the bridge will not start, see
-[docs/origin-bridge.md](docs/origin-bridge.md).
+[docs/origin-bridge.md](docs/origin-bridge.md). That guide also covers common
+Windows path and LabTalk launch pitfalls when starting `addon.py` manually.
 
 ## Security
 
