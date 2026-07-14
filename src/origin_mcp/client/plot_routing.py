@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -423,10 +425,26 @@ class _PlotRoutingMixin(_OriginClientBase):
             raise OriginOperationError("max_templates must be at least 1.")
         capabilities = self.capabilities()
         origin_paths = self._origin_template_paths()
-        search_dirs = [Path(path) for path in origin_paths.values() if path]
+        search_dirs: list[Path | tuple[Path, bool]] = []
         if template_dir is not None:
             template_dir = self._normalize_user_path(template_dir)
-            search_dirs.insert(0, template_dir)
+            search_dirs.append((template_dir, True))
+        user_files = origin_paths.get("user_files")
+        if user_files:
+            search_dirs.append((Path(user_files), True))
+        program = origin_paths.get("program")
+        if program:
+            program_dir = Path(program)
+            search_dirs.append((program_dir, False))
+            try:
+                search_dirs.extend(
+                    (child, True)
+                    for child in program_dir.iterdir()
+                    if child.is_dir()
+                    and any(token in child.name.lower() for token in ("template", "theme"))
+                )
+            except OSError:
+                pass
         discovered = self._discover_template_files(search_dirs, max_templates=max_templates)
         return {
             "style_mode_default": "origin_default",
@@ -532,20 +550,27 @@ class _PlotRoutingMixin(_OriginClientBase):
 
     def _discover_template_files(
         self,
-        directories: list[Path],
+        directories: list[Path | tuple[Path, bool]],
         max_templates: int,
     ) -> list[dict[str, str]]:
         suffixes = {".otp", ".otpu", ".otm", ".otmu"}
         discovered: list[dict[str, str]] = []
         seen: set[Path] = set()
-        for directory in directories:
+        seen_directories: set[tuple[Path, bool]] = set()
+        for location in directories:
+            directory, recursive = location if isinstance(location, tuple) else (location, True)
             directory = directory.expanduser()
             if not directory.exists() or not directory.is_dir():
                 continue
-            for path in directory.rglob("*"):
+            resolved_directory = directory.resolve()
+            directory_key = (resolved_directory, recursive)
+            if directory_key in seen_directories:
+                continue
+            seen_directories.add(directory_key)
+            for path in self._template_file_candidates(resolved_directory, recursive=recursive):
                 if len(discovered) >= max_templates:
                     return discovered
-                if not path.is_file() or path.suffix.lower() not in suffixes:
+                if path.suffix.lower() not in suffixes:
                     continue
                 resolved = path.resolve()
                 if resolved in seen:
@@ -555,10 +580,25 @@ class _PlotRoutingMixin(_OriginClientBase):
                     {
                         "name": path.stem,
                         "path": str(resolved),
-                        "source_dir": str(directory.resolve()),
+                        "source_dir": str(resolved_directory),
                     }
                 )
         return discovered
+
+    @staticmethod
+    def _template_file_candidates(directory: Path, *, recursive: bool) -> Iterator[Path]:
+        if recursive:
+            for root, _, filenames in os.walk(directory):
+                for filename in filenames:
+                    yield Path(root, filename)
+            return
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_file():
+                        yield Path(entry.path)
+        except OSError:
+            return
 
     def save_graph_template(
         self,

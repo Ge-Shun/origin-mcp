@@ -1,8 +1,10 @@
 import ast
 from pathlib import Path
 
+import origin_mcp.knowledge as knowledge
 import origin_mcp.server as server
 from origin_mcp.knowledge import browse_knowledge, query_knowledge
+from origin_mcp.knowledge_entries import _official_doc_entries, _official_doc_pages
 
 
 def test_browse_knowledge_lists_collections() -> None:
@@ -10,6 +12,22 @@ def test_browse_knowledge_lists_collections() -> None:
 
     names = {item["name"] for item in result["collections"]}
     assert {"mcp_tools", "reference", "python_api", "labtalk", "official_docs"} <= names
+
+
+def test_knowledge_indexes_are_cached_by_version() -> None:
+    assert knowledge._entries() is knowledge._entries()
+    assert knowledge._entries("2025") is knowledge._entries("2025")
+    assert knowledge._server_tool_docs() is knowledge._server_tool_docs()
+    assert _official_doc_pages("2025") is _official_doc_pages("2025")
+    assert _official_doc_entries("2025") is _official_doc_entries("2025")
+
+
+def test_cached_knowledge_metadata_isolated_from_callers() -> None:
+    first = browse_knowledge("reference", "plot-types/200")
+    first["entry"]["metadata"]["plot_type_id"] = -1
+
+    second = browse_knowledge("reference", "plot-types/200")
+    assert second["entry"]["metadata"]["plot_type_id"] == 200
 
 
 def test_mcp_tool_knowledge_covers_all_server_origin_tools() -> None:

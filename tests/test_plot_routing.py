@@ -102,6 +102,32 @@ def test_list_graph_templates_missing_dir(fake_client: OriginClient, tmp_path: P
         fake_client.list_graph_templates(template_dir=tmp_path / "nope")
 
 
+def test_default_plot_config_limits_program_tree_scan(tmp_path: Path) -> None:
+    program = tmp_path / "Origin"
+    templates = program / "Templates" / "Graph"
+    unrelated = program / "Python" / "site-packages"
+    templates.mkdir(parents=True)
+    unrelated.mkdir(parents=True)
+    (program / "direct.otp").write_bytes(b"template")
+    (templates / "nested.otpu").write_bytes(b"template")
+    (unrelated / "hidden.otp").write_bytes(b"not a graph template")
+
+    client = OriginClient()
+    client._capabilities = {}
+
+    class FakeOrigin:
+        def path(self, path_type: str = "u") -> str:
+            if path_type == "e":
+                return str(program)
+            return str(tmp_path / "missing")
+
+    client._op = FakeOrigin()
+    config = client.default_plot_config(max_templates=10)
+
+    names = {item["name"] for item in config["templates"]["discovered"]}
+    assert names == {"direct", "nested"}
+
+
 # -- plot_table_by_id (plotxy route) -------------------------------------
 
 

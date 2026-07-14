@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -122,11 +124,17 @@ def query_knowledge(
     }
 
 
-def _entries(official_docs_version: str | None = None) -> list[KnowledgeEntry]:
-    return [
+@cache
+def _entries(official_docs_version: str | None = None) -> tuple[KnowledgeEntry, ...]:
+    official_entries = (
+        OFFICIAL_DOC_ENTRIES
+        if official_docs_version is None
+        else _official_doc_entries(official_docs_version)
+    )
+    return (
         *_tool_entries(),
         *REFERENCE_ENTRIES,
-        *_official_doc_entries(official_docs_version),
+        *official_entries,
         *_plot_style_entries(),
         *_plot_type_entries(),
         *_analysis_entries(),
@@ -134,10 +142,11 @@ def _entries(official_docs_version: str | None = None) -> list[KnowledgeEntry]:
         *_originpro_class_entries(),
         *LABTALK_ENTRIES,
         *XFUNCTION_ENTRIES,
-    ]
+    )
 
 
-def _tool_entries() -> list[KnowledgeEntry]:
+@cache
+def _tool_entries() -> tuple[KnowledgeEntry, ...]:
     entries: list[KnowledgeEntry] = []
     tool_docs = _server_tool_docs()
     groups: dict[str, list[dict[str, str]]] = {group: [] for group in TOOL_GROUP_SUMMARIES}
@@ -174,11 +183,12 @@ def _tool_entries() -> list[KnowledgeEntry]:
                     metadata={"group": group, "source": "src/origin_mcp/tools/*.py"},
                 )
             )
-    return entries
+    return tuple(entries)
 
 
-def _server_tool_docs() -> list[dict[str, str]]:
-    tools = []
+@cache
+def _server_tool_docs() -> tuple[dict[str, str], ...]:
+    tools: list[dict[str, str]] = []
     tools_dir = Path(__file__).with_name("tools")
     for tool_path in sorted(tools_dir.glob("*.py")):
         if tool_path.name.startswith("_"):
@@ -193,7 +203,7 @@ def _server_tool_docs() -> list[dict[str, str]]:
                         "group": _tool_group_for_name(node.name),
                     }
                 )
-    return tools
+    return tuple(tools)
 
 
 def _tool_group_for_name(name: str) -> str:
@@ -299,7 +309,8 @@ def _tool_group_for_name(name: str) -> str:
     return "core"
 
 
-def _plot_style_entries() -> list[KnowledgeEntry]:
+@cache
+def _plot_style_entries() -> tuple[KnowledgeEntry, ...]:
     entries = [
         KnowledgeEntry(
             collection="reference",
@@ -388,10 +399,11 @@ def _plot_style_entries() -> list[KnowledgeEntry]:
                 metadata=item.as_dict(),
             )
         )
-    return entries
+    return tuple(entries)
 
 
-def _plot_type_entries() -> list[KnowledgeEntry]:
+@cache
+def _plot_type_entries() -> tuple[KnowledgeEntry, ...]:
     entries: list[KnowledgeEntry] = [
         KnowledgeEntry(
             collection="reference",
@@ -439,10 +451,11 @@ def _plot_type_entries() -> list[KnowledgeEntry]:
                 },
             )
         )
-    return entries
+    return tuple(entries)
 
 
-def _analysis_entries() -> list[KnowledgeEntry]:
+@cache
+def _analysis_entries() -> tuple[KnowledgeEntry, ...]:
     entries = [
         KnowledgeEntry(
             collection="reference",
@@ -483,14 +496,18 @@ def _analysis_entries() -> list[KnowledgeEntry]:
                 },
             )
         )
-    return entries
+    return tuple(entries)
 
 
-def _children(entries: list[KnowledgeEntry], path_key: str) -> list[dict[str, Any]]:
+def _children(entries: Sequence[KnowledgeEntry], path_key: str) -> list[dict[str, Any]]:
     child_map: dict[str, dict[str, Any]] = {}
     collection = entries[0].collection if entries else ""
     separator = "." if collection == "python_api" else "/"
     prefix = f"{path_key}{separator}" if path_key else ""
+    entry_by_path: dict[str, KnowledgeEntry] = {}
+    for entry in entries:
+        entry_by_path.setdefault(_normalize_path(entry.path), entry)
+
     for entry in entries:
         key = _normalize_path(entry.path)
         if path_key and not key.startswith(prefix):
@@ -500,10 +517,7 @@ def _children(entries: list[KnowledgeEntry], path_key: str) -> list[dict[str, An
             continue
         child_name = rest.split(separator, 1)[0]
         child_path = f"{prefix}{child_name}".strip(separator)
-        exact_child = next(
-            (item for item in entries if _normalize_path(item.path) == child_path),
-            None,
-        )
+        exact_child = entry_by_path.get(child_path)
         child_map[child_path] = {
             "path": exact_child.path if exact_child else child_path,
             "title": exact_child.title if exact_child else child_name,

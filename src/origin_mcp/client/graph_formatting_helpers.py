@@ -807,33 +807,6 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
                 error_code="origin_operation_failed",
             )
 
-    def _set_plot_fill_area(
-        self,
-        plot: Any,
-        graph_name: str,
-        layer_index: int,
-        plot_index: int,
-        fill_color_index: int,
-        transparency: float | None = None,
-    ) -> str:
-        script = self._fill_area_script(
-            graph_name=graph_name,
-            layer_index=layer_index,
-            plot_index=plot_index,
-            fill_color_index=fill_color_index,
-            transparency=transparency,
-        )
-        result = self.run_labtalk(script)
-        if result.get("result") is False:
-            raise OriginOperationError(f"Origin rejected fill-area script: {script}")
-        set_fill_area = getattr(plot, "set_fill_area", None)
-        if callable(set_fill_area):
-            try:
-                set_fill_area(fill_color_index, 9, fill_color_index)
-            except TypeError:
-                pass
-        return script
-
     def _fill_area_script(
         self,
         graph_name: str,

@@ -183,16 +183,6 @@ class BridgeTaskManager:
             )[: min(limit, 100)]
             return {"tasks": [task.as_dict(include_result=False) for task in tasks]}
 
-    def _get_task(self, task_id: str) -> BridgeTask:
-        with self._lock:
-            task = self._tasks.get(task_id)
-            if task is None:
-                raise OriginOperationError(
-                    f"Bridge task not found: {task_id}",
-                    error_code="bridge_task_not_found",
-                )
-            return task
-
     def _work(self) -> None:
         while True:
             task_id = self._queue.get()

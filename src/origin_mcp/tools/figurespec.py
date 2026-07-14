@@ -782,10 +782,6 @@ def _missing_mapping_columns(
     return missing
 
 
-def _executor_warnings(spec: FigureSpec) -> list[str]:
-    return _executor_warnings_from_details(_executor_warning_details(spec))
-
-
 def _executor_warnings_from_details(details: list[dict[str, Any]]) -> list[str]:
     return sorted({str(item["code"]) for item in details})
 

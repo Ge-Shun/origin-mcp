@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
 from .official_docs import (
@@ -32,7 +34,7 @@ class KnowledgeEntry:
             "title": self.title,
             "summary": self.summary,
             "keywords": list(self.keywords),
-            "metadata": self.metadata,
+            "metadata": deepcopy(self.metadata),
         }
         if include_body:
             data["body"] = self.body
@@ -996,14 +998,16 @@ OFFICIAL_DOC_PAGES: tuple[OfficialDocPage, ...] = (
 )
 
 
-def _official_doc_pages(version: str | None = None) -> list[OfficialDocPage]:
+@cache
+def _official_doc_pages(version: str | None = None) -> tuple[OfficialDocPage, ...]:
     pages = merge_records(list(OFFICIAL_DOC_PAGES), load_generated_records())
     validate_records(pages)
-    return records_for_version(pages, version)
+    return tuple(records_for_version(pages, version))
 
 
-def _official_doc_entries(version: str | None = None) -> list[KnowledgeEntry]:
-    return [
+@cache
+def _official_doc_entries(version: str | None = None) -> tuple[KnowledgeEntry, ...]:
+    return tuple(
         KnowledgeEntry(
             collection="official_docs",
             path=page.path,
@@ -1030,10 +1034,10 @@ def _official_doc_entries(version: str | None = None) -> list[KnowledgeEntry]:
             },
         )
         for page in _official_doc_pages(version)
-    ]
+    )
 
 
-OFFICIAL_DOC_ENTRIES: tuple[KnowledgeEntry, ...] = tuple(_official_doc_entries())
+OFFICIAL_DOC_ENTRIES: tuple[KnowledgeEntry, ...] = _official_doc_entries()
 
 
 PYTHON_API_ENTRIES: tuple[KnowledgeEntry, ...] = (
@@ -1138,7 +1142,8 @@ ORIGINPRO_CLASS_INDEX: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _originpro_class_entries() -> list[KnowledgeEntry]:
+@cache
+def _originpro_class_entries() -> tuple[KnowledgeEntry, ...]:
     entries = [
         KnowledgeEntry(
             collection="python_api",
@@ -1172,7 +1177,7 @@ def _originpro_class_entries() -> list[KnowledgeEntry]:
                 metadata={"official_url": OFFICIAL_URLS["originpro_api"]},
             )
         )
-    return entries
+    return tuple(entries)
 
 
 LABTALK_ENTRIES: tuple[KnowledgeEntry, ...] = (

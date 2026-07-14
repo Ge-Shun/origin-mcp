@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -625,7 +626,8 @@ class _WorksheetMixin(_OriginClientBase):
             )
 
         names = [str(col) for col in df.columns]
-        duplicates = sorted({name for name in names if names.count(name) > 1})
+        name_counts = Counter(names)
+        duplicates = sorted(name for name, count in name_counts.items() if count > 1)
         if duplicates:
             issues.append(
                 self._worksheet_issue(
