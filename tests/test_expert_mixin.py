@@ -104,3 +104,94 @@ def test_one_way_anova_uses_origin_operation_framework(fake_client: OriginClient
     assert "classname:=ANOVAOneWay" in result["script"]
     assert "InputData.Use=1" in result["script"]
     assert "xop execute:=cleanup" in result["script"]
+
+
+def test_multivariate_analysis_builds_controlled_ranges(fake_client: OriginClient) -> None:
+    fake_client.op.add_book(
+        "Measurements",
+        pd.DataFrame({"group": [1, 2], "a": [2, 3], "b": [4, 5], "response": [6, 7]}),
+    )
+
+    clustered = fake_client.multivariate_analysis(
+        method="kmeans",
+        worksheet="Measurements",
+        columns=["a", "b"],
+        options={"num": 3, "std": "snd", "anova": True},
+        output_book="ClusterReport",
+    )
+    discriminant = fake_client.multivariate_analysis(
+        method="discrim",
+        worksheet="Measurements",
+        columns=["a", "b"],
+        group_col="group",
+    )
+
+    assert clustered["script"].startswith("kmeans ")
+    assert "ir:=[Measurements]Sheet1!(2:3)" in clustered["script"]
+    assert "num:=3" in clustered["script"]
+    assert "rt:=[ClusterReport]<new>" in clustered["script"]
+    assert "group:=[Measurements]Sheet1!(group)" in discriminant["script"]
+    assert "var:=[Measurements]Sheet1!(2:3)" in discriminant["script"]
+
+
+def test_nonparametric_and_survival_dispatchers(fake_client: OriginClient) -> None:
+    fake_client.op.add_book(
+        "Study",
+        pd.DataFrame(
+            {
+                "time": [1, 2],
+                "censor": [0, 1],
+                "group": [1, 2],
+                "value_a": [3, 4],
+                "value_b": [5, 6],
+            }
+        ),
+    )
+
+    nonparametric = fake_client.nonparametric_test(
+        test="mann_whitney",
+        worksheet="Study",
+        columns=["value_a", "value_b"],
+        tail="upper",
+        exact=True,
+    )
+    survival = fake_client.survival_analysis(
+        method="kaplan_meier",
+        worksheet="Study",
+        time_col="time",
+        censor_col="censor",
+        group_col="group",
+        censor_values=[0, -1],
+        options={"logrank": True, "sfci": True},
+    )
+
+    assert nonparametric["script"].startswith("mwtest ")
+    assert "type:=1" in nonparametric["script"]
+    assert "tail:=upper" in nonparametric["script"]
+    assert "exact:=1" in nonparametric["script"]
+    assert survival["script"].startswith("kaplanmeier ")
+    assert "irng:=[Study]Sheet1!(1,2,3)" in survival["script"]
+    assert "censor:={0.0,-1.0}" in survival["script"]
+    assert "logrank:=1" in survival["script"]
+
+    single_censor = fake_client.survival_analysis(
+        method="kaplan_meier",
+        worksheet="Study",
+        time_col="time",
+        censor_col="censor",
+        censor_values=[0],
+    )
+    assert "censor:=0.0" in single_censor["script"]
+    assert "censor:={" not in single_censor["script"]
+
+
+def test_advanced_statistics_reject_unknown_options(fake_client: OriginClient) -> None:
+    fake_client.op.add_book("Data", pd.DataFrame({"a": [1], "b": [2]}))
+
+    with pytest.raises(OriginOperationError):
+        fake_client.multivariate_analysis(
+            method="kmeans",
+            worksheet="Data",
+            columns=["a", "b"],
+            options={"script": "exit"},
+        )

@@ -135,3 +135,118 @@ def origin_one_way_anova(
             ),
         )
     )
+
+
+@_mcp_tool(parameter_choices={"method": ("kmeans", "hcluster", "discrim", "pls")})
+def origin_multivariate_analysis(
+    method: str,
+    worksheet: str | None = None,
+    columns: list[str | int] | None = None,
+    variables_range: str | None = None,
+    group_col: str | int | None = None,
+    dependent_columns: list[str | int] | None = None,
+    options: dict[str, Any] | None = None,
+    output_book: str | None = None,
+) -> dict[str, Any]:
+    """Run K-means, hierarchical clustering, discriminant analysis, or PLS."""
+
+    return _wrap(
+        lambda: _ok(
+            "Completed Origin multivariate analysis.",
+            **client.multivariate_analysis(
+                method=method,
+                worksheet=worksheet,
+                columns=columns,
+                variables_range=variables_range,
+                group_col=group_col,
+                dependent_columns=dependent_columns,
+                options=options,
+                output_book=output_book,
+            ),
+        )
+    )
+
+
+@_mcp_tool(
+    parameter_choices={
+        "test": (
+            "friedman",
+            "kstest2",
+            "kwanova",
+            "mediantest",
+            "mwtest",
+            "sign2",
+            "signrank1",
+            "signrank2",
+        ),
+        "input_form": ("raw", "indexed"),
+        "tail": ("two", "upper", "lower"),
+    }
+)
+def origin_nonparametric_test(
+    test: str,
+    worksheet: str | None = None,
+    columns: list[str | int] | None = None,
+    input_range: str | None = None,
+    input_form: str = "raw",
+    alpha: float = 0.05,
+    tail: str = "two",
+    test_median: float = 0.0,
+    exact: bool = False,
+    options: dict[str, Any] | None = None,
+    output_book: str | None = None,
+) -> dict[str, Any]:
+    """Run an allowlisted OriginPro nonparametric hypothesis test."""
+
+    return _wrap(
+        lambda: _ok(
+            "Completed Origin nonparametric test.",
+            **client.nonparametric_test(
+                test=test,
+                worksheet=worksheet,
+                columns=columns,
+                input_range=input_range,
+                input_form=input_form,
+                alpha=alpha,
+                tail=tail,
+                test_median=test_median,
+                exact=exact,
+                options=options,
+                output_book=output_book,
+            ),
+        )
+    )
+
+
+@_mcp_tool(parameter_choices={"method": ("kaplanmeier", "phm_cox", "weibullfit")})
+def origin_survival_analysis(
+    method: str,
+    worksheet: str | None = None,
+    time_col: str | int | None = None,
+    censor_col: str | int | None = None,
+    group_col: str | int | None = None,
+    covariate_columns: list[str | int] | None = None,
+    input_range: str | None = None,
+    censor_values: list[int | float] | None = None,
+    options: dict[str, Any] | None = None,
+    output_book: str | None = None,
+) -> dict[str, Any]:
+    """Run Kaplan-Meier, Cox proportional-hazards, or Weibull survival analysis."""
+
+    return _wrap(
+        lambda: _ok(
+            "Completed Origin survival analysis.",
+            **client.survival_analysis(
+                method=method,
+                worksheet=worksheet,
+                time_col=time_col,
+                censor_col=censor_col,
+                group_col=group_col,
+                covariate_columns=covariate_columns,
+                input_range=input_range,
+                censor_values=censor_values,
+                options=options,
+                output_book=output_book,
+            ),
+        )
+    )

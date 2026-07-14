@@ -19,10 +19,11 @@ workflow surface small while preserving specialized wrappers as internal
 Python functions.
 
 Set `ORIGIN_MCP_TOOL_PROFILE` before starting the MCP server to select a larger
-surface: `data` adds worksheet transforms, `plot` adds specialized plot/graph/
-template tools, `analysis` adds typed fitting tools, and `standard` restores the
-previous curated surface. `full` exposes every wrapper; `expert` and `all` are
-aliases for it. Unknown values safely fall back to `compact`.
+surface: `data` adds worksheet transforms; `plot` adds specialized plot, graph,
+template, and multi-panel composition tools; `analysis` adds typed fitting,
+result inspection/recalculation, and advanced-statistics tools; and `standard`
+restores the previous curated surface. `full` exposes every wrapper; `expert`
+and `all` are aliases for it. Unknown values safely fall back to `compact`.
 
 ## Default Compact Tools
 
@@ -289,6 +290,62 @@ official originpro and X-Function surfaces:
   generation, and multi-Y batch analysis. The expert analysis surface includes
   typed FFT filtering, PCA, one-way ANOVA, and `origin_run_xfunction`, whose
   allow-listed catalog validates every argument before generating LabTalk.
+
+### Analysis results and recalculation
+
+The `analysis`, `standard`, and `full` profiles expose a complete workflow for
+existing Origin analysis operations:
+
+- Result reading through `origin_get_analysis_results` reads the report worksheet and uses Origin's
+  official `getresults` X-Function to retrieve its result tree. The response
+  provides stable `parameters`, `metrics`, `sections`, `worksheet`, and
+  `result_tree` fields.
+- Operation inspection through `origin_get_analysis_operation` reads a recalculating operation's settings
+  tree through `op_change op:=get`.
+- Recalculation through `origin_recalculate_analysis` runs the operation through `op_change op:=run`.
+  Pass `settings` to replace the operation tree before recalculation, or omit it
+  to use the current settings.
+
+`operation_range` is the Origin range owned by the recalculating operation, for
+example `[Book1]Result!col(2)`. Result-tree conversion uses the official
+`originpro.utils` tree helpers and cleans up temporary LabTalk trees after each
+call.
+
+### Advanced statistics
+
+`origin_multivariate_analysis` provides typed dispatch for K-means clustering,
+hierarchical clustering, discriminant analysis, and partial least-squares
+regression. `origin_nonparametric_test` covers Friedman, two-sample
+Kolmogorov-Smirnov, Kruskal-Wallis, median, Mann-Whitney, paired sign, and
+one-sample or paired Wilcoxon tests. `origin_survival_analysis` covers
+Kaplan-Meier, Cox proportional-hazards, and censored Weibull workflows.
+
+These tools accept worksheet columns or an explicit Origin range, validate all
+method-specific options against an allow-listed X-Function schema, and can send
+report output to `output_book`. They are available in the `analysis`,
+`standard`, and `full` profiles and require OriginPro where the underlying
+X-Function is OriginPro-only.
+
+### Publication multi-panel graphs
+
+The `plot`, `standard`, and `full` profiles expose official graph-composition
+routes in addition to the existing FigureSpec and layer-arrangement tools:
+
+- Graph merging through `origin_merge_graphs` combines graph pages into a new multi-panel graph with
+  explicit rows, columns, gaps, margins, panel labels, and optional common
+  scales. Common X-scale sizing works in Origin 2026; common Y-scale sizing uses
+  `resizeheightbyscale` and requires Origin 2026b or newer.
+- Layout creation through `origin_create_graph_layout` creates a Layout page containing selected graph
+  pages while retaining them as separately editable graphs.
+- Layer relationships through `origin_link_graph_layers` link X/Y scales and layer geometry;
+  `origin_copy_layer_scale` copies axis-scale settings between layers.
+- Layer extraction through `origin_extract_graph_layers` turns selected layers back into separate graph
+  pages.
+
+Use `origin_merge_graphs` for a single editable multi-layer figure and
+`origin_create_graph_layout` when the final page should assemble independent
+graph pages. Layer indexes in MCP calls are zero-based and are translated to
+Origin's one-based selectors.
 
 Notes tools create, read, replace/append, load, export as HTML, and delete Notes
 windows. Syntax values are text, HTML, Markdown, or Origin rich text, with text

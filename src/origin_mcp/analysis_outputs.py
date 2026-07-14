@@ -239,3 +239,88 @@ def structure_fit_result(raw: Any) -> dict[str, Any]:
         "sections": sections,
         "data": data,
     }
+
+
+def structure_result_tree(raw: Any) -> dict[str, Any]:
+    """Normalize an arbitrary Origin report tree into the stable analysis shape."""
+
+    data = serialize_analysis_value(raw)
+    if not isinstance(data, dict):
+        return {"parameters": [], "metrics": {}, "sections": {}, "result_tree": data}
+
+    parameters: list[dict[str, Any]] = []
+    metrics: dict[str, Any] = {}
+    seen_parameters: set[tuple[str, str]] = set()
+
+    def visit(value: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, dict):
+            if path and analysis_key(path[-1]) in {"parameter", "parameters"}:
+                for name, child in value.items():
+                    parameter_path = (*path, str(name))
+                    if is_analysis_number(child):
+                        item_path = ".".join(parameter_path)
+                        parameters.append({"name": str(name), "path": item_path, "value": child})
+                        seen_parameters.add((str(name), item_path))
+                        continue
+                    if not isinstance(child, dict):
+                        continue
+                    number = analysis_row_named_value(child, _VALUE_KEYS)
+                    if not is_analysis_number(number):
+                        visit(child, parameter_path)
+                        continue
+                    item = {
+                        "name": str(name),
+                        "path": ".".join((*parameter_path, "Value")),
+                        "value": number,
+                    }
+                    stderr = analysis_row_named_value(child, _STDERR_KEYS | {"error"})
+                    if is_analysis_number(stderr):
+                        item["stderr"] = stderr
+                    t_value = analysis_row_named_value(child, {"tvalue", "tstatistic"})
+                    if is_analysis_number(t_value):
+                        item["t_value"] = t_value
+                    p_value = analysis_row_named_value(child, {"prob", "pvalue"})
+                    if is_analysis_number(p_value):
+                        item["p_value"] = p_value
+                    parameters.append(item)
+                    seen_parameters.add((str(name), item["path"]))
+                return
+            label = analysis_row_label(value)
+            number = analysis_row_value(value)
+            if label and is_analysis_number(number) and not is_analysis_metric_name(label):
+                item_path = ".".join(path) or label
+                marker = (label, item_path)
+                if marker not in seen_parameters:
+                    parameter = {"name": label, "path": item_path, "value": number}
+                    stderr = analysis_row_named_value(value, _STDERR_KEYS)
+                    if is_analysis_number(stderr):
+                        parameter["stderr"] = stderr
+                    parameters.append(parameter)
+                    seen_parameters.add(marker)
+            for key, child in value.items():
+                visit(child, (*path, str(key)))
+            return
+        if isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, (*path, str(index)))
+            return
+        if not path or not is_analysis_number(value):
+            return
+        leaf = path[-1]
+        if is_analysis_metric_name(leaf):
+            metrics[".".join(path)] = value
+            return
+        joined = ".".join(path).lower()
+        if any(token in joined for token in _FIT_PARAMETER_TOKENS):
+            marker = (leaf, ".".join(path))
+            if marker not in seen_parameters:
+                parameters.append({"name": leaf, "path": marker[1], "value": value})
+                seen_parameters.add(marker)
+
+    visit(data)
+    return {
+        "parameters": parameters,
+        "metrics": metrics,
+        "sections": {"result_tree": data},
+        "result_tree": data,
+    }

@@ -16,6 +16,7 @@ property then returns it instead of importing ``originpro`` (see
 from __future__ import annotations
 
 import base64
+import copy
 import re
 from typing import Any
 
@@ -33,6 +34,7 @@ _DC_INT_RE = re.compile(r"wks\.dc\.(flags|auto)\s*=\s*(-?\d+)", re.IGNORECASE)
 _DC_NEW_SHEET_RE = re.compile(r'wbook\.dc\.newsheet\("([^"]*)"\s*,\s*1\s*\)', re.IGNORECASE)
 _DC_REMOVE_RE = re.compile(r"wbook\.dc\.remove\((\d+)\)", re.IGNORECASE)
 _SAVE_ANALYSIS_TEMPLATE_RE = re.compile(r'save\s+-ik\s+"([^"]+)"', re.IGNORECASE)
+_TREE_COMMAND_RE = re.compile(r"\b(getresults|op_change)\b.*?\btr:=(\w+)", re.IGNORECASE)
 
 
 class WBook:
@@ -578,6 +580,10 @@ class FakeOp:
         self.active_matrix: FakeMatrixSheet | None = None
         self.active_image: FakeImage | None = None
         self.lt_values: dict[str, Any] = {}
+        self.lt_trees: dict[str, dict[str, Any]] = {}
+        self.default_result_tree: dict[str, Any] = {}
+        self.default_operation_tree: dict[str, Any] = {}
+        self.last_operation_tree: dict[str, Any] | None = None
         # Records of lifecycle / LabTalk calls so tests can assert on side effects.
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.lt_exec_result: Any = True
@@ -698,6 +704,23 @@ class FakeOp:
     def lt_float(self, expression: str) -> Any:
         return self.lt_values.get(expression)
 
+    def lt_tree_to_dict(self, name: str, add_attributes: bool = False) -> dict[str, Any]:
+        del add_attributes
+        return copy.deepcopy(self.lt_trees.get(name, {}))
+
+    def lt_dict_to_tree(
+        self,
+        value: dict[str, Any],
+        name: str,
+        add_tree: bool = False,
+        check_attributes: bool = False,
+    ) -> None:
+        del add_tree, check_attributes
+        self.lt_trees[name] = copy.deepcopy(value)
+
+    def lt_delete_tree(self, name: str) -> None:
+        self.lt_trees.pop(name, None)
+
     # -- Lifecycle / LabTalk surface (opt-in per test) --------------------
     def set_show(self, show: bool) -> None:
         self.show = show
@@ -705,6 +728,15 @@ class FakeOp:
 
     def lt_exec(self, script: str) -> Any:
         self.calls.append(("lt_exec", (script,)))
+        tree_command = _TREE_COMMAND_RE.search(script)
+        if tree_command:
+            command, tree_name = tree_command.groups()
+            if command.lower() == "getresults":
+                self.lt_trees[tree_name] = copy.deepcopy(self.default_result_tree)
+            elif "op:=get" in script.lower():
+                self.lt_trees[tree_name] = copy.deepcopy(self.default_operation_tree)
+            elif "op:=run" in script.lower():
+                self.last_operation_tree = copy.deepcopy(self.lt_trees.get(tree_name, {}))
         if "expGraph" in script:
             self._emulate_export(script)
         if "template_saveas" in script:

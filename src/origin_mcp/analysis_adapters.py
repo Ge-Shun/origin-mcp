@@ -34,12 +34,33 @@ class AnalysisAdapter:
         return normalized
 
     def command(self, range_expr: str, output_sheet: str | None, options: dict[str, Any]) -> str:
+        normalized = self.normalize_options(options)
+        recalculate = normalized.pop("recalculate", None)
+        if recalculate is None:
+            recalculate = normalized.pop("recalc", None)
+
         parts = [self.x_function]
+        if recalculate is not None:
+            modes = {"none": 0, "auto": 1, "manual": 2}
+            if isinstance(recalculate, str):
+                mode = modes.get(recalculate.strip().lower())
+            elif isinstance(recalculate, bool):
+                mode = int(recalculate)
+            elif isinstance(recalculate, int):
+                mode = recalculate
+            else:
+                mode = None
+            if mode not in {0, 1, 2}:
+                raise OriginOperationError(
+                    "recalculate must be 0, 1, 2, none, auto, or manual.",
+                    error_code="invalid_request",
+                )
+            parts.extend(("-r", str(mode)))
         if range_expr:
             parts.append(f"{self.input_option}:={range_expr}")
         if output_sheet and self.output_option:
             parts.append(f"{self.output_option}:={output_sheet}")
-        option_text = xf_options(self.normalize_options(options), self.symbol_options)
+        option_text = xf_options(normalized, self.symbol_options)
         if option_text:
             parts.append(option_text)
         return " ".join(parts) + ";"

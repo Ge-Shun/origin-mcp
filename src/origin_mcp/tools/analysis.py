@@ -15,6 +15,56 @@ from ._shared import (
 )
 
 
+@_mcp_tool()
+def origin_get_analysis_results(
+    report_sheet: str,
+    max_rows: int = 100,
+    include_tree: bool = True,
+) -> dict[str, Any]:
+    """Read an Origin report sheet and normalize its official result tree."""
+
+    return _wrap(
+        lambda: _ok(
+            "Read Origin analysis results.",
+            **client.get_analysis_results(
+                report_sheet=report_sheet,
+                max_rows=max_rows,
+                include_tree=include_tree,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_get_analysis_operation(operation_range: str) -> dict[str, Any]:
+    """Read the settings tree for a recalculating Origin analysis operation."""
+
+    return _wrap(
+        lambda: _ok(
+            "Read Origin analysis operation.",
+            **client.get_analysis_operation(operation_range=operation_range),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_recalculate_analysis(
+    operation_range: str,
+    settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Recalculate an Origin analysis operation with current or updated settings."""
+
+    return _wrap(
+        lambda: _ok(
+            "Recalculated Origin analysis operation.",
+            **client.recalculate_analysis(
+                operation_range=operation_range,
+                settings=settings,
+            ),
+        )
+    )
+
+
 @_mcp_tool(
     schema_model=AnalysisRequest,
     parameter_descriptions={
@@ -26,7 +76,9 @@ from ._shared import (
         "options": (
             "Analysis-specific options. Examples: polynomial_fit uses order; smooth uses "
             "method and points; peak_find uses direction, threshold, and smooth_points; "
-            "t-tests use tail and alpha; fft/ifft use window and sampling_interval."
+            "t-tests use tail and alpha; fft/ifft use window and sampling_interval. "
+            "Set recalculate to none/0, auto/1, or manual/2 to create a recalculating "
+            "Origin operation."
         ),
     },
     parameter_choices={"analysis": tuple(sorted(ANALYSIS_ADAPTERS))},

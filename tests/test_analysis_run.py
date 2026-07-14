@@ -129,3 +129,74 @@ def test_nonlinear_fit_structured_rejects_empty_function(fake_client: OriginClie
     _seed(fake_client)
     with pytest.raises(OriginOperationError):
         fake_client.nonlinear_fit_structured(worksheet="Data", x_col="x", y_col="y", function="  ")
+
+
+def test_get_analysis_results_reads_and_normalizes_result_tree(
+    fake_client: OriginClient,
+) -> None:
+    fake_client.op.add_book(
+        "Report",
+        pd.DataFrame({"Parameter": ["Slope"], "Value": [2.5]}),
+        sheet="FitNL1",
+    )
+    fake_client.op.default_result_tree = {
+        "Summary": {"RSquare": 0.98, "PValue": 0.001},
+        "Parameters": {"Slope": 2.5, "Intercept": 1.0},
+    }
+
+    result = fake_client.get_analysis_results("[Report]FitNL1", max_rows=10)
+
+    assert result["report_sheet"] == "[Report]FitNL1"
+    assert result["metrics"]["Summary.RSquare"] == 0.98
+    assert result["result_tree"]["Parameters"]["Slope"] == 2.5
+    assert fake_client.op.lt_trees == {}
+
+
+def test_get_analysis_results_groups_origin_parameter_nodes(fake_client: OriginClient) -> None:
+    fake_client.op.add_book("Report", pd.DataFrame({"Value": [2.5]}), sheet="FitLinear1")
+    fake_client.op.default_result_tree = {
+        "Parameters": {
+            "Intercept": {"Value": 1.0, "Error": 0.2, "tValue": 5.0, "Prob": 0.01},
+            "Slope": {"Value": 2.5, "Error": 0.3, "tValue": 8.3, "Prob": 0.001},
+        }
+    }
+
+    result = fake_client.get_analysis_results("[Report]FitLinear1")
+
+    assert result["parameters"] == [
+        {
+            "name": "Intercept",
+            "path": "Parameters.Intercept.Value",
+            "value": 1.0,
+            "stderr": 0.2,
+            "t_value": 5.0,
+            "p_value": 0.01,
+        },
+        {
+            "name": "Slope",
+            "path": "Parameters.Slope.Value",
+            "value": 2.5,
+            "stderr": 0.3,
+            "t_value": 8.3,
+            "p_value": 0.001,
+        },
+    ]
+
+
+def test_analysis_operation_can_be_read_and_recalculated(fake_client: OriginClient) -> None:
+    fake_client.op.default_operation_tree = {"xfGetN": {"npts": 5, "method": "sg"}}
+
+    inspected = fake_client.get_analysis_operation("[Data]Result!col(1)")
+    recalculated = fake_client.recalculate_analysis(
+        "[Data]Result!col(1)", settings={"xfGetN": {"npts": 11, "method": "sg"}}
+    )
+
+    assert inspected["settings"]["xfGetN"]["npts"] == 5
+    assert recalculated["recalculated"] is True
+    assert fake_client.op.last_operation_tree == {"xfGetN": {"npts": 11, "method": "sg"}}
+    assert "op:=run" in recalculated["script"]
+
+
+def test_analysis_operation_rejects_script_delimiters(fake_client: OriginClient) -> None:
+    with pytest.raises(OriginOperationError):
+        fake_client.recalculate_analysis("col(1); exit")

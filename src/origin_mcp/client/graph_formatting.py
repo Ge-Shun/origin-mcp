@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from ..errors import OriginOperationError
@@ -616,6 +617,334 @@ class _GraphFormattingMixin(_GraphFormattingHelperMixin):
             "geometry_result": geometry_result,
             **result,
         }
+
+    def merge_graphs(
+        self,
+        graph_names: list[str],
+        output_name: str | None = None,
+        rows: int | None = None,
+        columns: int | None = None,
+        keep_sources: bool = True,
+        arrange: bool = True,
+        direction: str = "horizontal",
+        gap_x: float = 2,
+        gap_y: float = 2,
+        margins: tuple[float, float, float, float] = (5, 5, 5, 5),
+        unit: str = "percent",
+        width: float | None = None,
+        height: float | None = None,
+        label_style: str = "none",
+        custom_label: str | None = None,
+        link_layers: bool = False,
+        common_x_scale: bool = False,
+        common_y_scale: bool = False,
+    ) -> dict[str, Any]:
+        """Merge existing graph pages into a publication-style multi-panel graph."""
+
+        resolved = self._validated_graph_names(graph_names)
+        rows, columns = self._panel_grid(len(resolved), rows, columns)
+        unit_key = self._merge_unit(unit)
+        if common_y_scale:
+            self.ensure_feature(
+                "origin_2026b_or_newer",
+                "Common Y-scale sizing in merged graphs",
+            )
+        label_key = label_style.strip()
+        if label_key not in {"none", "capitalA", "a", "custom"}:
+            raise OriginOperationError("label_style must be none, capitalA, a, or custom.")
+        if label_key == "custom" and not custom_label:
+            raise OriginOperationError("custom_label is required for label_style='custom'.")
+
+        graph_expr = "+char(10)$+".join(f'"{self._escape_labtalk(name)}"' for name in resolved)
+        left, right, top, bottom = margins
+        args = [
+            "option:=specified",
+            f"graphs:={graph_expr}",
+            f"keep:={int(keep_sources)}",
+            f"arrange:={int(arrange)}",
+            f"row:={rows}",
+            f"col:={columns}",
+            f"dir:={'horz' if direction.strip().lower().startswith('h') else 'vert'}",
+            f"xgap:={float(gap_x)}",
+            f"ygap:={float(gap_y)}",
+            f"leftmg:={float(left)}",
+            f"rightmg:={float(right)}",
+            f"topmg:={float(top)}",
+            f"bottommg:={float(bottom)}",
+            f"spaceunit:={unit_key}",
+            f"labeltext:={label_key}",
+            f"linkarrange:={int(link_layers)}",
+        ]
+        if common_x_scale:
+            args.append("resizewidthbyscale:=1")
+        if common_y_scale:
+            args.append("resizeheightbyscale:=1")
+        if width is not None:
+            args.extend((f"width:={float(width)}", f"unit:={unit_key}"))
+        if height is not None:
+            args.extend((f"height:={float(height)}", f"unit:={unit_key}"))
+        if custom_label:
+            args.append(f'labelcustom:="{self._escape_labtalk(custom_label)}"')
+        safe_output_name = self._safe_graph_name(output_name) if output_name else None
+
+        before = self._graph_page_names()
+        script = "merge_graph " + " ".join(args) + ";"
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(
+                "Origin rejected merge_graph.", error_code="graph_merge_failed"
+            )
+        after = self._graph_page_names()
+        created = sorted(after - before)
+        created_name = created[0] if len(created) == 1 else None
+        actual_name = created_name
+        if safe_output_name and created_name:
+            renamed = self.rename_object(created_name, safe_output_name, object_type="graph")
+            actual_name = str(renamed["new_name"])
+        elif safe_output_name:
+            actual_name = safe_output_name
+        if output_name and actual_name:
+            self._remember_graph_alias(output_name, actual_name)
+        return {
+            "graph_names": resolved,
+            "output_graph": actual_name,
+            "created_graphs": created,
+            "rows": rows,
+            "columns": columns,
+            "script": script,
+            **result,
+        }
+
+    def create_graph_layout(
+        self,
+        graph_names: list[str],
+        rows: int | None = None,
+        columns: int | None = None,
+        keep_aspect_ratio: bool = False,
+        gap_x: float = 5,
+        gap_y: float = 5,
+        margins: tuple[float, float, float, float] = (15, 10, 10, 15),
+        width: float | None = None,
+        height: float | None = None,
+        unit: str = "inch",
+    ) -> dict[str, Any]:
+        """Create an Origin Layout page containing linked existing graphs."""
+
+        resolved = self._validated_graph_names(graph_names)
+        rows, columns = self._panel_grid(len(resolved), rows, columns)
+        graph_expr = "+char(10)$+".join(f'"{self._escape_labtalk(name)}"' for name in resolved)
+        left, right, top, bottom = margins
+        unit_key = self._merge_unit(unit)
+        args = [
+            "option:=specified",
+            f"graphs:={graph_expr}",
+            f"row:={rows}",
+            f"col:={columns}",
+            f"aspectratio:={int(keep_aspect_ratio)}",
+            f"xgap:={float(gap_x)}",
+            f"ygap:={float(gap_y)}",
+            f"leftmg:={float(left)}",
+            f"rightmg:={float(right)}",
+            f"topmg:={float(top)}",
+            f"bottommg:={float(bottom)}",
+        ]
+        if width is not None:
+            args.append(f"width:={float(width)}")
+        if height is not None:
+            args.append(f"height:={float(height)}")
+        if width is not None or height is not None:
+            args.append(f"unit:={unit_key}")
+        script = "g2layout " + " ".join(args) + ";"
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(
+                "Origin rejected g2layout.", error_code="graph_layout_failed"
+            )
+        return {
+            "graph_names": resolved,
+            "rows": rows,
+            "columns": columns,
+            "script": script,
+            **result,
+        }
+
+    def link_graph_layers(
+        self,
+        graph_name: str,
+        source_layer: int,
+        destination_layers: list[int],
+        link_x: bool | None = True,
+        link_y: bool | None = False,
+        unit: str = "link",
+    ) -> dict[str, Any]:
+        """Link destination-layer scales and geometry to a source layer."""
+
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name)
+        self._validate_layer_indexes(graph, [source_layer, *destination_layers])
+        if source_layer in destination_layers:
+            raise OriginOperationError("source_layer cannot also be a destination layer.")
+        if not destination_layers:
+            raise OriginOperationError("destination_layers cannot be empty.")
+        unit_key = self._merge_unit(unit, allow_link=True)
+        selector = self._layer_selector(destination_layers)
+        args = [
+            f"igp:=[{self._safe_graph_name(graph_name_actual)}]",
+            f"igl:=layer{source_layer + 1}",
+            f'destlayers:="{selector}"',
+            f"XAxis:={-1 if link_x is None else int(link_x)}",
+            f"YAxis:={-1 if link_y is None else int(link_y)}",
+            f"unit:={unit_key}",
+        ]
+        script = "laylink " + " ".join(args) + ";"
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError("Origin rejected laylink.", error_code="graph_link_failed")
+        return {
+            "graph_name": graph_name_actual,
+            "source_layer": source_layer,
+            "destination_layers": sorted(destination_layers),
+            "link_x": link_x,
+            "link_y": link_y,
+            "script": script,
+            **result,
+        }
+
+    def copy_layer_scale(
+        self,
+        graph_name: str,
+        source_layer: int,
+        destination_layers: list[int],
+        axis: int = 0,
+    ) -> dict[str, Any]:
+        """Copy Origin axis scale settings from one layer to other layers."""
+
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name)
+        self._validate_layer_indexes(graph, [source_layer, *destination_layers])
+        if not destination_layers:
+            raise OriginOperationError("destination_layers cannot be empty.")
+        selector = self._layer_selector(destination_layers)
+        script = (
+            f"laycopyscale igp:=[{self._safe_graph_name(graph_name_actual)}] "
+            f"igl:={source_layer + 1} dest:={selector} axis:={int(axis)};"
+        )
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(
+                "Origin rejected laycopyscale.", error_code="graph_scale_copy_failed"
+            )
+        return {
+            "graph_name": graph_name_actual,
+            "source_layer": source_layer,
+            "destination_layers": sorted(destination_layers),
+            "axis": axis,
+            "script": script,
+            **result,
+        }
+
+    def extract_graph_layers(
+        self,
+        graph_name: str,
+        layer_indexes: list[int],
+        keep_source: bool = True,
+        full_page: bool = True,
+    ) -> dict[str, Any]:
+        """Extract selected layers into separate graph pages."""
+
+        graph = self._find_or_active_graph(graph_name)
+        graph_name_actual = self._object_name(graph, default=graph_name)
+        self._validate_layer_indexes(graph, layer_indexes)
+        if not layer_indexes:
+            raise OriginOperationError("layer_indexes cannot be empty.")
+        before = self._graph_page_names()
+        selector = self._layer_selector(layer_indexes)
+        script = (
+            f"layextract igp:=[{self._safe_graph_name(graph_name_actual)}] "
+            f'layer:="{selector}" keep:={int(keep_source)} fullpage:={int(full_page)};'
+        )
+        result = self.run_labtalk(script)
+        if result.get("result") is False:
+            raise OriginOperationError(
+                "Origin rejected layextract.", error_code="graph_layer_extract_failed"
+            )
+        created = sorted(self._graph_page_names() - before)
+        return {
+            "graph_name": graph_name_actual,
+            "layer_indexes": sorted(layer_indexes),
+            "created_graphs": created,
+            "script": script,
+            **result,
+        }
+
+    def _validated_graph_names(self, graph_names: list[str]) -> list[str]:
+        if not graph_names:
+            raise OriginOperationError("graph_names cannot be empty.")
+        resolved = []
+        for name in graph_names:
+            graph = self._find_or_active_graph(name)
+            resolved.append(self._object_name(graph, default=name))
+        if len(set(resolved)) != len(resolved):
+            raise OriginOperationError("graph_names must not contain duplicates.")
+        return resolved
+
+    @staticmethod
+    def _panel_grid(count: int, rows: int | None, columns: int | None) -> tuple[int, int]:
+        if rows is None and columns is None:
+            columns = max(1, math.ceil(math.sqrt(count)))
+            rows = math.ceil(count / columns)
+        elif rows is None:
+            if columns is None or columns < 1:
+                raise OriginOperationError("columns must be at least 1.")
+            rows = math.ceil(count / columns)
+        elif columns is None:
+            if rows < 1:
+                raise OriginOperationError("rows must be at least 1.")
+            columns = math.ceil(count / rows)
+        if rows < 1 or columns < 1 or rows * columns < count:
+            raise OriginOperationError("rows * columns must fit every selected graph.")
+        return rows, columns
+
+    @staticmethod
+    def _safe_graph_name(value: str) -> str:
+        clean = value.strip()
+        if not clean or any(char in clean for char in (";", '"', "[", "]", "\n", "\r")):
+            raise OriginOperationError("Invalid graph page name.", error_code="invalid_request")
+        return clean
+
+    @staticmethod
+    def _merge_unit(value: str, allow_link: bool = False) -> str:
+        aliases = {"%": "percent", "page": "percent", "pixels": "pixel", "points": "point"}
+        clean = aliases.get(value.strip().lower(), value.strip().lower())
+        allowed = {"percent", "inch", "cm", "mm", "pixel", "point"}
+        if allow_link:
+            allowed.add("link")
+        if clean not in allowed:
+            raise OriginOperationError(f"Unsupported graph layout unit: {value}.")
+        return clean
+
+    @staticmethod
+    def _layer_selector(indexes: list[int]) -> str:
+        values = sorted(set(index + 1 for index in indexes))
+        if any(value < 1 for value in values):
+            raise OriginOperationError("Layer indexes must be non-negative.")
+        runs: list[str] = []
+        start = previous = values[0]
+        for value in values[1:]:
+            if value == previous + 1:
+                previous = value
+                continue
+            runs.append(str(start) if start == previous else f"{start}:{previous}")
+            start = previous = value
+        runs.append(str(start) if start == previous else f"{start}:{previous}")
+        return ",".join(runs)
+
+    @staticmethod
+    def _validate_layer_indexes(graph: Any, indexes: list[int]) -> None:
+        count = len(graph) if hasattr(graph, "__len__") else 0
+        for index in indexes:
+            if index < 0 or index >= count:
+                raise OriginOperationError(f"layer_index is out of range: {index}")
 
     def add_graph_label(
         self,

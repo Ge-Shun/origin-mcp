@@ -45,6 +45,22 @@ def test_smooth_adapter_uses_official_input_and_option_names() -> None:
     assert "polyorder:=2" in command
 
 
+def test_analysis_adapter_formats_recalculation_as_execution_option() -> None:
+    adapter = resolve_analysis_adapter("smooth", 10.3)
+
+    command = adapter.command(
+        range_expr="[Book1]1!(time,signal)",
+        output_sheet="[SmoothOut]Result!(1,2)",
+        options={"method": "sg", "recalculate": "manual"},
+    )
+
+    assert command.startswith("smooth -r 2 iy:=[Book1]1!(time,signal)")
+    assert "recalculate:=" not in command
+
+    with pytest.raises(OriginOperationError, match="recalculate must be"):
+        adapter.command("[Book1]1!(1,2)", None, {"recalculate": "sometimes"})
+
+
 def test_linear_fit_adapter_uses_official_fix_parameter_names() -> None:
     adapter = resolve_analysis_adapter("linear_fit", 10.3)
     command = adapter.command(

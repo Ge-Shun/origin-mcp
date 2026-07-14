@@ -30,8 +30,13 @@ welcome.
 - Run Origin analyses such as fitting, smoothing, integration, peak finding,
   descriptive statistics, interpolation, normalization, t-tests, FFT/IFFT, and
   correlation.
-- Drive analysis templates, batch processing, Peak Analyzer, PCA, and a
-  validated catalog of signal-processing X-Functions.
+- Read normalized report results, inspect or recalculate existing analysis
+  operations, and drive analysis templates, batch processing, and Peak Analyzer.
+- Run PCA, clustering, discriminant analysis, partial least-squares regression,
+  nonparametric tests, survival analysis, and validated signal-processing
+  X-Functions.
+- Compose publication figures by merging graphs, creating Layout pages, linking
+  panel scales, copying layer scales, and extracting selected panels.
 - Export figures and projects through a local Origin GUI bridge.
 - Save a finished graph as a reusable user template, then search/match and reapply
   it to same-type figures (see [docs/tools.md](docs/tools.md#user-template-library)).

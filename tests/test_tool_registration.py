@@ -156,6 +156,17 @@ def test_plot_profile_includes_template_tools() -> None:
     } <= names
 
 
+def test_plot_profile_includes_multi_panel_composition_tools() -> None:
+    names = _registered_tool_names("plot")
+    assert {
+        "origin_merge_graphs",
+        "origin_create_graph_layout",
+        "origin_link_graph_layers",
+        "origin_copy_layer_scale",
+        "origin_extract_graph_layers",
+    } <= names
+
+
 def test_analysis_profile_includes_analysis_wrappers() -> None:
     """Analysis mode exposes the generic dispatcher plus the structured fits.
 
@@ -171,6 +182,12 @@ def test_analysis_profile_includes_analysis_wrappers() -> None:
         "origin_linear_fit",
         "origin_nonlinear_fit_structured",
         "origin_list_fit_functions",
+        "origin_get_analysis_results",
+        "origin_get_analysis_operation",
+        "origin_recalculate_analysis",
+        "origin_multivariate_analysis",
+        "origin_nonparametric_test",
+        "origin_survival_analysis",
     } <= names
 
     # These specialized wrappers are intentionally full-profile only now.

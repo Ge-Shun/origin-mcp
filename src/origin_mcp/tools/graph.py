@@ -905,6 +905,166 @@ def origin_arrange_layers(
     )
 
 
+@_mcp_tool(
+    parameter_choices={
+        "direction": ("horizontal", "vertical"),
+        "unit": ("percent", "inch", "cm", "mm", "pixel", "point"),
+        "label_style": ("none", "capitalA", "a", "custom"),
+    }
+)
+def origin_merge_graphs(
+    graph_names: list[str],
+    output_name: str | None = None,
+    rows: int | None = None,
+    columns: int | None = None,
+    keep_sources: bool = True,
+    arrange: bool = True,
+    direction: str = "horizontal",
+    gap_x: float = 2,
+    gap_y: float = 2,
+    margins: tuple[float, float, float, float] = (5, 5, 5, 5),
+    unit: str = "percent",
+    width: float | None = None,
+    height: float | None = None,
+    label_style: str = "none",
+    custom_label: str | None = None,
+    link_layers: bool = False,
+    common_x_scale: bool = False,
+    common_y_scale: bool = False,
+) -> dict[str, Any]:
+    """Merge existing graph pages into a publication-style multi-panel graph."""
+
+    return _wrap(
+        lambda: _ok(
+            "Merged Origin graph pages.",
+            **client.merge_graphs(
+                graph_names=graph_names,
+                output_name=output_name,
+                rows=rows,
+                columns=columns,
+                keep_sources=keep_sources,
+                arrange=arrange,
+                direction=direction,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                margins=margins,
+                unit=unit,
+                width=width,
+                height=height,
+                label_style=label_style,
+                custom_label=custom_label,
+                link_layers=link_layers,
+                common_x_scale=common_x_scale,
+                common_y_scale=common_y_scale,
+            ),
+        )
+    )
+
+
+@_mcp_tool(parameter_choices={"unit": ("inch", "cm", "mm", "pixel", "point")})
+def origin_create_graph_layout(
+    graph_names: list[str],
+    rows: int | None = None,
+    columns: int | None = None,
+    keep_aspect_ratio: bool = False,
+    gap_x: float = 5,
+    gap_y: float = 5,
+    margins: tuple[float, float, float, float] = (15, 10, 10, 15),
+    width: float | None = None,
+    height: float | None = None,
+    unit: str = "inch",
+) -> dict[str, Any]:
+    """Create an Origin Layout page containing linked graph pages."""
+
+    return _wrap(
+        lambda: _ok(
+            "Created Origin graph layout.",
+            **client.create_graph_layout(
+                graph_names=graph_names,
+                rows=rows,
+                columns=columns,
+                keep_aspect_ratio=keep_aspect_ratio,
+                gap_x=gap_x,
+                gap_y=gap_y,
+                margins=margins,
+                width=width,
+                height=height,
+                unit=unit,
+            ),
+        )
+    )
+
+
+@_mcp_tool(parameter_choices={"unit": ("link", "percent", "inch", "cm", "mm", "pixel", "point")})
+def origin_link_graph_layers(
+    graph_name: str,
+    source_layer: int,
+    destination_layers: list[int],
+    link_x: bool | None = True,
+    link_y: bool | None = False,
+    unit: str = "link",
+) -> dict[str, Any]:
+    """Link graph-layer scales and geometry to a source layer."""
+
+    return _wrap(
+        lambda: _ok(
+            "Linked Origin graph layers.",
+            **client.link_graph_layers(
+                graph_name=graph_name,
+                source_layer=source_layer,
+                destination_layers=destination_layers,
+                link_x=link_x,
+                link_y=link_y,
+                unit=unit,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_copy_layer_scale(
+    graph_name: str,
+    source_layer: int,
+    destination_layers: list[int],
+    axis: int = 0,
+) -> dict[str, Any]:
+    """Copy Origin axis-scale settings from one graph layer to others."""
+
+    return _wrap(
+        lambda: _ok(
+            "Copied Origin graph-layer scale.",
+            **client.copy_layer_scale(
+                graph_name=graph_name,
+                source_layer=source_layer,
+                destination_layers=destination_layers,
+                axis=axis,
+            ),
+        )
+    )
+
+
+@_mcp_tool()
+def origin_extract_graph_layers(
+    graph_name: str,
+    layer_indexes: list[int],
+    keep_source: bool = True,
+    full_page: bool = True,
+) -> dict[str, Any]:
+    """Extract selected layers into separate Origin graph pages."""
+
+    return _wrap(
+        lambda: _ok(
+            "Extracted Origin graph layers.",
+            **client.extract_graph_layers(
+                graph_name=graph_name,
+                layer_indexes=layer_indexes,
+                keep_source=keep_source,
+                full_page=full_page,
+            ),
+        )
+    )
+
+
 @_mcp_tool()
 def origin_add_graph_label(
     text: str,

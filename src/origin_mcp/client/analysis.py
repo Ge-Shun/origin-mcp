@@ -1,16 +1,199 @@
 from __future__ import annotations
 
+import importlib
 import uuid
 from typing import Any
 
 from ..analysis_adapters import resolve_analysis_adapter
-from ..analysis_outputs import is_analysis_number, structure_analysis_output, structure_fit_result
+from ..analysis_outputs import (
+    is_analysis_number,
+    structure_analysis_output,
+    structure_fit_result,
+    structure_result_tree,
+)
 from ..errors import OriginOperationError
 from .base import ANALYSIS_XY_OUTPUTS, _OriginClientBase
 
 
 class _AnalysisMixin(_OriginClientBase):
     """Curve fitting and Origin analysis methods."""
+
+    def get_analysis_results(
+        self,
+        report_sheet: str,
+        max_rows: int = 100,
+        include_tree: bool = True,
+    ) -> dict[str, Any]:
+        """Read a report worksheet and its official ``getresults`` result tree."""
+
+        if max_rows < 1:
+            raise OriginOperationError("max_rows must be at least 1.")
+        wks = self._find_sheet_from_ref(report_sheet)
+        ref = self._worksheet_ref(wks)
+        worksheet_ref = f"[{ref.book_name}]{ref.sheet_name}"
+        worksheet = self.read_worksheet(
+            book_name=ref.book_name,
+            sheet_name=ref.sheet_name,
+            max_rows=max_rows,
+        )
+        response: dict[str, Any] = {
+            "report_sheet": worksheet_ref,
+            "worksheet": worksheet,
+            "parameters": [],
+            "metrics": {},
+            "sections": {"worksheet": worksheet},
+            "result_tree": None,
+            "warnings": [],
+        }
+        if not include_tree:
+            return response
+
+        tree_name = self._temporary_tree_name("omr")
+        script = f"getresults tr:={tree_name} iw:={worksheet_ref}! escstr:=1;"
+        try:
+            result = self.run_labtalk(script)
+            response["script"] = script
+            response["result"] = result.get("result")
+            if result.get("result") is False:
+                response["warnings"].append("Origin rejected getresults for the report sheet.")
+                return response
+            tree = self._lt_tree_to_dict(tree_name)
+            if tree is None:
+                response["warnings"].append(
+                    "The installed originpro package does not expose lt_tree_to_dict; "
+                    "worksheet data was returned without a result tree."
+                )
+                return response
+            structured = structure_result_tree(tree)
+            response.update(structured)
+            response["sections"]["worksheet"] = worksheet
+            return response
+        finally:
+            self._delete_lt_tree(tree_name)
+
+    def get_analysis_operation(
+        self,
+        operation_range: str,
+    ) -> dict[str, Any]:
+        """Read recalculating-operation settings with Origin's ``op_change``."""
+
+        clean_range = self._safe_operation_range(operation_range)
+        tree_name = self._temporary_tree_name("omo")
+        script = f"op_change ir:={clean_range} tr:={tree_name} op:=get;"
+        try:
+            result = self.run_labtalk(script)
+            if result.get("result") is False:
+                raise OriginOperationError(
+                    "Origin could not read the analysis operation.",
+                    error_code="analysis_operation_failed",
+                )
+            settings = self._lt_tree_to_dict(tree_name)
+            warnings = []
+            if settings is None:
+                warnings.append("The installed originpro package does not expose lt_tree_to_dict.")
+            return {
+                "operation_range": clean_range,
+                "settings": settings,
+                "script": script,
+                "warnings": warnings,
+                **result,
+            }
+        finally:
+            self._delete_lt_tree(tree_name)
+
+    def recalculate_analysis(
+        self,
+        operation_range: str,
+        settings: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Run a recalculating operation, optionally replacing its settings tree."""
+
+        clean_range = self._safe_operation_range(operation_range)
+        tree_name = self._temporary_tree_name("omc")
+        try:
+            if settings is None:
+                get_script = f"op_change ir:={clean_range} tr:={tree_name} op:=get;"
+                get_result = self.run_labtalk(get_script)
+                if get_result.get("result") is False:
+                    raise OriginOperationError(
+                        "Origin could not read the analysis operation before recalculation.",
+                        error_code="analysis_operation_failed",
+                    )
+            else:
+                self._lt_dict_to_tree(settings, tree_name)
+                get_script = None
+
+            run_script = f"op_change ir:={clean_range} tr:={tree_name} op:=run;"
+            result = self.run_labtalk(run_script)
+            if result.get("result") is False:
+                raise OriginOperationError(
+                    "Origin could not recalculate the analysis operation.",
+                    error_code="analysis_recalculation_failed",
+                )
+            applied = self._lt_tree_to_dict(tree_name)
+            return {
+                "operation_range": clean_range,
+                "settings": applied if applied is not None else settings,
+                "get_script": get_script,
+                "script": run_script,
+                "recalculated": True,
+                **result,
+            }
+        finally:
+            self._delete_lt_tree(tree_name)
+
+    @staticmethod
+    def _temporary_tree_name(prefix: str) -> str:
+        return f"{prefix}{uuid.uuid4().hex[:10]}"
+
+    @staticmethod
+    def _safe_operation_range(value: str) -> str:
+        clean = value.strip()
+        if not clean or any(char in clean for char in (";", '"', "\n", "\r", "{", "}")):
+            raise OriginOperationError(
+                "operation_range contains unsupported script delimiters.",
+                error_code="invalid_request",
+            )
+        return clean
+
+    def _originpro_utils_function(self, name: str) -> Any:
+        direct = getattr(self.op, name, None)
+        if callable(direct):
+            return direct
+        utils = getattr(self.op, "utils", None)
+        candidate = getattr(utils, name, None) if utils is not None else None
+        if callable(candidate):
+            return candidate
+        try:
+            module = importlib.import_module("originpro.utils")
+        except ImportError:
+            return None
+        candidate = getattr(module, name, None)
+        return candidate if callable(candidate) else None
+
+    def _lt_tree_to_dict(self, name: str) -> dict[str, Any] | None:
+        converter = self._originpro_utils_function("lt_tree_to_dict")
+        if not callable(converter):
+            return None
+        value = converter(name)
+        return value if isinstance(value, dict) else None
+
+    def _lt_dict_to_tree(self, value: dict[str, Any], name: str) -> None:
+        converter = self._originpro_utils_function("lt_dict_to_tree")
+        if not callable(converter):
+            raise OriginOperationError(
+                "The installed originpro package does not expose lt_dict_to_tree.",
+                error_code="origin_dependency_unavailable",
+            )
+        converter(value, name, False, True)
+
+    def _delete_lt_tree(self, name: str) -> None:
+        deleter = self._originpro_utils_function("lt_delete_tree")
+        if callable(deleter):
+            try:
+                deleter(name)
+            except Exception:
+                pass
 
     def linear_fit_result(
         self,

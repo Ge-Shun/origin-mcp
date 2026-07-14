@@ -291,6 +291,64 @@ def test_arrange_layers_applies_custom_geometry(fake_client: OriginClient) -> No
     assert "layer -s 2; layer.left=55.0; layer.top=12.0;" in scripts[1]
 
 
+def test_merge_graphs_builds_publication_panel_command(fake_client: OriginClient) -> None:
+    fake_client.op.add_graph("G1")
+    fake_client.op.add_graph("G2")
+    fake_client.op.add_graph("G3")
+
+    result = fake_client.merge_graphs(
+        ["G1", "G2", "G3"],
+        output_name="Figure1",
+        rows=1,
+        columns=3,
+        label_style="capitalA",
+        common_x_scale=True,
+    )
+
+    assert result["output_graph"] == "Figure1"
+    assert 'graphs:="G1"+char(10)$+"G2"+char(10)$+"G3"' in result["script"]
+    assert "row:=1 col:=3" in result["script"]
+    assert "labeltext:=capitalA" in result["script"]
+    assert "resizewidthbyscale:=1" in result["script"]
+    assert "resizeheightbyscale" not in result["script"]
+    assert "ogp:=" not in result["script"]
+
+
+def test_merge_graphs_requires_2026b_for_common_y_scale(fake_client: OriginClient) -> None:
+    fake_client.op.add_graph("G1")
+    fake_client.op.add_graph("G2")
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.merge_graphs(["G1", "G2"], common_y_scale=True)
+
+    assert excinfo.value.error_code == "unsupported_origin_feature"
+
+
+def test_graph_layout_and_layer_relationship_commands(fake_client: OriginClient) -> None:
+    fake_client.op.add_graph("G1", layers=3)
+    fake_client.op.add_graph("G2")
+
+    layout = fake_client.create_graph_layout(["G1", "G2"], rows=1, columns=2)
+    linked = fake_client.link_graph_layers(
+        "G1", source_layer=0, destination_layers=[1, 2], link_x=True, link_y=False
+    )
+    copied = fake_client.copy_layer_scale("G1", 0, [1, 2], axis=1)
+    extracted = fake_client.extract_graph_layers("G1", [0, 2])
+
+    assert "g2layout option:=specified" in layout["script"]
+    assert 'destlayers:="2:3"' in linked["script"]
+    assert "XAxis:=1 YAxis:=0" in linked["script"]
+    assert "igl:=1 dest:=2:3 axis:=1" in copied["script"]
+    assert 'layer:="1,3"' in extracted["script"]
+
+
+def test_graph_layer_relationships_validate_indexes(fake_client: OriginClient) -> None:
+    fake_client.op.add_graph("G1", layers=2)
+
+    with pytest.raises(OriginOperationError):
+        fake_client.link_graph_layers("G1", source_layer=0, destination_layers=[2])
+
+
 def test_get_graph_info_reports_layers_and_plots(fake_client: OriginClient) -> None:
     fake_client.op.add_book("Data", pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
     fake_client.op.add_graph("G1", lname="Long")

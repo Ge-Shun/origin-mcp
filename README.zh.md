@@ -24,7 +24,9 @@ pull request。
   Project Explorer 文件夹。
 - 创建并调整常见 2D、3D、等高线、统计和专用图形。
 - 运行拟合、平滑、积分、寻峰、描述统计、插值、归一化、t 检验、FFT/IFFT 和相关分析等 Origin 分析。
-- 驱动分析模板、批处理、Peak Analyzer、PCA 和经过参数校验的信号处理 X-Function。
+- 读取标准化报表结果，检查或重算已有分析操作，并驱动分析模板、批处理和 Peak Analyzer。
+- 运行 PCA、聚类、判别分析、偏最小二乘回归、非参数检验、生存分析，以及经过参数校验的信号处理 X-Function。
+- 合并图页、创建 Layout 页面、联动面板坐标轴、复制图层尺度并提取指定面板，完成出版级多面板组图。
 - 通过本地 Origin GUI bridge 导出图形和项目。
 - 将画好的图保存为可复用的用户模板，之后可搜索匹配并套用到同类型图形（见 [docs/tools.md](docs/tools.md#user-template-library)）。
 
