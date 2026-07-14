@@ -98,7 +98,9 @@ def query_knowledge(
 
     if collection is not None:
         collection = _normalize_collection(collection)
-    entries = _entries(official_docs_version=version if collection == "official_docs" else None)
+    entries: Sequence[KnowledgeEntry] = _entries(
+        official_docs_version=version if collection == "official_docs" else None
+    )
     if collection is not None:
         entries = [entry for entry in entries if entry.collection == collection]
     if version:
