@@ -65,6 +65,14 @@ an external hidden helper to send a bridge `shutdown` request with
 `release_origin=true`, so it can stop the foreground bridge even when Origin's
 embedded Python is busy serving requests.
 
+The two entries are intentional. An earlier single-button toggle tried to run
+the stop path re-entrantly inside the same Origin Python context. That is not
+reliable while the foreground cooperative serve loop owns the script engine.
+A synchronous external stop helper would block the same thread that must answer
+its shutdown request, while an asynchronous helper cannot reliably return a
+start/stop decision to the original click. Keeping Start in Origin and Stop in a
+separate asynchronous helper avoids both failure modes.
+
 ## Quick Setup With Custom.ogs
 
 Origin's Standard toolbar includes a Custom Routine button that runs LabTalk

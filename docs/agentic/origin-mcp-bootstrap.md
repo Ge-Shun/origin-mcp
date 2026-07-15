@@ -151,11 +151,15 @@ Get-CimInstance Win32_Process |
 
 [USER ACTION REQUIRED]
 
-For daily use, build and install the Origin OPX from `docs/origin-ui-buttons.md`,
-then click the **Origin MCP Bridge** App icon inside Origin as a single bridge
-toggle.
-If the OPX background bridge does not process requests on that installation,
-fall back to the manual foreground startup below.
+For daily use, build and install both Origin OPX Apps from
+`docs/origin-ui-buttons.md`. Click **Origin MCP Bridge Start** to run the bridge
+in reliable foreground cooperative mode, and click **Origin MCP Bridge Stop**
+to request shutdown through its separate hidden helper process. These are two
+App entries rather than a single toggle because the foreground bridge keeps
+Origin's embedded Python script engine busy; an in-process re-entrant stop click
+is not reliable across Origin installations.
+If the Start App does not process requests on that installation, fall back to
+the manual foreground startup below.
 
 For manual startup or troubleshooting, in Origin/OriginPro:
 

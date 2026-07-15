@@ -236,6 +236,19 @@ host and port yet: start `addon.py` inside Origin, then retry `origin_doctor`.
 Search the knowledge base for `bridge diagnostics` when you need the canonical
 troubleshooting checklist.
 
+Before an MCP client is connected, the equivalent command-line checks are:
+
+```powershell
+origin-mcp status
+origin-mcp doctor --ping-origin
+```
+
+Add `--json` for machine-readable output. The commands return `0` when healthy,
+`1` when the bridge is not running, `2` when startup failed or the live Origin
+check is degraded, and `3` when diagnostics could not be completed. The status
+command only probes the local bridge; `doctor --ping-origin` may bring the
+Origin window forward while checking automation.
+
 ## High-Level Bridge Workflows
 
 The bridge can run file-to-figure workflows without `originpro` calls in the MCP
