@@ -11,98 +11,31 @@
 [English](README.md)
 
 `origin-mcp` 是一个本地 Model Context Protocol (MCP) 服务器，用于让 AI
-助手在 Windows 上控制 Origin/OriginPro。它通过 OriginLab 的 Python 自动化接口连接
-Origin，并提供数据导入、工作表编辑、绘图与图形美化、Origin 分析、图形导出以及
-Origin 生命周期管理等工具。
-
-本项目目前仍处于测试阶段。欢迎在真实 Origin 工作流中试用，提交 issue、改进建议或
-pull request。
+助手在 Windows 上控制 Origin/OriginPro。经过鉴权的本地 bridge 运行在 Origin 内部，
+确保自动化始终位于 UI 线程。本项目仍处于测试阶段，欢迎真实工作流反馈和贡献。
 
 ## 功能亮点
 
-- 将 CSV、TSV、TXT、DAT、XLS 和 Excel 数据导入 Origin 工作表。
-- 读取、写入、排序、清空和导出工作表数据。
-- 管理 Data Connector 的更新、刷新和断开流程，以及矩阵、图像页、Notes 窗口和
-  Project Explorer 文件夹。
-- 创建并调整常见 2D、3D、等高线、统计和专用图形。
-- 运行拟合、平滑、积分、寻峰、描述统计、插值、归一化、t 检验、FFT/IFFT 和相关分析等 Origin 分析。
-- 读取标准化报表结果，检查或重算已有分析操作，并驱动分析模板、批处理和 Peak Analyzer。
-- 运行 PCA、聚类、判别分析、偏最小二乘回归、非参数检验、生存分析，以及经过参数校验的信号处理 X-Function。
-- 合并图页、创建 Layout 页面、联动面板坐标轴、复制图层尺度并提取指定面板，完成出版级多面板组图。
-- 通过本地 Origin GUI bridge 导出图形和项目。
-- 将画好的图保存为可复用的用户模板，之后可搜索匹配并套用到同类型图形（见 [docs/tools.md](docs/tools.md#user-template-library)）。
+- 导入、编辑、转换和导出工作表、矩阵、图像及 Data Connector 数据。
+- 创建并调整 2D、3D、等高线、统计和专用图形。
+- 运行拟合、信号处理、统计、Peak Analyzer 和批处理工作流。
+- 管理项目、文件夹、Notes、模板、分析操作与多面板布局。
+- 使用可复用模板、调色板和可选的
+  [Nature 风格预设](docs/tools.md#palette-catalog)制作出版级图形。
 
-## Nature 风格图形
+## 快速开始
 
-默认情况下，origin-mcp 会保留当前 Origin 图形模板自带的样式。如果希望得到更接近
-论文插图的清爽科研图，可以直接告诉 AI 助手“使用 Nature 格式”来创建或美化图形。
-该预设会应用色盲友好的调色板、更醒目的科研图线条、Arial 字体以及更简洁的图例。
+需要 Windows、已授权的 Origin/OriginPro，以及供 MCP server 使用的 Python 3.10+。
+当前目标版本为 Origin 2026/2026b；bridge 使用 Origin 自带的 Python。
 
-如果需要更细的控制，也可以让助手列出可用调色板。更详细的调色板和样式控制见
-[docs/tools.md](docs/tools.md#palette-catalog)。
-
-## 环境要求
-
-- Windows
-- 已安装并授权的 Origin 或 OriginPro
-- Origin/OriginPro 2026 与 2026b 是当前现代目标版本；内置官方文档索引和能力基线
-  已对齐 2026b（10.35）
-- Origin 内嵌 Python 及其预装的 `originpro` 包
-
-### Python 版本支持
-
-`origin-mcp` 以两个协作进程运行，受支持的 Python 版本按角色区分：
-
-- **MCP server core**（`python -m origin_mcp` 进程，仅通过本机回环与 bridge
-  通信）：Python 3.10+。CI 会在 Windows 上测试这一受支持的版本范围。
-- **Origin bridge**（`addon.py`）：运行在 Origin 自带的内嵌 Python 中，版本由你
-  安装的 Origin 决定，无需自行选择。
-
-本项目不把外部 `originpro` 自动化作为受支持的 MCP backend。请在 Origin 内嵌
-Python 中启动 bridge，再让 MCP server 通过本机回环连接它。
-
-## 安装
-
-从 PyPI 安装 MCP server 核心：
+1. 安装 MCP server：
 
 ```bash
 pip install origin-mcp
 ```
 
-这就是 MCP server 需要的全部：它以 `python -m origin_mcp` 运行，仅通过本机回环
-与 bridge 通信。bridge 运行在 Origin 自带的内嵌 Python 中，并自行安装依赖（见下文
-「在 Origin 内启动 bridge」一节）。
-
-可选的 `origin-mcp[origin]` extra 会把 `originpro` 和 `pywin32` 装进同一环境；
-标准的 bridge 流程并不需要它。若想基于源码使用，在仓库根目录运行 `pip install -e .`。
-
-## 开发检查
-
-本地快速检查可使用下面的入口；它会使用隔离缓存目录，避免 `.ruff_cache` /
-`.mypy_cache` 被锁定或权限异常时误报失败：
-
-```bash
-python scripts/dev_check.py
-```
-
-需要同时跑测试时：
-
-```bash
-python scripts/dev_check.py --tests
-```
-
-## Agentic Setup
-
-把下面这段发给你的 AI agent，让它按步骤自配置：
-
-```text
-Fetch and follow this bootstrap guide end to end:
-https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md
-```
-
-## MCP 配置
-
-MCP 客户端配置示例：
+2. 添加 MCP 客户端配置；如果 `python` 指向其他环境，请改用对应 `python.exe` 的
+   绝对路径：
 
 ```json
 {
@@ -115,84 +48,45 @@ MCP 客户端配置示例：
 }
 ```
 
-如果 `python` 不是已安装 `origin-mcp` 的 Python 3.10+ 解释器，请改用该解释器的
-`python.exe` 绝对路径。更多示例见 [docs/mcp-config.md](docs/mcp-config.md)。
-
-## 在 Origin 内启动 bridge
-
-bridge 跑在 Origin 自带的 Python 里，这样 `originpro` 始终在 Origin 的 UI 线程上
-执行。无需任何额外配置，每个 Origin 会话启动一次即可：
-
-**Origin App（推荐日常使用）。** 安装 Python 包后，先生成两个自包含的 bridge App：
+3. 安装 Origin Start/Stop App，完成简短的
+   [注册步骤](docs/origin-ui-buttons.md)，然后在每次 Origin 会话中点击一次
+   **Origin MCP Bridge Start**：
 
 ```powershell
 origin-mcp install-origin-app --force
 ```
 
-然后按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md) 中的简短注册步骤，在 Origin
-里打包并安装命令生成的两个 OPX 文件。之后在 Apps 库里点
-**Origin MCP Bridge Start** 启动 bridge，点 **Origin MCP Bridge Stop** 关闭。Start App
-使用可靠的前台协作模式；Stop App 通过独立的隐藏辅助进程发送停止请求，因此需要保留为
-两个 App 入口，而不是单一切换按钮。
-
-**Python Console（临时使用或排查问题）。** 打开 Origin 的 **Python Console**，粘贴这一行
-（把路径换成你的项目路径）：
-
-```python
-import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
-```
-
-看到 `Bridge is running inside Origin.` 提示框即表示启动成功，使用工具期间保持该控制台
-运行。要关闭时，让 MCP 助手关闭 bridge（它会调用 `origin_bridge_shutdown`），或双击
-`scripts\stop-bridge.cmd`（或运行 `python scripts\stop_bridge.py`）。两种方式都不会
-关闭 Origin。
-
-若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
-该文档也说明了手动启动 `addon.py` 时常见的 Windows 路径转义和 LabTalk 命令解析问题。
-
-## 检查 bridge 状态
-
-只检查 bridge 是否运行，不驱动 Origin：
+4. 验证 bridge 和 Origin 实时连接：
 
 ```powershell
 origin-mcp status
-```
-
-需要完整诊断时，可额外检查与 Origin 的实时连接：
-
-```powershell
 origin-mcp doctor --ping-origin
 ```
 
-两个命令都支持 `--json`，便于脚本和 Agent 读取。退出码固定为：`0` 表示健康，`1`
-表示未运行，`2` 表示正在启动、功能降级或启动失败，`3` 表示诊断命令自身无法完成。
-`python -m origin_mcp status` 和 `python -m origin_mcp doctor` 具有相同行为；两个入口在
-不带参数时仍会通过 stdio 启动 MCP server。
+两个诊断命令都支持 `--json`。手动启动和故障排查见
+[bridge 指南](docs/origin-bridge.md)。
 
-## 错误自动恢复指引
+## 文档
 
-工具调用失败时，响应除稳定的 `error_code` 外，还会返回 `recoverable` 和按执行顺序排列的
-`next_actions`。Agent 可按这些步骤自动检查 bridge、修正参数或缩小读取范围；只有
-`recoverable=true` 且确认原操作可安全重复时才应重试。成功响应不会包含这两个字段。
+- [MCP 客户端配置](docs/mcp-config.md)
+- [Origin Start/Stop App](docs/origin-ui-buttons.md)
+- [Bridge 安装与故障排查](docs/origin-bridge.md)
+- [工具、配置档、绘图样式与错误恢复](docs/tools.md)
+- [Agent 自动配置指南](docs/agentic/origin-mcp-bootstrap.md)
 
-例如 bridge 未启动时，`next_actions` 会提示启动 Origin MCP Bridge Start App，并依次运行
-`origin-mcp status` 与 `origin-mcp doctor --ping-origin` 验证恢复；遇到不支持的 Origin
-版本或功能时，`recoverable=false`，指引会建议改用兼容流程或升级环境。
+## 开发
+
+从源码安装可运行 `pip install -e .`，完整本地检查使用：
+
+```bash
+python scripts/dev_check.py --tests
+```
 
 ## 安全性
 
-bridge 只监听 `127.0.0.1`，并默认用每次会话自动生成的 token 验证本机请求，正常使用
-无需额外安全配置。
-
-请把该 token 当作凭据对待：任何持有它的本机进程都能用完整工具集驱动 Origin，包括通过
-`origin_run_labtalk` 执行任意 LabTalk 代码。token 每次会话生成，写入当前用户临时目录下
-属主可访问的文件（Windows 上为 `%TEMP%/origin-mcp/bridge.json`）；在标准单用户机器上，
-该目录已由操作系统权限保护。但若你把 `TEMP` 或 `ORIGIN_MCP_BRIDGE_HANDSHAKE` 重定向到
-其他本机用户可读的目录，token（以及对 Origin 的控制权）就会暴露给他们。设置
-`ORIGIN_MCP_BRIDGE_NO_AUTH` 会彻底取消 token 边界，仅在你完全信任本机所有进程时使用。
-
-如需限制工具可读写的文件范围，可设置 `ORIGIN_MCP_ALLOWED_ROOTS` 为允许访问的目录。
-除非你完全信任本机所有进程，否则不要关闭 bridge 鉴权。
+bridge 只监听 `127.0.0.1`，默认使用每次会话生成的 token 鉴权。请把 token 当作凭据，
+将握手文件保存在当前用户私有目录；除非信任所有本机进程，否则不要设置
+`ORIGIN_MCP_BRIDGE_NO_AUTH`。可通过 `ORIGIN_MCP_ALLOWED_ROOTS` 限制工具访问的文件范围。
 
 ## 许可证
 
