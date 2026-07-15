@@ -4,7 +4,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
 [![Downloads](https://static.pepy.tech/badge/origin-mcp)](https://pepy.tech/projects/origin-mcp)
-[![Python versions](https://img.shields.io/pypi/pyversions/origin-mcp)](https://pypi.org/project/origin-mcp/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://pypi.org/project/origin-mcp/)
 [![origin-mcp MCP server](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -67,8 +67,7 @@ style controls.
 versions differ by role:
 
 - **MCP server core** (the `python -m origin_mcp` process, which only talks to
-  the bridge over localhost): Python 3.10+. CI tests this core on Windows with
-  Python 3.10, 3.11, 3.12, 3.13, and 3.14.
+  the bridge over localhost): Python 3.10+. CI tests this supported range on Windows.
 - **Origin bridge** (`addon.py`): runs inside Origin's own embedded Python, so
   its version is whatever your Origin install ships — there is nothing to pick.
 

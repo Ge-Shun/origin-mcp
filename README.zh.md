@@ -4,7 +4,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
 [![Downloads](https://static.pepy.tech/badge/origin-mcp)](https://pepy.tech/projects/origin-mcp)
-[![Python versions](https://img.shields.io/pypi/pyversions/origin-mcp)](https://pypi.org/project/origin-mcp/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://pypi.org/project/origin-mcp/)
 [![origin-mcp MCP server](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Ge-Shun/origin-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -54,8 +54,7 @@ pull request。
 `origin-mcp` 以两个协作进程运行，受支持的 Python 版本按角色区分：
 
 - **MCP server core**（`python -m origin_mcp` 进程，仅通过本机回环与 bridge
-  通信）：Python 3.10+。CI 会在 Windows 上使用 Python 3.10、3.11、3.12、3.13
-  和 3.14 测试该核心进程。
+  通信）：Python 3.10+。CI 会在 Windows 上测试这一受支持的版本范围。
 - **Origin bridge**（`addon.py`）：运行在 Origin 自带的内嵌 Python 中，版本由你
   安装的 Origin 决定，无需自行选择。
 
