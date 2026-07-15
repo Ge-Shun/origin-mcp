@@ -170,6 +170,16 @@ origin-mcp doctor --ping-origin
 `python -m origin_mcp status` 和 `python -m origin_mcp doctor` 具有相同行为；两个入口在
 不带参数时仍会通过 stdio 启动 MCP server。
 
+## 错误自动恢复指引
+
+工具调用失败时，响应除稳定的 `error_code` 外，还会返回 `recoverable` 和按执行顺序排列的
+`next_actions`。Agent 可按这些步骤自动检查 bridge、修正参数或缩小读取范围；只有
+`recoverable=true` 且确认原操作可安全重复时才应重试。成功响应不会包含这两个字段。
+
+例如 bridge 未启动时，`next_actions` 会提示启动 Origin MCP Bridge Start App，并依次运行
+`origin-mcp status` 与 `origin-mcp doctor --ping-origin` 验证恢复；遇到不支持的 Origin
+版本或功能时，`recoverable=false`，指引会建议改用兼容流程或升级环境。
+
 ## 安全性
 
 bridge 只监听 `127.0.0.1`，并默认用每次会话自动生成的 token 验证本机请求，正常使用

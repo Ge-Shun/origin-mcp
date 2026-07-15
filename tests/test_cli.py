@@ -17,6 +17,7 @@ from origin_mcp.diagnostics import (
     classify_diagnostics,
     status_file_candidates,
 )
+from origin_mcp.errors import OriginBridgeError
 
 
 def diagnostic_report(
@@ -136,6 +137,25 @@ def test_diagnostics_command_failure_has_stable_exit_code(
         "error_type": "RuntimeError",
         "message": "bad configuration",
     }
+
+
+def test_collect_diagnostics_reuses_structured_recovery_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        diagnostics,
+        "read_bridge_status",
+        lambda _path=None: {"exists": False, "readable": False, "data": None},
+    )
+    monkeypatch.setattr(diagnostics, "active_log_path", lambda: None)
+
+    def unavailable(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise OriginBridgeError("connection refused", "origin_bridge_unavailable")
+
+    report = diagnostics.collect_diagnostics(request_fn=unavailable)
+
+    assert report["next_actions"] == report["recommendations"]
+    assert any("Start App" in action for action in report["next_actions"])
 
 
 def test_status_candidates_include_installed_start_app(

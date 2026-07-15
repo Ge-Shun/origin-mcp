@@ -13,6 +13,7 @@ from .bridge_client import OriginBridgeConfig, request_bridge
 from .bridge_handshake import read_handshake
 from .errors import OriginBridgeError
 from .logging_config import active_log_path, tail_log
+from .recovery import recovery_guidance
 
 EXIT_HEALTHY = 0
 EXIT_NOT_RUNNING = 1
@@ -239,10 +240,7 @@ def collect_diagnostics(
             "error_code": exc.error_code,
             "message": str(exc),
         }
-        recommendations.append(
-            "Start Origin and click the Origin MCP Bridge Start App. For manual startup, "
-            "open Origin's Python Console and run the root addon.py."
-        )
+        recommendations.extend(recovery_guidance(exc.error_code).next_actions)
         recommendations.append(
             "If addon.py is already running, compare ORIGIN_MCP_BRIDGE_HOST and "
             "ORIGIN_MCP_BRIDGE_PORT with the status file."
@@ -267,10 +265,7 @@ def collect_diagnostics(
                 "error_code": exc.error_code,
                 "message": str(exc),
             }
-            recommendations.append(
-                "The bridge responded, but Origin automation failed. Check the live Origin "
-                "session and the status file last_error field."
-            )
+            recommendations.extend(recovery_guidance(exc.error_code).next_actions)
 
     status_data = status_file.get("data")
     if isinstance(status_data, dict) and status_data.get("last_error"):
@@ -310,6 +305,7 @@ def collect_diagnostics(
     if config_metadata:
         config_info.update(config_metadata)
 
+    next_actions = _dedupe_strings(recommendations)
     return {
         "config": config_info,
         "status_file": status_file,
@@ -319,7 +315,8 @@ def collect_diagnostics(
         "bridge": bridge_check,
         "origin": origin_check,
         "log": log_info,
-        "recommendations": _dedupe_strings(recommendations),
+        "recommendations": next_actions,
+        "next_actions": next_actions,
     }
 
 

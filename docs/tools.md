@@ -8,8 +8,28 @@ Tool failures return `ok=false`, a human-readable `message`, the Python
 `error_type`, and a stable `error_code` such as `worksheet_not_found`,
 `graph_not_found`, `file_not_found`, `path_not_allowed`,
 `unsupported_origin_feature`, `unsupported_analysis_type`, or
-`origin_dependency_unavailable`. Clients should branch on `error_code` instead
-of parsing the message text.
+`origin_dependency_unavailable`. They also include a `recoverable` boolean and
+an ordered `next_actions` list with concrete recovery steps. Clients should
+branch on `error_code`, present or execute safe `next_actions`, and retry only
+when `recoverable=true` and the failed operation is safe to repeat. Successful
+responses omit both recovery fields.
+
+```json
+{
+  "ok": false,
+  "message": "Worksheet not found: [Book1]Data",
+  "error_code": "worksheet_not_found",
+  "recoverable": true,
+  "next_actions": [
+    "Inspect the current Origin project objects and correct the referenced name or ID.",
+    "Create or import the missing object before retrying the operation."
+  ],
+  "data": {
+    "error_type": "OriginOperationError",
+    "error_code": "worksheet_not_found"
+  }
+}
+```
 
 ## Tool Profiles
 

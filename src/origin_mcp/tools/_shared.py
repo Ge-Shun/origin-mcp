@@ -15,6 +15,7 @@ from origin_mcp.errors import (
 )
 from origin_mcp.logging_config import get_tools_logger
 from origin_mcp.models import ToolResult
+from origin_mcp.recovery import recovery_guidance
 
 mcp = FastMCP(
     "origin-mcp",
@@ -514,10 +515,13 @@ def _json_safe(value: Any) -> Any:
 
 def _error(exc: Exception) -> dict[str, Any]:
     error_code = _error_code(exc)
+    guidance = recovery_guidance(error_code)
     return ToolResult(
         ok=False,
         message=str(exc),
         error_code=error_code,
+        recoverable=guidance.recoverable,
+        next_actions=list(guidance.next_actions),
         data={"error_type": type(exc).__name__, "error_code": error_code},
     ).model_dump(exclude_none=True)
 

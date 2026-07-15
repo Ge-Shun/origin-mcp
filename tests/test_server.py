@@ -17,7 +17,7 @@ import origin_mcp.tools.plotting_plot_ids as plotting_plot_ids_tools
 from origin_mcp.errors import OriginDependencyError, OriginOperationError
 from origin_mcp.models import PlotKind
 from origin_mcp.origin_client import GraphRef, WorksheetRef
-from origin_mcp.server import _error, _json_safe
+from origin_mcp.server import _error, _json_safe, _ok
 
 
 class FakeGraphClient:
@@ -50,6 +50,12 @@ def test_json_safe_replaces_non_finite_floats() -> None:
         "nested": [None, None, {"value": 2.0}],
     }
     assert math.isnan(data["bad"])
+
+
+def test_success_response_omits_error_recovery_fields() -> None:
+    result = _ok("done", value=1)
+
+    assert result == {"ok": True, "message": "done", "data": {"value": 1}}
 
 
 def test_default_mcp_tool_profile_is_compact() -> None:
@@ -340,6 +346,8 @@ def test_error_response_includes_stable_error_code() -> None:
 
     assert result["ok"] is False
     assert result["error_code"] == "worksheet_not_found"
+    assert result["recoverable"] is True
+    assert result["next_actions"]
     assert result["data"]["error_type"] == "OriginOperationError"
     assert result["data"]["error_code"] == "worksheet_not_found"
 
@@ -348,6 +356,8 @@ def test_error_response_codes_dependency_failures() -> None:
     result = _error(OriginDependencyError("The 'originpro' package is not available."))
 
     assert result["error_code"] == "origin_dependency_unavailable"
+    assert result["recoverable"] is True
+    assert any("doctor" in action for action in result["next_actions"])
 
 
 def test_error_response_codes_unsupported_analysis() -> None:
@@ -359,6 +369,8 @@ def test_error_response_codes_unsupported_analysis() -> None:
     )
 
     assert result["error_code"] == "unsupported_analysis_type"
+    assert result["recoverable"] is True
+    assert any("supported analysis type" in action for action in result["next_actions"])
 
 
 def test_origin_run_analysis_delegates_linear_fit_to_structured_api(

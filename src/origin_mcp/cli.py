@@ -180,7 +180,7 @@ def _write_human_report(
         else:
             print("Log: disabled", file=output)
 
-    recommendations = report.get("recommendations")
+    recommendations = report.get("next_actions", report.get("recommendations"))
     if isinstance(recommendations, list) and recommendations:
         print("Next actions:", file=output)
         limit = None if detailed else 3
