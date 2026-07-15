@@ -166,6 +166,26 @@ If a package is missing or the bridge will not start, see
 [docs/origin-bridge.md](docs/origin-bridge.md). That guide also covers common
 Windows path and LabTalk launch pitfalls when starting `addon.py` manually.
 
+## Check Bridge Status
+
+Check the bridge without driving Origin:
+
+```powershell
+origin-mcp status
+```
+
+For a fuller report, optionally including a live Origin connection check:
+
+```powershell
+origin-mcp doctor --ping-origin
+```
+
+Both commands accept `--json` for scripts and agents. Their exit codes are `0`
+for healthy, `1` for not running, `2` for starting/degraded/failed, and `3` when
+the diagnostic command itself cannot complete. `python -m origin_mcp status`
+and `python -m origin_mcp doctor` are equivalent; running either entry point
+without arguments still starts the MCP server over stdio.
+
 ## Security
 
 The bridge listens only on `127.0.0.1` and authenticates local requests by

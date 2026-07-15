@@ -1,5 +1,7 @@
 # origin-mcp
 
+![origin-mcp cover](docs/assets/github-readme-cover.png)
+
 [![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
 [![Downloads](https://static.pepy.tech/badge/origin-mcp)](https://pepy.tech/projects/origin-mcp)
 [![Python versions](https://img.shields.io/pypi/pyversions/origin-mcp)](https://pypi.org/project/origin-mcp/)
@@ -122,9 +124,17 @@ MCP 客户端配置示例：
 bridge 跑在 Origin 自带的 Python 里，这样 `originpro` 始终在 Origin 的 UI 线程上
 执行。无需任何额外配置，每个 Origin 会话启动一次即可：
 
-**Origin App（推荐日常使用）。** 按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md)
-一次性生成并安装两个 bridge App。之后在 Apps 库里点 **Origin MCP Bridge Start** 启动
-bridge，点 **Origin MCP Bridge Stop** 关闭。
+**Origin App（推荐日常使用）。** 安装 Python 包后，先生成两个自包含的 bridge App：
+
+```powershell
+origin-mcp install-origin-app --force
+```
+
+然后按 [docs/origin-ui-buttons.md](docs/origin-ui-buttons.md) 中的简短注册步骤，在 Origin
+里打包并安装命令生成的两个 OPX 文件。之后在 Apps 库里点
+**Origin MCP Bridge Start** 启动 bridge，点 **Origin MCP Bridge Stop** 关闭。Start App
+使用可靠的前台协作模式；Stop App 通过独立的隐藏辅助进程发送停止请求，因此需要保留为
+两个 App 入口，而不是单一切换按钮。
 
 **Python Console（临时使用或排查问题）。** 打开 Origin 的 **Python Console**，粘贴这一行
 （把路径换成你的项目路径）：
@@ -140,6 +150,25 @@ import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main
 
 若缺少依赖包或 bridge 起不来，请参阅 [docs/origin-bridge.md](docs/origin-bridge.md)。
 该文档也说明了手动启动 `addon.py` 时常见的 Windows 路径转义和 LabTalk 命令解析问题。
+
+## 检查 bridge 状态
+
+只检查 bridge 是否运行，不驱动 Origin：
+
+```powershell
+origin-mcp status
+```
+
+需要完整诊断时，可额外检查与 Origin 的实时连接：
+
+```powershell
+origin-mcp doctor --ping-origin
+```
+
+两个命令都支持 `--json`，便于脚本和 Agent 读取。退出码固定为：`0` 表示健康，`1`
+表示未运行，`2` 表示正在启动、功能降级或启动失败，`3` 表示诊断命令自身无法完成。
+`python -m origin_mcp status` 和 `python -m origin_mcp doctor` 具有相同行为；两个入口在
+不带参数时仍会通过 stdio 启动 MCP server。
 
 ## 安全性
 

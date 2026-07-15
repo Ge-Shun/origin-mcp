@@ -12,6 +12,7 @@ import pytest
 
 import origin_mcp.bridge as bridge
 import origin_mcp.bridge_client as bridge_client_module
+import origin_mcp.diagnostics as diagnostics
 import origin_mcp.logging_config as bridge_logging
 import origin_mcp.server as mcp_server
 import origin_mcp.tools.bridge as bridge_tools
@@ -210,7 +211,7 @@ def test_doctor_prefers_status_path_published_in_handshake(
 ) -> None:
     current = tmp_path / "current-status.json"
     current.write_text('{"running": true, "message": "current"}', encoding="utf-8")
-    monkeypatch.setattr(bridge_tools, "read_handshake", lambda: {"status_path": str(current)})
+    monkeypatch.setattr(diagnostics, "read_handshake", lambda: {"status_path": str(current)})
 
     result = bridge_tools._read_bridge_status()
 

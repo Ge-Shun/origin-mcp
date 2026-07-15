@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import Any
 
-from origin_mcp.bridge_client import OriginBridgeConfig, request_bridge
-from origin_mcp.bridge_handshake import read_handshake
-from origin_mcp.errors import OriginBridgeError
-from origin_mcp.logging_config import active_log_path, tail_log
+from origin_mcp.bridge_client import request_bridge
+from origin_mcp.diagnostics import collect_diagnostics, read_bridge_status
 
 from ._shared import (
     COMPACT_TOOL_NAMES,
@@ -20,135 +15,9 @@ from ._shared import (
     client,
 )
 
-
-def _dedupe_strings(values: list[str]) -> list[str]:
-    unique: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        if value not in seen:
-            seen.add(value)
-            unique.append(value)
-    return unique
-
-
-def _status_file_candidates(status_path: str | None = None) -> list[Path]:
-    candidates: list[Path] = []
-    handshake = read_handshake() or {}
-    for value in (
-        status_path,
-        os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
-        handshake.get("status_path"),
-    ):
-        if value:
-            candidates.append(Path(value).expanduser())
-    candidates.extend(
-        [
-            Path.cwd() / "origin-bridge.status.txt",
-            Path(__file__).resolve().parents[3] / "origin-bridge.status.txt",
-        ]
-    )
-
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        key = os.path.normcase(str(resolved))
-        if key not in seen:
-            seen.add(key)
-            unique.append(resolved)
-    return unique
-
-
-def _read_bridge_status(status_path: str | None = None) -> dict[str, Any]:
-    candidates = _status_file_candidates(status_path)
-    for candidate in candidates:
-        if not candidate.exists():
-            continue
-        try:
-            text = candidate.read_text(encoding="utf-8")
-        except OSError as exc:
-            return {
-                "path": str(candidate),
-                "exists": True,
-                "readable": False,
-                "error": str(exc),
-                "candidates": [str(path) for path in candidates],
-            }
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            data = None
-        return {
-            "path": str(candidate),
-            "exists": True,
-            "readable": True,
-            "format": "json" if isinstance(data, dict) else "text",
-            "data": data if isinstance(data, dict) else None,
-            "raw_preview": None if isinstance(data, dict) else text[:1000],
-            "candidates": [str(path) for path in candidates],
-        }
-    return {
-        "path": str(candidates[0]) if candidates else None,
-        "exists": False,
-        "readable": False,
-        "candidates": [str(path) for path in candidates],
-    }
-
-
-def _status_runtime_recommendations(status_data: dict[str, Any]) -> list[str]:
-    probe = status_data.get("runtime_probe")
-    if not isinstance(probe, dict):
-        return []
-
-    recommendations: list[str] = []
-    if probe.get("inside_origin", probe.get("likely_origin_embedded_python")) is False:
-        recommendations.append(
-            "The status file does not look like it came from Origin's embedded Python. "
-            "Start addon.py from Origin's Python Console or the Origin MCP Bridge Start App, "
-            "not from a normal terminal Python."
-        )
-    inside_origin = probe.get("inside_origin", probe.get("likely_origin_embedded_python")) is True
-    embedded_api = (
-        probe.get(
-            "embedded_api_available",
-            probe.get("origin_host_api_available"),
-        )
-        is True
-    )
-    if probe.get("originpro_available") is False and not (inside_origin and embedded_api):
-        recommendations.append(
-            "originpro was not importable when addon.py wrote the status file. Start the "
-            "bridge inside Origin, or allow addon.py to install missing runtime dependencies."
-        )
-    return recommendations
-
-
-def _status_diagnostics(status_data: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(status_data, dict):
-        return {}
-    probe = status_data.get("runtime_probe")
-    probe_data = probe if isinstance(probe, dict) else {}
-    return {
-        "message": status_data.get("message"),
-        "running": status_data.get("running"),
-        "install_phase": status_data.get("install_phase"),
-        "last_successful_start": status_data.get("last_successful_start"),
-        "last_error": status_data.get("last_error"),
-        "last_error_type": status_data.get("last_error_type"),
-        "inside_origin": probe_data.get(
-            "inside_origin",
-            probe_data.get("likely_origin_embedded_python"),
-        ),
-        "embedded_api_available": probe_data.get(
-            "embedded_api_available",
-            probe_data.get("origin_host_api_available"),
-        ),
-        "originpro_available": probe_data.get("originpro_available"),
-        "originpro_source": probe_data.get("originpro_source"),
-        "python_executable": status_data.get("python_executable"),
-        "python_version": status_data.get("python_version"),
-        "status_updated_at": status_data.get("updated_at"),
-    }
+# Backward-compatible private alias for callers/tests that inspected the old
+# tool-local helper before diagnostics were shared with the CLI.
+_read_bridge_status = read_bridge_status
 
 
 def _bridge_call(
@@ -258,87 +127,15 @@ def origin_doctor(
     """Diagnose Origin bridge configuration, status file, and connectivity."""
 
     def run() -> dict[str, Any]:
-        config = OriginBridgeConfig.from_env(host=host, port=port, token=token, timeout=timeout)
-        status_file = _read_bridge_status(status_path)
-        bridge_check: dict[str, Any] = {"ok": False}
-        origin_check: dict[str, Any] | None = None
-        recommendations: list[str] = []
-
-        try:
-            response = request_bridge(
-                "ping",
-                host=config.host,
-                port=config.port,
-                token=config.token,
-                timeout=config.timeout,
-            )
-            bridge_check = {"ok": True, "response": response}
-        except OriginBridgeError as exc:
-            bridge_check = {
-                "ok": False,
-                "error_code": exc.error_code,
-                "message": str(exc),
-            }
-            recommendations.append(
-                "Start Origin, open the Python Console, and run the root addon.py."
-            )
-            recommendations.append(
-                "If addon.py is already running, compare ORIGIN_MCP_BRIDGE_HOST and "
-                "ORIGIN_MCP_BRIDGE_PORT with the status file."
-            )
-
-        if ping_origin and bridge_check["ok"]:
-            try:
-                origin_check = {
-                    "ok": True,
-                    "response": request_bridge(
-                        "origin_ping",
-                        {"show": True},
-                        host=config.host,
-                        port=config.port,
-                        token=config.token,
-                        timeout=max(float(config.timeout), 10.0),
-                    ),
-                }
-            except OriginBridgeError as exc:
-                origin_check = {
-                    "ok": False,
-                    "error_code": exc.error_code,
-                    "message": str(exc),
-                }
-                recommendations.append(
-                    "The bridge responded, but Origin automation failed. Check the live Origin "
-                    "session and the status file last_error field."
-                )
-
-        status_data = status_file.get("data")
-        if isinstance(status_data, dict) and status_data.get("last_error"):
-            recommendations.append(
-                "addon.py recorded last_error in the status file; inspect that field first."
-            )
-        if isinstance(status_data, dict):
-            recommendations.extend(_status_runtime_recommendations(status_data))
-        if not status_file.get("exists"):
-            recommendations.append(
-                "No bridge status file was found. Set ORIGIN_MCP_BRIDGE_STATUS or start addon.py "
-                "from the checkout root."
-            )
-
-        log_path = active_log_path()
-        log_info: dict[str, Any] = {
-            "path": str(log_path) if log_path else None,
-            "enabled": log_path is not None,
-            "exists": bool(log_path and log_path.exists()),
-            "recent": tail_log(20) if log_path and log_path.exists() else [],
-        }
-
-        return _ok(
-            "Origin doctor completed.",
-            config={
-                "host": config.host,
-                "port": config.port,
-                "timeout": config.timeout,
-                "token_configured": bool(config.token),
+        diagnostics = collect_diagnostics(
+            host=host,
+            port=port,
+            token=token,
+            timeout=timeout,
+            status_path=status_path,
+            ping_origin=ping_origin,
+            request_fn=request_bridge,
+            config_metadata={
                 "tool_profile": _tool_profile(),
                 "compact_tool_count": len(COMPACT_TOOL_NAMES),
                 "compact_tools": sorted(COMPACT_TOOL_NAMES),
@@ -346,23 +143,9 @@ def origin_doctor(
                     name: len(tools) for name, tools in PROFILE_TOOL_NAMES.items()
                 },
                 "full_profile_aliases": ["full", "expert", "all"],
-                "env": {
-                    "ORIGIN_MCP_BRIDGE_HOST": os.environ.get("ORIGIN_MCP_BRIDGE_HOST"),
-                    "ORIGIN_MCP_BRIDGE_PORT": os.environ.get("ORIGIN_MCP_BRIDGE_PORT"),
-                    "ORIGIN_MCP_BRIDGE_TIMEOUT": os.environ.get("ORIGIN_MCP_BRIDGE_TIMEOUT"),
-                    "ORIGIN_MCP_BRIDGE_STATUS": os.environ.get("ORIGIN_MCP_BRIDGE_STATUS"),
-                    "ORIGIN_MCP_BRIDGE_TOKEN": bool(os.environ.get("ORIGIN_MCP_BRIDGE_TOKEN")),
-                    "ORIGIN_MCP_TOOL_PROFILE": os.environ.get("ORIGIN_MCP_TOOL_PROFILE"),
-                    "ORIGIN_MCP_LOG_FILE": os.environ.get("ORIGIN_MCP_LOG_FILE"),
-                },
             },
-            status_file=status_file,
-            status_diagnostics=_status_diagnostics(status_data),
-            bridge=bridge_check,
-            origin=origin_check,
-            log=log_info,
-            recommendations=_dedupe_strings(recommendations),
         )
+        return _ok("Origin doctor completed.", **diagnostics)
 
     return _wrap(run)
 
