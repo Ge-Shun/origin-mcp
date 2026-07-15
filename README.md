@@ -68,6 +68,9 @@ origin-mcp doctor --ping-origin
 Both diagnostic commands support `--json`. For manual bridge startup or
 troubleshooting, see the [bridge guide](docs/origin-bridge.md).
 
+To let an AI agent install and configure origin-mcp, send it this instruction:
+`Fetch and follow https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md end to end.`
+
 ## Documentation
 
 - [MCP client configuration](docs/mcp-config.md)

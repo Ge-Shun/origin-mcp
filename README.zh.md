@@ -66,6 +66,9 @@ origin-mcp doctor --ping-origin
 两个诊断命令都支持 `--json`。手动启动和故障排查见
 [bridge 指南](docs/origin-bridge.md)。
 
+让 AI 自动安装并配置 origin-mcp，可直接把这句话发给它：
+`请完整获取并执行 https://raw.githubusercontent.com/Ge-Shun/origin-mcp/main/docs/agentic/origin-mcp-bootstrap.md 中的全部步骤。`
+
 ## 文档
 
 - [MCP 客户端配置](docs/mcp-config.md)
