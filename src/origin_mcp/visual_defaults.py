@@ -8,8 +8,9 @@ before the corresponding Origin properties are applied.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -18,6 +19,12 @@ from .chart_palette import normalize_chart_type
 from .text_format import humanize_field_name, infer_axis_title, infer_series_labels
 
 DEFAULT_HEATMAP_COLORMAP = "viridis"
+
+_ISO_DATETIME_PATTERN = re.compile(
+    r"^\d{4}[-/]\d{2}[-/]\d{2}"
+    r"(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$"
+)
+_NICE_MANTISSAS = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0)
 
 
 @dataclass(frozen=True)
@@ -198,11 +205,71 @@ def resolve_visual_defaults(
         shared_targets = [target for target in (y_major_ticks, right_target) if target is not None]
         y_major_ticks = min(shared_targets) if shared_targets else None
         y2_major_ticks = y_major_ticks
+    zero_baseline = context.raw_chart_type == "histogram" or (
+        context.chart_type == "bar" and (y_min is None or y_min >= 0)
+    )
+    scalable = context.chart_type not in {"heatmap", "surface", "polar"}
+    x_scale = None
+    x_datetime_scale = None
+    if scalable and context.x_is_datetime:
+        x_datetime_scale = nice_datetime_scale(x_values, x_major_ticks or 6)
+        if x_datetime_scale is not None:
+            x_major_ticks = int(x_datetime_scale["tick_count"])
+    elif scalable and not context.x_is_categorical and x_min is not None and x_major_ticks:
+        x_upper = x_max if x_max is not None else x_min
+        x_span = x_upper - x_min
+        anchor_x_zero = x_min >= 0 and x_min <= max(x_span * 0.05, 1e-12)
+        x_scale = nice_numeric_scale(
+            x_min,
+            x_upper,
+            x_major_ticks,
+            anchor_zero=anchor_x_zero,
+        )
+        x_major_ticks = int(x_scale["tick_count"])
+        x_format, x_decimals = _numeric_format(
+            float(x_scale["from"]),
+            float(x_scale["to"]),
+            float(x_scale["step"]),
+        )
+    y_scale = None
+    if scalable and context.raw_chart_type != "histogram" and y_min is not None and y_major_ticks:
+        y_scale = nice_numeric_scale(
+            y_min,
+            y_max if y_max is not None else y_min,
+            y_major_ticks,
+            include_zero=context.chart_type == "bar",
+            anchor_zero=zero_baseline,
+            strict_tick_count=bool(y2_names_actual),
+        )
+        y_major_ticks = int(y_scale["tick_count"])
+        y_format, y_decimals = _numeric_format(
+            float(y_scale["from"]),
+            float(y_scale["to"]),
+            float(y_scale["step"]),
+        )
+    y2_scale = None
+    if scalable and y2_min is not None and y2_major_ticks:
+        y2_scale = nice_numeric_scale(
+            y2_min,
+            y2_max if y2_max is not None else y2_min,
+            y2_major_ticks,
+            strict_tick_count=True,
+        )
+        y2_major_ticks = int(y2_scale["tick_count"])
+        y2_format, y2_decimals = _numeric_format(
+            float(y2_scale["from"]),
+            float(y2_scale["to"]),
+            float(y2_scale["step"]),
+        )
     x_major_grid, y_major_grid = _grid_defaults(context)
     left_margin = _tick_label_margin(y_min, y_max, y_format, y_decimals)
     y2_margin = _tick_label_margin(y2_min, y2_max, y2_format, y2_decimals)
-    zero_baseline = context.raw_chart_type == "histogram" or (
-        context.chart_type == "bar" and (y_min is None or y_min >= 0)
+    temporal_endpoint_margin = 0.1 if context.x_is_datetime else None
+    left_margin = _max_optional(left_margin, temporal_endpoint_margin)
+    right_margin = _max_optional(
+        decision_value(legend_layout, "right_margin"),
+        y2_margin,
+        temporal_endpoint_margin,
     )
 
     aspect_ratios = {
@@ -249,6 +316,30 @@ def resolve_visual_defaults(
                 y2_title.source if y2_title is not None else "smart_default",
             ),
             "x_tick_rotation": x_rotation,
+            "x_scale": _decision(
+                x_scale,
+                "tidy_numeric_bounds_with_extreme_padding"
+                if x_scale is not None
+                else "non_numeric_or_specialized_x_axis",
+            ),
+            "x_datetime_scale": _decision(
+                x_datetime_scale,
+                "calendar_aligned_ticks_with_extreme_padding"
+                if x_datetime_scale is not None
+                else "non_temporal_x_axis",
+            ),
+            "y_scale": _decision(
+                y_scale,
+                "tidy_numeric_bounds_with_extreme_padding"
+                if y_scale is not None
+                else "preserve_origin_scale_for_specialized_or_derived_axis",
+            ),
+            "y2_scale": _decision(
+                y2_scale,
+                "independent_tidy_bounds_with_shared_tick_count"
+                if y2_scale is not None
+                else "single_or_specialized_y_axis",
+            ),
             "x_number_format": _decision(
                 None if _preserve_specialized_x_axis(context) else x_format,
                 (
@@ -338,19 +429,15 @@ def resolve_visual_defaults(
             "page_width_aspect_ratio": legend_layout["page_width_aspect_ratio"],
             "left_margin": _decision(
                 left_margin,
-                "reserve_space_for_long_y_tick_labels"
+                "reserve_space_for_axis_tick_labels"
                 if left_margin is not None
                 else "default_tick_labels_fit",
             ),
             "right_margin": _decision(
-                _max_optional(
-                    decision_value(legend_layout, "right_margin"),
-                    y2_margin,
-                ),
+                right_margin,
                 (
-                    "reserve_external_legend_or_right_axis_tick_space"
-                    if decision_value(legend_layout, "right_margin") is not None
-                    or y2_margin is not None
+                    "reserve_external_legend_or_axis_tick_space"
+                    if right_margin is not None
                     else "default_tick_labels_fit"
                 ),
             ),
@@ -365,6 +452,179 @@ def decision_value(defaults: dict[str, Any], *path: str) -> Any:
     for part in path:
         current = current[part]
     return current.get("value") if isinstance(current, dict) and "value" in current else current
+
+
+def strict_datetime_values(values: Any) -> list[datetime | None] | None:
+    """Parse an entirely temporal sequence without guessing ambiguous strings.
+
+    ISO-like year-first strings are accepted.  Missing entries are preserved,
+    while any other text makes the whole sequence non-temporal so category
+    labels such as ``Stage 1`` can never be silently converted.
+    """
+
+    try:
+        array = np.asarray(values, dtype=object).reshape(-1)
+    except Exception:
+        return None
+    parsed: list[datetime | None] = []
+    present = 0
+    for value in array:
+        if _is_missing_value(value):
+            parsed.append(None)
+            continue
+        converted = _strict_datetime_value(value)
+        if converted is None:
+            return None
+        parsed.append(converted)
+        present += 1
+    return parsed if present else None
+
+
+def nice_numeric_scale(
+    lower: float,
+    upper: float,
+    tick_count: int,
+    *,
+    include_zero: bool = False,
+    anchor_zero: bool = False,
+    padding_fraction: float = 0.05,
+    strict_tick_count: bool = False,
+) -> dict[str, float | int]:
+    """Return tidy fixed-count bounds that safely contain the data extent."""
+
+    if not (math.isfinite(lower) and math.isfinite(upper)):
+        raise ValueError("Numeric scale bounds must be finite.")
+    if lower > upper:
+        lower, upper = upper, lower
+    tick_count = max(2, int(tick_count))
+    if not strict_tick_count:
+        data_span = max(upper - lower, abs(lower) * 0.1, 1e-12)
+        choices = []
+        for candidate_count in range(max(3, tick_count - 1), tick_count + 3):
+            scale = nice_numeric_scale(
+                lower,
+                upper,
+                candidate_count,
+                include_zero=include_zero,
+                anchor_zero=anchor_zero,
+                padding_fraction=padding_fraction,
+                strict_tick_count=True,
+            )
+            excess = (float(scale["to"]) - float(scale["from"]) - (upper - lower)) / data_span
+            score = excess + 0.02 * abs(candidate_count - tick_count)
+            choices.append((score, candidate_count, scale))
+        return min(choices, key=lambda item: (item[0], item[1]))[2]
+    intervals = tick_count - 1
+    span = upper - lower
+    if span <= 0:
+        half_span = max(abs(lower) * 0.05, 0.5)
+        lower -= half_span
+        upper += half_span
+        span = upper - lower
+
+    padding = max(0.0, float(padding_fraction)) * span
+    padded_lower = lower - padding
+    padded_upper = upper + padding
+    zero_at_lower = (include_zero or anchor_zero) and lower >= 0
+    zero_at_upper = include_zero and upper <= 0
+    if zero_at_lower:
+        padded_lower = 0.0
+    elif zero_at_upper:
+        padded_upper = 0.0
+    elif include_zero:
+        padded_lower = min(padded_lower, 0.0)
+        padded_upper = max(padded_upper, 0.0)
+
+    raw_step = max((padded_upper - padded_lower) / intervals, np.finfo(float).tiny)
+    candidates = _nice_step_candidates(raw_step)
+    best: tuple[float, float, float] | None = None
+    for step in candidates:
+        if zero_at_lower:
+            starts: Any = [(0, step)]
+        elif zero_at_upper:
+            starts = [(-intervals, step)]
+        else:
+            quantum = step / 2.0
+            first = math.ceil(((padded_upper - intervals * step) / quantum) - 1e-12)
+            last = math.floor((padded_lower / quantum) + 1e-12)
+            starts = ((start, quantum) for start in range(first, last + 1))
+        for start, quantum in starts:
+            axis_lower = start * quantum
+            axis_upper = axis_lower + intervals * step
+            tolerance = step * 1e-10
+            if axis_lower > padded_lower + tolerance or axis_upper < padded_upper - tolerance:
+                continue
+            lower_slack = lower - axis_lower
+            upper_slack = axis_upper - upper
+            imbalance = abs(lower_slack - upper_slack) / max(span, step)
+            excess = (axis_upper - axis_lower - span) / max(span, step)
+            score = excess + 0.2 * imbalance + 0.01 * (step / raw_step)
+            candidate = (score, axis_lower, step)
+            if best is None or candidate < best:
+                best = candidate
+        if best is not None and step > raw_step * 2.5:
+            break
+    if best is None:  # Defensive fallback for extreme floating-point ranges.
+        step = candidates[-1]
+        axis_lower = math.floor(padded_lower / step) * step
+    else:
+        _, axis_lower, step = best
+    axis_upper = axis_lower + intervals * step
+    return {
+        "from": _clean_float(axis_lower),
+        "to": _clean_float(axis_upper),
+        "step": _clean_float(step),
+        "tick_count": tick_count,
+    }
+
+
+def nice_datetime_scale(values: Any, tick_count: int = 6) -> dict[str, Any] | None:
+    """Return calendar-aligned temporal ticks with padded, non-clipping bounds."""
+
+    parsed = strict_datetime_values(values)
+    if parsed is None:
+        return None
+    actual = [value for value in parsed if value is not None]
+    if not actual:
+        return None
+    lower = min(actual)
+    upper = max(actual)
+    if lower == upper:
+        lower -= timedelta(hours=12)
+        upper += timedelta(hours=12)
+    target = max(3, int(tick_count))
+    candidates: list[tuple[str, int]] = [
+        *(("second", value) for value in (1, 2, 5, 10, 15, 30)),
+        *(("minute", value) for value in (1, 2, 5, 10, 15, 30)),
+        *(("hour", value) for value in (1, 2, 3, 4, 6, 12)),
+        *(("day", value) for value in (1, 2, 3, 7, 14)),
+        *(("month", value) for value in (1, 2, 3, 6)),
+        *(("year", value) for value in (1, 2, 5, 10, 20, 50, 100)),
+    ]
+    best: tuple[float, list[datetime], str, int] | None = None
+    for unit, amount in candidates:
+        ticks = _calendar_ticks(lower, upper, unit, amount)
+        if len(ticks) < 2 or len(ticks) > 12:
+            continue
+        coverage = (ticks[-1] - ticks[0]).total_seconds()
+        data_span = max((upper - lower).total_seconds(), 1.0)
+        score = abs(len(ticks) - target) + 0.15 * max(0.0, coverage / data_span - 1.0)
+        candidate = (score, ticks, unit, amount)
+        if best is None or candidate[0] < best[0]:
+            best = candidate
+    if best is None:
+        return None
+    _, ticks, unit, amount = best
+    label_type = "time" if (upper - lower) < timedelta(days=1) else "date"
+    return {
+        "from": _datetime_iso(ticks[0]),
+        "to": _datetime_iso(ticks[-1]),
+        "ticks": [_datetime_iso(value) for value in ticks],
+        "tick_count": len(ticks),
+        "unit": unit,
+        "step": amount,
+        "label_type": label_type,
+    }
 
 
 def _decision(value: Any, reason: str, source: str = "smart_default") -> dict[str, Any]:
@@ -423,10 +683,124 @@ def _is_datetime_array(array: np.ndarray) -> bool:
             return True
     except TypeError:
         pass
-    values = [value for value in array if value is not None]
-    return bool(values) and all(
-        isinstance(value, (date, datetime, np.datetime64)) for value in values
+    return strict_datetime_values(array) is not None
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, np.datetime64):
+        return bool(np.isnat(value))
+    try:
+        missing = value != value
+        return bool(missing) if isinstance(missing, (bool, np.bool_)) else False
+    except Exception:
+        return False
+
+
+def _strict_datetime_value(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        converted = value
+    elif isinstance(value, date):
+        converted = datetime(value.year, value.month, value.day)
+    elif isinstance(value, np.datetime64):
+        if np.isnat(value):
+            return None
+        text = np.datetime_as_string(value, unit="us")
+        converted = datetime.fromisoformat(text)
+    elif isinstance(value, str) and _ISO_DATETIME_PATTERN.fullmatch(value.strip()):
+        text = value.strip().replace("/", "-")
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            converted = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    if converted.tzinfo is not None:
+        converted = converted.astimezone(UTC).replace(tzinfo=None)
+    return converted
+
+
+def _nice_step_candidates(raw_step: float) -> list[float]:
+    exponent = math.floor(math.log10(raw_step))
+    candidates = {
+        mantissa * (10.0**power)
+        for power in range(exponent - 1, exponent + 3)
+        for mantissa in _NICE_MANTISSAS
+        if mantissa * (10.0**power) >= raw_step * (1.0 - 1e-12)
+    }
+    return sorted(candidates)
+
+
+def _clean_float(value: float) -> float:
+    if abs(value) < 1e-14:
+        return 0.0
+    return float(f"{value:.14g}")
+
+
+def _calendar_ticks(
+    lower: datetime,
+    upper: datetime,
+    unit: str,
+    amount: int,
+) -> list[datetime]:
+    start = _calendar_floor(lower, unit, amount)
+    if start >= lower:
+        start = _calendar_add(start, unit, -amount)
+    ticks = [start]
+    while ticks[-1] <= upper and len(ticks) <= 12:
+        ticks.append(_calendar_add(ticks[-1], unit, amount))
+    if ticks[-1] <= upper:
+        ticks.append(_calendar_add(ticks[-1], unit, amount))
+    return ticks
+
+
+def _calendar_floor(value: datetime, unit: str, amount: int) -> datetime:
+    if unit == "year":
+        year = ((value.year - 1) // amount) * amount + 1
+        return datetime(year, 1, 1)
+    if unit == "month":
+        month_index = value.year * 12 + value.month - 1
+        floored = (month_index // amount) * amount
+        return datetime(floored // 12, floored % 12 + 1, 1)
+    seconds = {
+        "second": amount,
+        "minute": amount * 60,
+        "hour": amount * 3600,
+        "day": amount * 86400,
+    }[unit]
+    epoch = datetime(1970, 1, 1)
+    elapsed = (value - epoch).total_seconds()
+    return epoch + timedelta(seconds=math.floor(elapsed / seconds) * seconds)
+
+
+def _calendar_add(value: datetime, unit: str, amount: int) -> datetime:
+    if unit == "year":
+        return value.replace(year=value.year + amount)
+    if unit == "month":
+        month_index = value.year * 12 + value.month - 1 + amount
+        return value.replace(year=month_index // 12, month=month_index % 12 + 1)
+    return (
+        value
+        + {
+            "second": timedelta(seconds=amount),
+            "minute": timedelta(minutes=amount),
+            "hour": timedelta(hours=amount),
+            "day": timedelta(days=amount),
+        }[unit]
     )
+
+
+def _datetime_iso(value: datetime) -> str:
+    if value.microsecond:
+        return value.isoformat(timespec="milliseconds")
+    if value.second:
+        return value.isoformat(timespec="seconds")
+    if value.hour or value.minute:
+        return value.isoformat(timespec="minutes")
+    return value.date().isoformat()
 
 
 def _numeric_extent(series: list[Any]) -> tuple[float | None, float | None]:
@@ -584,7 +958,11 @@ def _series_label_reason(field_names: list[str], labels: list[str]) -> str:
     return "humanized_field_names"
 
 
-def _numeric_format(lower: float | None, upper: float | None) -> tuple[str, int]:
+def _numeric_format(
+    lower: float | None,
+    upper: float | None,
+    step: float | None = None,
+) -> tuple[str, int]:
     if lower is None or upper is None:
         return "decimal", -1
     magnitude = max(abs(lower), abs(upper))
@@ -593,9 +971,21 @@ def _numeric_format(lower: float | None, upper: float | None) -> tuple[str, int]
     span = abs(upper - lower)
     if span <= 0:
         return "decimal", -1
-    approximate_step = span / 5.0
-    decimals = max(0, min(6, int(math.ceil(-math.log10(approximate_step)))))
+    approximate_step = abs(step) if step is not None and step != 0 else span / 5.0
+    decimals = (
+        _decimal_places_for_step(approximate_step)
+        if step is not None
+        else max(0, min(6, int(math.ceil(-math.log10(approximate_step)))))
+    )
     return "decimal", decimals
+
+
+def _decimal_places_for_step(step: float) -> int:
+    for decimals in range(7):
+        scaled = step * (10**decimals)
+        if math.isclose(scaled, round(scaled), rel_tol=1e-10, abs_tol=1e-10):
+            return decimals
+    return 6
 
 
 def _major_tick_target(
