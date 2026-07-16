@@ -43,15 +43,14 @@ def test_humanize_field_name_formats_words_acronyms_and_units() -> None:
 
 
 def test_axis_title_inference_extracts_shared_metric_and_unit() -> None:
-    inferred = infer_axis_title(
-        ["glucose_control_mg_dL", "glucose_treated_mg_dL"]
-    )
+    inferred = infer_axis_title(["glucose_control_mg_dL", "glucose_treated_mg_dL"])
 
     assert inferred.label == "Glucose (mg/dL)"
     assert inferred.unit == "mg/dL"
-    assert infer_series_labels(
-        ["glucose_control_mg_dL", "glucose_treated_mg_dL"]
-    ) == ["Control", "Treated"]
+    assert infer_series_labels(["glucose_control_mg_dL", "glucose_treated_mg_dL"]) == [
+        "Control",
+        "Treated",
+    ]
 
 
 def test_axis_title_inference_understands_statistics_and_temperature_unit() -> None:

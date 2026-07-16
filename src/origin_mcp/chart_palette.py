@@ -256,9 +256,7 @@ def _palette_readability_score(palette: dict[str, Any]) -> float:
 def _contrast_against_white(color: Rgb) -> float:
     channels = [channel / 255 for channel in color]
     linear = [
-        channel / 12.92
-        if channel <= 0.04045
-        else ((channel + 0.055) / 1.055) ** 2.4
+        channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
         for channel in channels
     ]
     luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]

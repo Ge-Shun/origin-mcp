@@ -144,9 +144,7 @@ class _TablePlotMixin(_OriginClientBase):
             x_label=x_label,
             y_label=y_label,
         )
-        show_legend_actual = bool(
-            decision_value(visual_defaults, "legend", "show")
-        )
+        show_legend_actual = bool(decision_value(visual_defaults, "legend", "show"))
         graph_template = self._resolve_graph_template(kind=kind, template=template)
         graph = self._new_graph(kind=kind, graph_name=graph_name, template=graph_template)
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
@@ -198,9 +196,7 @@ class _TablePlotMixin(_OriginClientBase):
             self.apply_nature_style(**style_kwargs)
         if kind == "histogram":
             resolved_bin_width = histogram_bin_width
-            if histogram_bin_width == "auto" or (
-                histogram_bin_width is None and template is None
-            ):
+            if histogram_bin_width == "auto" or (histogram_bin_width is None and template is None):
                 resolved_bin_width = automatic_histogram_bin_width(df[y_names[0]].to_numpy())
             if resolved_bin_width is not None:
                 if not isinstance(resolved_bin_width, (int, float)) or resolved_bin_width <= 0:
@@ -496,9 +492,7 @@ class _TablePlotMixin(_OriginClientBase):
         if resolved_bin_width is not None and (
             not isinstance(resolved_bin_width, (int, float)) or resolved_bin_width <= 0
         ):
-            raise OriginOperationError(
-                "histogram_bin_width must be a positive number or 'auto'."
-            )
+            raise OriginOperationError("histogram_bin_width must be a positive number or 'auto'.")
         actual_book_name = book_name or (
             self._safe_filename(f"{graph_name}_Data") if graph_name else None
         )
@@ -1156,9 +1150,7 @@ class _TablePlotMixin(_OriginClientBase):
         zero_baseline = bool(decision_value(defaults, "axes", "y_zero_baseline"))
         canvas = defaults.get("canvas", {})
         page_aspect_ratio = (
-            decision_value(canvas, "page_aspect_ratio")
-            if "page_aspect_ratio" in canvas
-            else None
+            decision_value(canvas, "page_aspect_ratio") if "page_aspect_ratio" in canvas else None
         )
         bottom_margin = (
             decision_value(canvas, "bottom_margin") if "bottom_margin" in canvas else None
@@ -1168,9 +1160,7 @@ class _TablePlotMixin(_OriginClientBase):
             if "page_width_aspect_ratio" in canvas
             else None
         )
-        right_margin = (
-            decision_value(canvas, "right_margin") if "right_margin" in canvas else None
-        )
+        right_margin = decision_value(canvas, "right_margin") if "right_margin" in canvas else None
         script_parts = [
             f'win -a "{safe_graph}";',
             "layer -s 1;",
@@ -1183,13 +1173,9 @@ class _TablePlotMixin(_OriginClientBase):
         if page_aspect_ratio is not None or page_width_aspect_ratio is not None:
             script_parts.append("page.kar=0;")
             if page_aspect_ratio is not None:
-                script_parts.append(
-                    f"page.height=page.width/{float(page_aspect_ratio):g};"
-                )
+                script_parts.append(f"page.height=page.width/{float(page_aspect_ratio):g};")
             elif page_width_aspect_ratio is not None:
-                script_parts.append(
-                    f"page.width=page.height*{float(page_width_aspect_ratio):g};"
-                )
+                script_parts.append(f"page.width=page.height*{float(page_width_aspect_ratio):g};")
         if bottom_margin is not None or right_margin is not None:
             script_parts.append(
                 "page -fls -u -ml 0.08 -mt 0.05 "

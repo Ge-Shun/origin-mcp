@@ -385,10 +385,7 @@ class _GraphFormattingHelperMixin(_OriginClientBase):
         y_upper = f"layer.y.to-(layer.y.to-layer.y.from)*{margin:.6g}-legend.dy/2"
         y_lower = f"layer.y.from+(layer.y.to-layer.y.from)*{margin:.6g}+legend.dy/2"
         if position == "outside_right":
-            x_expr = (
-                "layer.x.to+(layer.x.to-layer.x.from)*"
-                f"{max(margin, 0.04):.6g}+legend.dx/2"
-            )
+            x_expr = f"layer.x.to+(layer.x.to-layer.x.from)*{max(margin, 0.04):.6g}+legend.dx/2"
             y_expr = "layer.y.to-legend.dy/2"
             return self._legend_position_script(graph_name, layer_index, x_expr, y_expr)
         x_expr = x_right if position.endswith("_right") else x_left

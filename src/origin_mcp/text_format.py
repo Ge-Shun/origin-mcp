@@ -60,9 +60,7 @@ FIELD_UNIT_SUFFIXES = {
     "percent": "%",
 }
 
-FIELD_UNIT_TOKEN_SUFFIXES = {
-    (token,): unit for token, unit in FIELD_UNIT_SUFFIXES.items()
-} | {
+FIELD_UNIT_TOKEN_SUFFIXES = {(token,): unit for token, unit in FIELD_UNIT_SUFFIXES.items()} | {
     ("mg", "dL"): "mg/dL",
     ("mg", "L"): "mg/L",
     ("g", "L"): "g/L",
@@ -141,6 +139,7 @@ class AxisTitleInference:
     unit: str | None
     reason: str
     source: str = "smart_default"
+
 
 SUPERSCRIPT_CHARS = {
     "⁰": "0",
@@ -312,8 +311,7 @@ def infer_axis_title(
     shared_unit = units[0] if all(unit == units[0] for unit in units) else None
     common_metric = _common_metric_tokens(parsed)
     generic_fields = all(
-        not item.metric_tokens
-        or set(item.metric_tokens).issubset(GENERIC_VALUE_TOKENS)
+        not item.metric_tokens or set(item.metric_tokens).issubset(GENERIC_VALUE_TOKENS)
         for item in parsed
     )
     table_metric = _constant_table_value(table, TABLE_METRIC_COLUMNS) if generic_fields else None
@@ -364,9 +362,7 @@ def infer_series_labels(
     ):
         if omit_units_when_metrics_differ:
             labels = [
-                origin_rich_text(
-                    _format_field_words([*item.metric_tokens, *item.statistic_roles])
-                )
+                origin_rich_text(_format_field_words([*item.metric_tokens, *item.statistic_roles]))
                 for item in parsed
             ]
             if all(labels) and len({label.casefold() for label in labels}) == len(labels):

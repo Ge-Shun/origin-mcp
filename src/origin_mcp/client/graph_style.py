@@ -77,9 +77,7 @@ class _GraphStyleMixin(_OriginClientBase):
                     self._set_origin_property(plot, "symbol_size", actual_symbol_size)
                 role = roles[global_plot_index]
                 color = (
-                    semantic_palette[role]
-                    if role
-                    else palette[global_plot_index % len(palette)]
+                    semantic_palette[role] if role else palette[global_plot_index % len(palette)]
                 )
                 self._set_origin_property(plot, "color", color)
                 try:

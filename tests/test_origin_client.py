@@ -1580,9 +1580,7 @@ def test_apply_smart_visual_defaults_formats_axes_marks_and_legend(
     assert "layer.y.from=0;" in scripts[0]
     assert "page.height=page.width/1.05;" in scripts[0]
     assert "page -fls -u -ml 0.08 -mt 0.05 -mr 0.05 -mb 0.25;" in scripts[0]
-    assert style_calls == [
-        {"graph_name": "Graph1", "symbol_size": 3.5, "transparency": 35.0}
-    ]
+    assert style_calls == [{"graph_name": "Graph1", "symbol_size": 3.5, "transparency": 35.0}]
     assert legend_calls == [
         {
             "graph_name": "Graph1",

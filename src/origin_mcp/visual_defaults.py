@@ -164,9 +164,7 @@ def resolve_visual_defaults(
         else None
     )
     y_format, y_decimals = _numeric_format(context.y_min, context.y_max)
-    zero_baseline = context.chart_type == "bar" and (
-        context.y_min is None or context.y_min >= 0
-    )
+    zero_baseline = context.chart_type == "bar" and (context.y_min is None or context.y_min >= 0)
 
     aspect_ratios = {
         "line": 1.5,
@@ -347,9 +345,7 @@ def _rotated_label_canvas(
             _decision(0.35, "reserve_space_for_vertical_category_labels"),
         )
     if rotation >= 45:
-        heavily_crowded = (
-            context.x_unique_count >= 12 or context.longest_x_label >= 18
-        )
+        heavily_crowded = context.x_unique_count >= 12 or context.longest_x_label >= 18
         if heavily_crowded:
             return (
                 _decision(1.05, "extra_page_height_for_long_rotated_category_labels"),
@@ -377,8 +373,10 @@ def _legend_layout_defaults(
     total = sum(lengths)
     fallback_outside = series_count >= 7 or longest > 24 or total > 90
     placement_assessed = bool(placement and placement["assessed"])
-    outside = visible and series_count > 1 and (
-        not placement["has_safe_inside"] if placement_assessed else fallback_outside
+    outside = (
+        visible
+        and series_count > 1
+        and (not placement["has_safe_inside"] if placement_assessed else fallback_outside)
     )
     occupancy_reason = (
         "all_inside_legend_regions_intersect_data"
