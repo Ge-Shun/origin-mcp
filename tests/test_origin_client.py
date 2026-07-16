@@ -29,6 +29,18 @@ def test_read_table_csv(tmp_path: Path) -> None:
     assert df["value"].tolist() == [1, 2]
 
 
+def test_coerce_x_datetime_converts_only_strict_iso_values() -> None:
+    client = OriginClient()
+    temporal = pd.DataFrame({"when": ["2026-01-01", "2026-01-02"], "value": [1, 2]})
+    categorical = pd.DataFrame({"when": ["Stage 1", "Stage 2"], "value": [1, 2]})
+
+    converted = client._coerce_x_datetime(temporal, "when")
+    preserved = client._coerce_x_datetime(categorical, "when")
+
+    assert str(converted["when"].dtype).startswith("datetime64")
+    assert preserved["when"].tolist() == ["Stage 1", "Stage 2"]
+
+
 def test_read_table_tsv(tmp_path: Path) -> None:
     path = tmp_path / "data.tsv"
     path.write_text("time\tvalue\n0\t1\n1\t2\n", encoding="utf-8")
@@ -1650,6 +1662,17 @@ def test_apply_smart_visual_defaults_sets_axis_ticks_grids_and_dual_y_format(
         },
         "axes": {
             "x_tick_rotation": {"value": 0},
+            "x_scale": {"value": {"from": 0.0, "to": 12.0, "step": 2.0, "tick_count": 7}},
+            "x_datetime_scale": {"value": None},
+            "y_scale": {"value": {"from": 0.0, "to": 1.0, "step": 0.2, "tick_count": 6}},
+            "y2_scale": {
+                "value": {
+                    "from": 50_000,
+                    "to": 550_000,
+                    "step": 100_000,
+                    "tick_count": 6,
+                }
+            },
             "x_number_format": {"value": "decimal"},
             "x_decimal_places": {"value": 0},
             "y_number_format": {"value": "decimal"},
@@ -1688,6 +1711,12 @@ def test_apply_smart_visual_defaults_sets_axis_ticks_grids_and_dual_y_format(
     assert "layer.x.majorTicks=7;" in script
     assert script.count("layer.x2.ticks=0;") == 2
     assert "layer.y.majorTicks=6;" in script
+    assert "layer.x.from=0;" in script
+    assert "layer.x.to=12;" in script
+    assert "layer.x.inc=2;" in script
+    assert "layer.y.from=0;" in script
+    assert "layer.y.to=1;" in script
+    assert "layer.y.inc=0.2;" in script
     assert "layer.x.grid.show=0;" in script
     assert "layer.y.grid.show=1;" in script
     assert "layer.y.grid.majorColor=color(235,235,235);" in script
@@ -1696,9 +1725,57 @@ def test_apply_smart_visual_defaults_sets_axis_ticks_grids_and_dual_y_format(
     assert "layer.y2.label.numFormat=2;" in script
     assert "layer.y2.label.decPlaces=2;" in script
     assert "layer.y2.majorTicks=6;" in script
+    assert "layer.y.from=50000;" in script
+    assert "layer.y.to=550000;" in script
+    assert "layer.y.inc=100000;" in script
+    assert "layer.y2.from=50000;" in script
+    assert "layer.y2.to=550000;" in script
+    assert "layer.y2.inc=100000;" in script
     assert "layer.y.grid.show=0;" in script
     assert "layer.y2.grid.show=0;" in script
     assert "page -fls -u -ml 0.1 -mt 0.05 -mr 0.12 -mb 0.08;" in script
+
+
+def test_apply_smart_visual_defaults_sets_datetime_ticks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    scripts = []
+    defaults = {
+        "legend": {"show": {"value": False}},
+        "marks": {"symbol_size": {"value": None}, "transparency": {"value": None}},
+        "axes": {
+            "x_tick_rotation": {"value": 0},
+            "x_datetime_scale": {
+                "value": {
+                    "from": "2025-12-01",
+                    "to": "2026-04-01",
+                    "ticks": ["2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"],
+                    "tick_count": 5,
+                    "unit": "month",
+                    "step": 1,
+                    "label_type": "date",
+                }
+            },
+            "y_number_format": {"value": "decimal"},
+            "y_decimal_places": {"value": 1},
+            "y_zero_baseline": {"value": False},
+        },
+        "canvas": {},
+    }
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    client._apply_smart_visual_defaults(graph_name="Graph1", defaults=defaults)
+
+    script = scripts[0]
+    assert "layer.x.from=date(2025/12/01 00:00:00,3);" in script
+    assert "layer.x.to=date(2026/04/01 00:00:00,3);" in script
+    assert 'layer.x.ticksbydata$="$(date(2025/12/01 00:00:00,3))' in script
+    assert "layer.x.label.type=4;" in script
 
 
 def test_plot_table_exports_by_graph_name(

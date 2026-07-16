@@ -5,9 +5,12 @@ import numpy as np
 from origin_mcp.visual_defaults import (
     automatic_histogram_bin_width,
     decision_value,
+    nice_datetime_scale,
+    nice_numeric_scale,
     recommend_legend_placement,
     recommend_legend_position,
     resolve_visual_defaults,
+    strict_datetime_values,
 )
 
 
@@ -24,6 +27,46 @@ def test_automatic_histogram_bin_width_is_robust_and_bounded() -> None:
 def test_automatic_histogram_bin_width_handles_degenerate_data() -> None:
     assert automatic_histogram_bin_width([1.0]) is None
     assert automatic_histogram_bin_width([2.0, 2.0, 2.0]) is None
+
+
+def test_nice_numeric_scale_pads_extremes_without_clipping() -> None:
+    scale = nice_numeric_scale(0.13, 0.87, 6)
+
+    assert scale["from"] < 0.13
+    assert scale["to"] > 0.87
+    assert scale["step"] > 0
+    assert np.isclose(
+        (float(scale["to"]) - float(scale["from"])) / float(scale["step"]) + 1,
+        scale["tick_count"],
+    )
+
+
+def test_nice_numeric_scale_handles_constant_and_zero_anchored_data() -> None:
+    constant = nice_numeric_scale(5.0, 5.0, 6)
+    bar = nice_numeric_scale(2.2, 9.7, 6, include_zero=True, anchor_zero=True)
+
+    assert constant["from"] < 5.0 < constant["to"]
+    assert bar["from"] == 0
+    assert bar["to"] > 9.7
+
+
+def test_strict_datetime_detection_accepts_iso_but_rejects_categories() -> None:
+    parsed = strict_datetime_values(["2026-01-01", "2026-01-02 12:30"])
+
+    assert parsed is not None
+    assert parsed[1] is not None and parsed[1].hour == 12
+    assert strict_datetime_values(["Stage 1", "Stage 2"]) is None
+    assert strict_datetime_values(["01/02/2026", "02/02/2026"]) is None
+
+
+def test_nice_datetime_scale_uses_aligned_ticks_and_safe_bounds() -> None:
+    scale = nice_datetime_scale(["2026-01-03", "2026-04-17"], 6)
+
+    assert scale is not None
+    assert scale["from"] < "2026-01-03"
+    assert scale["to"] > "2026-04-17"
+    assert 3 <= scale["tick_count"] <= 9
+    assert scale["label_type"] == "date"
 
 
 def test_legend_position_avoids_increasing_series_upper_right() -> None:
@@ -248,14 +291,31 @@ def test_smart_defaults_choose_readable_numeric_ticks_and_quiet_grids() -> None:
         y_series=[np.linspace(0.125, 0.875, 50)],
     )
 
-    assert decision_value(defaults, "axes", "x_major_ticks") == 7
-    assert decision_value(defaults, "axes", "y_major_ticks") == 6
+    x_scale = decision_value(defaults, "axes", "x_scale")
+    assert decision_value(defaults, "axes", "x_major_ticks") == x_scale["tick_count"] == 8
+    assert x_scale["from"] <= 0 and x_scale["to"] > 100
+    y_scale = decision_value(defaults, "axes", "y_scale")
+    assert decision_value(defaults, "axes", "y_major_ticks") == y_scale["tick_count"] == 7
+    assert y_scale["from"] < 0.125 and y_scale["to"] > 0.875
     assert decision_value(defaults, "axes", "x_minor_ticks") == 1
     assert decision_value(defaults, "axes", "y_minor_ticks") == 1
     assert decision_value(defaults, "axes", "x_major_grid") is False
     assert decision_value(defaults, "axes", "y_major_grid") is True
     assert decision_value(defaults, "axes", "minor_grid") is False
     assert decision_value(defaults, "axes", "top_axis_ticks") is False
+
+
+def test_smart_defaults_preserve_fractional_nice_step_labels() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=6,
+        x_values=[0.13, 1.07, 2.91, 4.36, 6.88, 9.74],
+        y_series=[[-2.37, -1.42, 0.18, 1.73, 3.09, 4.63]],
+    )
+
+    assert decision_value(defaults, "axes", "x_scale")["step"] == 1.5
+    assert decision_value(defaults, "axes", "x_decimal_places") == 1
 
 
 def test_smart_defaults_format_dual_y_axes_independently_and_align_ticks() -> None:
@@ -273,6 +333,12 @@ def test_smart_defaults_format_dual_y_axes_independently_and_align_ticks() -> No
     assert decision_value(defaults, "axes", "y2_number_format") == "scientific"
     assert decision_value(defaults, "axes", "y_major_ticks") == 5
     assert decision_value(defaults, "axes", "y2_major_ticks") == 5
+    left_scale = decision_value(defaults, "axes", "y_scale")
+    right_scale = decision_value(defaults, "axes", "y2_scale")
+    assert left_scale["tick_count"] == right_scale["tick_count"] == 5
+    assert left_scale["step"] != right_scale["step"]
+    assert left_scale["from"] < 20.1 and left_scale["to"] > 20.4
+    assert right_scale["from"] < 100_000 and right_scale["to"] > 400_000
     assert decision_value(defaults, "axes", "y2_major_grid") is False
     assert decision_value(defaults, "canvas", "right_margin") == 0.12
 
@@ -292,8 +358,24 @@ def test_smart_defaults_preserve_datetime_labels_with_temporal_tick_density() ->
     assert defaults["context"]["x_is_categorical"] is False
     assert decision_value(defaults, "axes", "x_tick_rotation") == 0
     assert decision_value(defaults, "axes", "x_number_format") is None
-    assert decision_value(defaults, "axes", "x_major_ticks") == 6
+    datetime_scale = decision_value(defaults, "axes", "x_datetime_scale")
+    assert decision_value(defaults, "axes", "x_major_ticks") == datetime_scale["tick_count"]
     assert decision_value(defaults, "axes", "x_minor_ticks") == 0
+    assert decision_value(defaults, "canvas", "left_margin") == 0.1
+    assert decision_value(defaults, "canvas", "right_margin") == 0.1
+
+
+def test_smart_defaults_recognize_iso_datetime_strings() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=["2026-01-01", "2026-02-01", "2026-03-01"],
+        y_series=[[1, 2, 3]],
+    )
+
+    assert defaults["context"]["x_is_datetime"] is True
+    assert decision_value(defaults, "axes", "x_datetime_scale") is not None
 
 
 def test_smart_defaults_leave_specialized_chart_axes_and_grids_untouched() -> None:

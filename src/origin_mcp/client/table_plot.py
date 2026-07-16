@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from .. import template_library
 from ..errors import OriginMcpError, OriginOperationError
@@ -10,6 +13,7 @@ from ..visual_defaults import (
     automatic_histogram_bin_width,
     decision_value,
     resolve_visual_defaults,
+    strict_datetime_values,
 )
 from .base import (
     MATRIX_PLOTM_IDS,
@@ -21,6 +25,16 @@ from .base import (
 )
 
 DUAL_Y_NATURE_AXIS_TITLE_SIZE = 20
+
+
+def _labtalk_number(value: Any) -> str:
+    return f"{float(value):.14g}"
+
+
+def _labtalk_date(value: str) -> str:
+    parsed = datetime.fromisoformat(value)
+    text = parsed.strftime("%Y/%m/%d %H:%M:%S")
+    return f"date({text},3)"
 
 
 class _TablePlotMixin(_OriginClientBase):
@@ -120,6 +134,7 @@ class _TablePlotMixin(_OriginClientBase):
             if x_error_col is not None
             else None
         )
+        df = self._coerce_x_datetime(df, x_name)
 
         actual_book_name = book_name or (
             self._safe_filename(f"{graph_name}_Data") if graph_name else None
@@ -280,6 +295,7 @@ class _TablePlotMixin(_OriginClientBase):
         x_name = self._resolve_column(columns, x_col, default_index=0)
         y1_names = [self._resolve_column(columns, col, default_index=1) for col in y1_cols]
         y2_names = [self._resolve_column(columns, col, default_index=1) for col in y2_cols]
+        df = self._coerce_x_datetime(df, x_name)
         style_mode_actual = self._normalize_style_mode(style_mode)
         visual_defaults = resolve_visual_defaults(
             chart_type=plot_type,
@@ -463,12 +479,14 @@ class _TablePlotMixin(_OriginClientBase):
         selected = self._resolve_selected_columns(columns, selected_cols)
         style_mode_actual = self._normalize_style_mode(style_mode)
         chart_type = self._nature_chart_type_for_plot_id(plot_type_id, template)
+        axis_x_name, axis_y_names = self._plot_type_axis_fields(selected, plot_type_id)
+        if axis_x_name in columns:
+            df = self._coerce_x_datetime(df, axis_x_name)
         profile_x, profile_y, series_count = self._plot_type_visual_profile(
             df,
             selected,
             plot_type_id,
         )
-        axis_x_name, axis_y_names = self._plot_type_axis_fields(selected, plot_type_id)
         smart_defaults = resolve_visual_defaults(
             chart_type=chart_type,
             series_count=series_count,
@@ -1206,8 +1224,31 @@ class _TablePlotMixin(_OriginClientBase):
                             f"layer.{axis_name}.grid.majorWidth=0.5;",
                         ]
                     )
+            scale = axis_value(f"{axis_name}_scale")
+            if scale is not None:
+                script_parts.extend(
+                    [
+                        f"layer.{axis_name}.from={_labtalk_number(scale['from'])};",
+                        f"layer.{axis_name}.to={_labtalk_number(scale['to'])};",
+                        f"layer.{axis_name}.inc={_labtalk_number(scale['step'])};",
+                        f"layer.{axis_name}.rescale=1;",
+                    ]
+                )
+        datetime_scale = axis_value("x_datetime_scale")
+        if datetime_scale is not None:
+            ticks = " ".join(f"$({_labtalk_date(value)})" for value in datetime_scale["ticks"])
+            script_parts.extend(
+                [
+                    f"layer.x.from={_labtalk_date(datetime_scale['from'])};",
+                    f"layer.x.to={_labtalk_date(datetime_scale['to'])};",
+                    f'layer.x.ticksbydata$="{ticks}";',
+                    f"layer.x.label.type={3 if datetime_scale['label_type'] == 'time' else 4};",
+                    "layer.x.rescale=1;",
+                ]
+            )
         if zero_baseline:
-            script_parts.append("layer.y.from=0;")
+            if axis_value("y_scale") is None:
+                script_parts.append("layer.y.from=0;")
         y2_number_format = axis_value("y2_number_format")
         if y2_number_format is not None:
             script_parts.extend(
@@ -1229,6 +1270,17 @@ class _TablePlotMixin(_OriginClientBase):
             if y2_minor_ticks is not None:
                 script_parts.append(f"layer.y.minorTicks={int(y2_minor_ticks)};")
                 script_parts.append(f"layer.y2.minorTicks={int(y2_minor_ticks)};")
+            y2_scale = axis_value("y2_scale")
+            if y2_scale is not None:
+                for axis_name in ("y", "y2"):
+                    script_parts.extend(
+                        [
+                            f"layer.{axis_name}.from={_labtalk_number(y2_scale['from'])};",
+                            f"layer.{axis_name}.to={_labtalk_number(y2_scale['to'])};",
+                            f"layer.{axis_name}.inc={_labtalk_number(y2_scale['step'])};",
+                            f"layer.{axis_name}.rescale=1;",
+                        ]
+                    )
             script_parts.extend(
                 [
                     "layer.x.grid.show=0;",
@@ -1286,6 +1338,15 @@ class _TablePlotMixin(_OriginClientBase):
             "marks": mark_result,
             "legend": legend_result,
         }
+
+    @staticmethod
+    def _coerce_x_datetime(df: Any, x_name: str) -> Any:
+        parsed = strict_datetime_values(df[x_name].to_numpy())
+        if parsed is None:
+            return df
+        converted = df.copy()
+        converted[x_name] = np.asarray(parsed, dtype="datetime64[us]")
+        return converted
 
     @staticmethod
     def _set_worksheet_display_labels(
