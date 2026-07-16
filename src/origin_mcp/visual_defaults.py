@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
@@ -26,6 +27,7 @@ class VisualContext:
     series_count: int
     row_count: int
     x_is_categorical: bool
+    x_is_datetime: bool
     x_unique_count: int
     longest_x_label: int
     y_min: float | None
@@ -163,8 +165,45 @@ def resolve_visual_defaults(
         if y2_names_actual or y2_label is not None
         else None
     )
-    y_format, y_decimals = _numeric_format(context.y_min, context.y_max)
-    zero_baseline = context.chart_type == "bar" and (context.y_min is None or context.y_min >= 0)
+    y_split = len(y_names_actual) if y2_names_actual else len(y_series_actual)
+    y_min, y_max = _numeric_extent(y_series_actual[:y_split])
+    y2_min, y2_max = _numeric_extent(y_series_actual[y_split:])
+    x_min, x_max = (
+        (None, None)
+        if context.x_is_categorical or context.x_is_datetime
+        else _numeric_extent([x_values])
+    )
+    x_format, x_decimals = _numeric_format(x_min, x_max)
+    y_format, y_decimals = _numeric_format(y_min, y_max)
+    y2_format, y2_decimals = _numeric_format(y2_min, y2_max)
+    if context.raw_chart_type == "histogram":
+        y_format, y_decimals = "decimal", 0
+    x_major_ticks = _major_tick_target(
+        context,
+        axis="x",
+        number_format=x_format,
+    )
+    y_major_ticks = _major_tick_target(
+        context,
+        axis="y",
+        number_format=y_format,
+    )
+    y2_major_ticks = None
+    if y2_names_actual and y2_min is not None:
+        right_target = _major_tick_target(
+            context,
+            axis="y",
+            number_format=y2_format,
+        )
+        shared_targets = [target for target in (y_major_ticks, right_target) if target is not None]
+        y_major_ticks = min(shared_targets) if shared_targets else None
+        y2_major_ticks = y_major_ticks
+    x_major_grid, y_major_grid = _grid_defaults(context)
+    left_margin = _tick_label_margin(y_min, y_max, y_format, y_decimals)
+    y2_margin = _tick_label_margin(y2_min, y2_max, y2_format, y2_decimals)
+    zero_baseline = context.raw_chart_type == "histogram" or (
+        context.chart_type == "bar" and (y_min is None or y_min >= 0)
+    )
 
     aspect_ratios = {
         "line": 1.5,
@@ -210,8 +249,80 @@ def resolve_visual_defaults(
                 y2_title.source if y2_title is not None else "smart_default",
             ),
             "x_tick_rotation": x_rotation,
+            "x_number_format": _decision(
+                None if _preserve_specialized_x_axis(context) else x_format,
+                (
+                    "preserve_categorical_or_temporal_labels"
+                    if _preserve_specialized_x_axis(context)
+                    else "magnitude_and_range"
+                ),
+            ),
+            "x_decimal_places": _decision(
+                None if _preserve_specialized_x_axis(context) else x_decimals,
+                (
+                    "preserve_categorical_or_temporal_labels"
+                    if _preserve_specialized_x_axis(context)
+                    else "range_appropriate_precision"
+                ),
+            ),
             "y_number_format": _decision(y_format, "magnitude_and_range"),
             "y_decimal_places": _decision(y_decimals, "range_appropriate_precision"),
+            "y2_number_format": _decision(
+                y2_format if y2_min is not None else None,
+                "independent_right_axis_magnitude_and_range"
+                if y2_min is not None
+                else "single_y_axis",
+            ),
+            "y2_decimal_places": _decision(
+                y2_decimals if y2_min is not None else None,
+                "independent_right_axis_precision" if y2_min is not None else "single_y_axis",
+            ),
+            "x_major_ticks": _decision(
+                x_major_ticks,
+                _major_tick_reason(context, axis="x", number_format=x_format),
+            ),
+            "y_major_ticks": _decision(
+                y_major_ticks,
+                _major_tick_reason(context, axis="y", number_format=y_format),
+            ),
+            "y2_major_ticks": _decision(
+                y2_major_ticks,
+                "align_dual_y_major_tick_counts" if y2_major_ticks is not None else "single_y_axis",
+            ),
+            "x_minor_ticks": _decision(
+                _minor_tick_target(context, axis="x"),
+                _minor_tick_reason(context, axis="x"),
+            ),
+            "y_minor_ticks": _decision(
+                _minor_tick_target(context, axis="y"),
+                _minor_tick_reason(context, axis="y"),
+            ),
+            "y2_minor_ticks": _decision(
+                _minor_tick_target(context, axis="y") if y2_major_ticks is not None else None,
+                "match_left_axis_minor_tick_density"
+                if y2_major_ticks is not None
+                else "single_y_axis",
+            ),
+            "x_major_grid": _decision(
+                x_major_grid,
+                "vertical_grid_adds_clutter" if not x_major_grid else "support_x_value_comparison",
+            ),
+            "y_major_grid": _decision(
+                y_major_grid,
+                "support_value_comparison"
+                if y_major_grid
+                else "non_cartesian_or_cell_encoded_chart",
+            ),
+            "y2_major_grid": _decision(False, "avoid_duplicate_dual_y_grid_lines"),
+            "minor_grid": _decision(False, "keep_background_quiet"),
+            "top_axis_ticks": _decision(
+                None if context.chart_type in {"heatmap", "surface", "polar"} else False,
+                (
+                    "preserve_specialized_chart_axis_ticks"
+                    if context.chart_type in {"heatmap", "surface", "polar"}
+                    else "top_frame_does_not_need_duplicate_ticks"
+                ),
+            ),
             "y_zero_baseline": _decision(
                 zero_baseline,
                 "nonnegative_bar_like_chart" if zero_baseline else "preserve_data_range",
@@ -225,7 +336,24 @@ def resolve_visual_defaults(
             "page_aspect_ratio": page_aspect_ratio,
             "bottom_margin": bottom_margin,
             "page_width_aspect_ratio": legend_layout["page_width_aspect_ratio"],
-            "right_margin": legend_layout["right_margin"],
+            "left_margin": _decision(
+                left_margin,
+                "reserve_space_for_long_y_tick_labels"
+                if left_margin is not None
+                else "default_tick_labels_fit",
+            ),
+            "right_margin": _decision(
+                _max_optional(
+                    decision_value(legend_layout, "right_margin"),
+                    y2_margin,
+                ),
+                (
+                    "reserve_external_legend_or_right_axis_tick_space"
+                    if decision_value(legend_layout, "right_margin") is not None
+                    or y2_margin is not None
+                    else "default_tick_labels_fit"
+                ),
+            ),
         },
     }
 
@@ -252,7 +380,7 @@ def _visual_context(
     y_series: list[Any],
 ) -> VisualContext:
     raw_chart_type = str(chart_type or "generic").strip().lower().replace("-", "_")
-    x_is_categorical, x_unique_count, longest_x_label = _x_profile(x_values)
+    x_is_categorical, x_is_datetime, x_unique_count, longest_x_label = _x_profile(x_values)
     y_min, y_max = _numeric_extent(y_series)
     return VisualContext(
         raw_chart_type=raw_chart_type,
@@ -260,6 +388,7 @@ def _visual_context(
         series_count=max(0, int(series_count)),
         row_count=max(0, int(row_count)),
         x_is_categorical=x_is_categorical,
+        x_is_datetime=x_is_datetime,
         x_unique_count=x_unique_count,
         longest_x_label=longest_x_label,
         y_min=y_min,
@@ -267,22 +396,37 @@ def _visual_context(
     )
 
 
-def _x_profile(values: Any) -> tuple[bool, int, int]:
+def _x_profile(values: Any) -> tuple[bool, bool, int, int]:
     if values is None:
-        return False, 0, 0
+        return False, False, 0, 0
     try:
         array = np.asarray(values).reshape(-1)
     except Exception:
-        return False, 0, 0
+        return False, False, 0, 0
     labels = [str(value) for value in array if value is not None and str(value) != "nan"]
     if not labels:
-        return False, 0, 0
+        return False, False, 0, 0
+    is_datetime = _is_datetime_array(array)
+    if is_datetime:
+        return False, True, len(set(labels)), max(len(label) for label in labels)
     try:
         numeric = np.asarray(labels, dtype=float)
         is_categorical = not bool(np.all(np.isfinite(numeric)))
     except (TypeError, ValueError):
         is_categorical = True
-    return is_categorical, len(set(labels)), max(len(label) for label in labels)
+    return is_categorical, False, len(set(labels)), max(len(label) for label in labels)
+
+
+def _is_datetime_array(array: np.ndarray) -> bool:
+    try:
+        if np.issubdtype(array.dtype, np.datetime64):
+            return True
+    except TypeError:
+        pass
+    values = [value for value in array if value is not None]
+    return bool(values) and all(
+        isinstance(value, (date, datetime, np.datetime64)) for value in values
+    )
 
 
 def _numeric_extent(series: list[Any]) -> tuple[float | None, float | None]:
@@ -452,6 +596,105 @@ def _numeric_format(lower: float | None, upper: float | None) -> tuple[str, int]
     approximate_step = span / 5.0
     decimals = max(0, min(6, int(math.ceil(-math.log10(approximate_step)))))
     return "decimal", decimals
+
+
+def _major_tick_target(
+    context: VisualContext,
+    *,
+    axis: str,
+    number_format: str,
+) -> int | None:
+    if context.chart_type in {"heatmap", "surface", "polar"}:
+        return None
+    if axis == "x" and context.x_is_categorical:
+        return None
+    if axis == "x" and context.x_is_datetime:
+        return 6
+    if number_format == "scientific":
+        return 5
+    if axis == "x" and context.chart_type in {"line", "scatter"}:
+        return 7
+    return 6
+
+
+def _major_tick_reason(
+    context: VisualContext,
+    *,
+    axis: str,
+    number_format: str,
+) -> str:
+    if context.chart_type in {"heatmap", "surface", "polar"}:
+        return "preserve_specialized_chart_axis_scale"
+    if axis == "x" and context.x_is_categorical:
+        return "preserve_category_tick_positions"
+    if axis == "x" and context.x_is_datetime:
+        return "six_temporal_anchors"
+    if number_format == "scientific":
+        return "fewer_ticks_for_wide_scientific_labels"
+    if axis == "x" and context.chart_type in {"line", "scatter"}:
+        return "use_wide_canvas_for_seven_x_anchors"
+    return "six_major_ticks_for_readable_comparison"
+
+
+def _preserve_specialized_x_axis(context: VisualContext) -> bool:
+    return (
+        context.x_is_categorical
+        or context.x_is_datetime
+        or context.chart_type
+        in {
+            "heatmap",
+            "surface",
+            "polar",
+        }
+    )
+
+
+def _minor_tick_target(context: VisualContext, *, axis: str) -> int | None:
+    if context.chart_type in {"heatmap", "surface", "polar"}:
+        return None
+    if axis == "x" and (context.x_is_categorical or context.x_is_datetime):
+        return 0
+    return 1
+
+
+def _minor_tick_reason(context: VisualContext, *, axis: str) -> str:
+    if context.chart_type in {"heatmap", "surface", "polar"}:
+        return "preserve_specialized_chart_axis_scale"
+    if axis == "x" and (context.x_is_categorical or context.x_is_datetime):
+        return "avoid_dense_category_or_temporal_subdivisions"
+    return "one_subdivision_between_major_ticks"
+
+
+def _grid_defaults(context: VisualContext) -> tuple[bool, bool]:
+    if context.chart_type in {"heatmap", "surface", "polar"}:
+        return False, False
+    # Horizontal guides make value comparison easier. Vertical guides are
+    # intentionally omitted because they compete with traces, bars and labels.
+    return False, True
+
+
+def _tick_label_margin(
+    lower: float | None,
+    upper: float | None,
+    number_format: str,
+    decimal_places: int,
+) -> float | None:
+    if lower is None or upper is None:
+        return None
+    if number_format == "scientific":
+        return 0.12
+    precision = max(0, decimal_places)
+    longest = max(len(f"{value:.{precision}f}") for value in (lower, upper))
+    if longest >= 10:
+        return 0.12
+    if longest >= 8:
+        return 0.1
+    return None
+
+
+def _max_optional(*values: float | None) -> float | None:
+    present = [value for value in values if value is not None]
+    return max(present) if present else None
 
 
 def automatic_histogram_bin_width(values: Any) -> float | None:

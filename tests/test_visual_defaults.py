@@ -237,3 +237,93 @@ def test_smart_defaults_use_scientific_notation_for_large_values() -> None:
 
     assert decision_value(defaults, "axes", "y_number_format") == "scientific"
     assert decision_value(defaults, "axes", "y_decimal_places") == 2
+
+
+def test_smart_defaults_choose_readable_numeric_ticks_and_quiet_grids() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=50,
+        x_values=np.linspace(0, 100, 50),
+        y_series=[np.linspace(0.125, 0.875, 50)],
+    )
+
+    assert decision_value(defaults, "axes", "x_major_ticks") == 7
+    assert decision_value(defaults, "axes", "y_major_ticks") == 6
+    assert decision_value(defaults, "axes", "x_minor_ticks") == 1
+    assert decision_value(defaults, "axes", "y_minor_ticks") == 1
+    assert decision_value(defaults, "axes", "x_major_grid") is False
+    assert decision_value(defaults, "axes", "y_major_grid") is True
+    assert decision_value(defaults, "axes", "minor_grid") is False
+    assert decision_value(defaults, "axes", "top_axis_ticks") is False
+
+
+def test_smart_defaults_format_dual_y_axes_independently_and_align_ticks() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=2,
+        row_count=4,
+        x_values=[0, 1, 2, 3],
+        y_series=[[20.1, 20.2, 20.3, 20.4], [100_000, 200_000, 300_000, 400_000]],
+        y_names=["temperature_C"],
+        y2_names=["pressure_Pa"],
+    )
+
+    assert decision_value(defaults, "axes", "y_number_format") == "decimal"
+    assert decision_value(defaults, "axes", "y2_number_format") == "scientific"
+    assert decision_value(defaults, "axes", "y_major_ticks") == 5
+    assert decision_value(defaults, "axes", "y2_major_ticks") == 5
+    assert decision_value(defaults, "axes", "y2_major_grid") is False
+    assert decision_value(defaults, "canvas", "right_margin") == 0.12
+
+
+def test_smart_defaults_preserve_datetime_labels_with_temporal_tick_density() -> None:
+    dates = np.array(["2026-01-01", "2026-01-02", "2026-01-03"], dtype="datetime64[D]")
+
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=dates,
+        y_series=[[1, 2, 3]],
+    )
+
+    assert defaults["context"]["x_is_datetime"] is True
+    assert defaults["context"]["x_is_categorical"] is False
+    assert decision_value(defaults, "axes", "x_tick_rotation") == 0
+    assert decision_value(defaults, "axes", "x_number_format") is None
+    assert decision_value(defaults, "axes", "x_major_ticks") == 6
+    assert decision_value(defaults, "axes", "x_minor_ticks") == 0
+
+
+def test_smart_defaults_leave_specialized_chart_axes_and_grids_untouched() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="heatmap",
+        series_count=1,
+        row_count=9,
+        x_values=np.arange(9),
+        y_series=[np.arange(9)],
+    )
+
+    assert decision_value(defaults, "axes", "x_major_ticks") is None
+    assert decision_value(defaults, "axes", "y_major_ticks") is None
+    assert decision_value(defaults, "axes", "x_minor_ticks") is None
+    assert decision_value(defaults, "axes", "y_minor_ticks") is None
+    assert decision_value(defaults, "axes", "x_number_format") is None
+    assert decision_value(defaults, "axes", "top_axis_ticks") is None
+    assert decision_value(defaults, "axes", "x_major_grid") is False
+    assert decision_value(defaults, "axes", "y_major_grid") is False
+
+
+def test_histogram_count_axis_uses_integer_ticks_and_zero_baseline() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="histogram",
+        series_count=1,
+        row_count=5,
+        x_values=[-3, -1, 0, 2, 4],
+        y_series=[[-3, -1, 0, 2, 4]],
+    )
+
+    assert decision_value(defaults, "axes", "y_number_format") == "decimal"
+    assert decision_value(defaults, "axes", "y_decimal_places") == 0
+    assert decision_value(defaults, "axes", "y_zero_baseline") is True

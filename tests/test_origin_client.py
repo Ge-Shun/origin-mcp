@@ -1637,6 +1637,70 @@ def test_apply_smart_visual_defaults_widens_canvas_for_external_legend(
     assert legend_calls[0]["position"] == "outside_right"
 
 
+def test_apply_smart_visual_defaults_sets_axis_ticks_grids_and_dual_y_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    scripts = []
+    defaults = {
+        "legend": {"show": {"value": False}},
+        "marks": {
+            "symbol_size": {"value": None},
+            "transparency": {"value": None},
+        },
+        "axes": {
+            "x_tick_rotation": {"value": 0},
+            "x_number_format": {"value": "decimal"},
+            "x_decimal_places": {"value": 0},
+            "y_number_format": {"value": "decimal"},
+            "y_decimal_places": {"value": 1},
+            "y2_number_format": {"value": "scientific"},
+            "y2_decimal_places": {"value": 2},
+            "x_major_ticks": {"value": 7},
+            "y_major_ticks": {"value": 6},
+            "y2_major_ticks": {"value": 6},
+            "x_minor_ticks": {"value": 1},
+            "y_minor_ticks": {"value": 1},
+            "y2_minor_ticks": {"value": 1},
+            "x_major_grid": {"value": False},
+            "y_major_grid": {"value": True},
+            "y2_major_grid": {"value": False},
+            "top_axis_ticks": {"value": False},
+            "y_zero_baseline": {"value": False},
+        },
+        "canvas": {
+            "page_aspect_ratio": {"value": None},
+            "bottom_margin": {"value": None},
+            "page_width_aspect_ratio": {"value": None},
+            "left_margin": {"value": 0.1},
+            "right_margin": {"value": 0.12},
+        },
+    }
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    client._apply_smart_visual_defaults(graph_name="Graph1", defaults=defaults)
+
+    script = scripts[0]
+    assert "layer.x.majorTicks=7;" in script
+    assert script.count("layer.x2.ticks=0;") == 2
+    assert "layer.y.majorTicks=6;" in script
+    assert "layer.x.grid.show=0;" in script
+    assert "layer.y.grid.show=1;" in script
+    assert "layer.y.grid.majorColor=color(235,235,235);" in script
+    assert "layer -s 2;" in script
+    assert "layer.y.label.numFormat=2;" in script
+    assert "layer.y2.label.numFormat=2;" in script
+    assert "layer.y2.label.decPlaces=2;" in script
+    assert "layer.y2.majorTicks=6;" in script
+    assert "layer.y.grid.show=0;" in script
+    assert "layer.y2.grid.show=0;" in script
+    assert "page -fls -u -ml 0.1 -mt 0.05 -mr 0.12 -mb 0.08;" in script
+
+
 def test_plot_table_exports_by_graph_name(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

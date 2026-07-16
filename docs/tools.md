@@ -249,6 +249,17 @@ legends, retains multi-series legends, moves line/scatter legends to the quieter
 upper corner, rotates crowded category ticks, selects scientific notation only
 for extreme magnitudes, keeps nonnegative bar-like charts on a zero baseline,
 and reduces marker size while increasing transparency for dense scatter plots.
+Continuous Cartesian axes request roughly five to seven major ticks according
+to label width and chart footprint, with a single minor subdivision. Datetime
+axes preserve Origin's date labels and use six temporal anchors; categorical
+axes preserve their category positions. Dual-Y plots format the two numeric
+scales independently, then use the smaller shared target tick count so the left
+and right major ticks stay visually aligned. A light horizontal major grid aids
+value comparison on line, scatter, bar, box, and generic Cartesian plots;
+vertical and minor grids remain hidden, and specialized heatmap, surface, and
+polar axes retain their own scale behavior. Standard Cartesian plots keep the
+top frame line but suppress duplicate top-axis major and minor ticks. Long
+numeric tick labels reserve additional left or right page margin automatically.
 Plots with long categorical X labels remain vertically oriented; their page
 height and bottom margin grow automatically so rotated labels are not clipped.
 The height is set from a target page aspect ratio, so repeated formatting does
