@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -719,7 +719,7 @@ def _strict_datetime_value(value: Any) -> datetime | None:
     else:
         return None
     if converted.tzinfo is not None:
-        converted = converted.astimezone(UTC).replace(tzinfo=None)
+        converted = converted.astimezone(timezone.utc).replace(tzinfo=None)
     return converted
 
 
