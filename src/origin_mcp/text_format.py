@@ -361,12 +361,14 @@ def infer_series_labels(
         SERIES_CONTAINER_TOKENS | SERIES_DIMENSION_TOKENS | GENERIC_VALUE_TOKENS
     ):
         if omit_units_when_metrics_differ:
-            labels = [
+            candidate_labels = [
                 origin_rich_text(_format_field_words([*item.metric_tokens, *item.statistic_roles]))
                 for item in parsed
             ]
-            if all(labels) and len({label.casefold() for label in labels}) == len(labels):
-                return labels
+            if all(candidate_labels) and len(
+                {label.casefold() for label in candidate_labels}
+            ) == len(candidate_labels):
+                return candidate_labels
         return [humanize_field_name(item.raw) for item in parsed]
 
     labels: list[str] = []

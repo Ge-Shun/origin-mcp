@@ -373,11 +373,11 @@ def _legend_layout_defaults(
     total = sum(lengths)
     fallback_outside = series_count >= 7 or longest > 24 or total > 90
     placement_assessed = bool(placement and placement["assessed"])
-    outside = (
-        visible
-        and series_count > 1
-        and (not placement["has_safe_inside"] if placement_assessed else fallback_outside)
-    )
+    if placement is not None and placement_assessed:
+        needs_outside = not placement["has_safe_inside"]
+    else:
+        needs_outside = fallback_outside
+    outside = visible and series_count > 1 and needs_outside
     occupancy_reason = (
         "all_inside_legend_regions_intersect_data"
         if placement_assessed

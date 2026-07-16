@@ -31,7 +31,7 @@ class GraphRef:
     visual_defaults: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        data = {
+        data: dict[str, Any] = {
             "graph_name": self.graph_name,
             "export_path": self.export_path,
             "template": self.template,
