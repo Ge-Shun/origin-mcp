@@ -65,23 +65,29 @@ class _GraphStyleMixin(_OriginClientBase):
         actual_symbol_size = chart_style["symbol_size"]
         styled_plots = 0
         applied_roles: list[str] = []
+        roles = self._palette_roles(palette_role, total_plots, palette_name_actual)
+        global_plot_index = 0
         for index in indexes:
             layer = self._graph_layer(graph, index)
             plots = self._layer_plots(layer)
-            roles = self._palette_roles(palette_role, len(plots), palette_name_actual)
-            for plot_index, plot in enumerate(plots):
+            for plot in plots:
                 if actual_line_width is not None:
                     self._set_nature_plot_line_width(plot, actual_line_width)
                 if actual_symbol_size is not None:
                     self._set_origin_property(plot, "symbol_size", actual_symbol_size)
-                role = roles[plot_index]
-                color = semantic_palette[role] if role else palette[plot_index % len(palette)]
+                role = roles[global_plot_index]
+                color = (
+                    semantic_palette[role]
+                    if role
+                    else palette[global_plot_index % len(palette)]
+                )
                 self._set_origin_property(plot, "color", color)
                 try:
                     self._set_origin_property(plot, "transparency", 0)
                 except OriginOperationError:
                     pass
-                applied_roles.append(role or f"category_{plot_index + 1}")
+                applied_roles.append(role or f"category_{global_plot_index + 1}")
+                global_plot_index += 1
             styled_plots += len(plots)
 
         safe_font = self._escape_labtalk(font_family)
@@ -166,11 +172,13 @@ class _GraphStyleMixin(_OriginClientBase):
                 response["diagnostics"]["auto_palette"] = auto_palette
         return response
 
-    def _nature_axis_title_text(self, layer: Any, axis_name: str, safe_font: str) -> str:
+    def _nature_axis_title_text(self, layer: Any, axis_name: str, _safe_font: str) -> str:
         axis = layer.axis(axis_name)
         title = self._safe_origin_attr(axis, "title")
-        text = self._labtalk_text(str(title or "")).replace('"', '\\"').replace(")", r"\)")
-        return f"\\f:{safe_font}({text})"
+        # Font is assigned independently through xb.font/yl.font. Keeping the
+        # title literal here prevents nested Origin escapes such as \x(00B5)
+        # from being corrupted when a surrounding \f:Font(...) group is built.
+        return self._labtalk_text(str(title or "")).replace('"', '\\"')
 
     def _set_nature_plot_line_width(self, plot: Any, line_width: float) -> None:
         self._set_plot_line_width(plot, line_width)

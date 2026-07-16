@@ -459,6 +459,8 @@ def _pti(
     title: str | None,
     export_path: str | None,
     style_mode: str = "origin_default",
+    show_legend: bool | None = None,
+    palette_name: str | None = None,
 ) -> dict[str, Any]:
     plot_type_id, template = PLOT_TYPE_ID_ROUTES[route]
     return _plot_table_id(
@@ -468,7 +470,9 @@ def _pti(
         selected_cols=selected_cols,
         graph_name=graph_name,
         title=title,
+        show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -498,6 +502,8 @@ def origin_plot(
     title: str | None = None,
     export_path: str | None = None,
     style_mode: str = "origin_default",
+    show_legend: bool | None = None,
+    palette_name: str | None = None,
 ) -> dict[str, Any]:
     """Create a table-based plot selected by ``kind``.
 
@@ -533,8 +539,9 @@ def origin_plot(
                 title=title,
                 x_label=None,
                 y_label=None,
-                show_legend=True,
+                show_legend=show_legend,
                 style_mode=style_mode,
+                palette_name=palette_name,
                 export_path=export_path,
             )
         if kind in _DISTRIBUTION_PLOT_KINDS:
@@ -546,7 +553,9 @@ def origin_plot(
                 selected_cols=selected_cols,
                 graph_name=graph_name,
                 title=title,
+                show_legend=show_legend,
                 style_mode=style_mode,
+                palette_name=palette_name,
                 export_path=export_path,
             )
         if kind not in PLOT_TYPE_ID_ROUTES:
@@ -558,7 +567,17 @@ def origin_plot(
                 )
             )
             raise ValueError(f"Unknown plot kind: {kind!r}. Valid kinds: {valid}.")
-        return _pti(path, kind, selected_cols, graph_name, title, export_path, style_mode)
+        return _pti(
+            path,
+            kind,
+            selected_cols,
+            graph_name,
+            title,
+            export_path,
+            style_mode,
+            show_legend,
+            palette_name,
+        )
 
     return _wrap(run)
 

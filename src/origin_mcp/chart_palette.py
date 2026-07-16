@@ -10,6 +10,9 @@ historical ``self._nature_palette()`` access pattern keeps working.
 
 from __future__ import annotations
 
+import colorsys
+import itertools
+import math
 import os
 from typing import Any
 
@@ -220,8 +223,60 @@ def select_palette_for_count(plot_count: int) -> tuple[str, dict[str, Any]]:
     ]
     if not matches:
         raise OriginOperationError(f"No lcpmgh/colors palette is available for {target} colors.")
-    matches.sort(key=lambda item: int(item[1].get("source_index") or 0))
+    # The source catalog is ordered for browsing rather than for plotting on a
+    # white page. Rank exact-count palettes by legibility and hue separation so
+    # ``lcpmgh_auto`` does not accidentally choose a nearly white first match.
+    matches.sort(
+        key=lambda item: (
+            -_palette_readability_score(item[1]),
+            int(item[1].get("source_index") or 0),
+        )
+    )
     return matches[0]
+
+
+def _palette_readability_score(palette: dict[str, Any]) -> float:
+    colors = [_rgb(color) for color in palette.get("palette", [])]
+    if not colors:
+        return float("-inf")
+    contrasts = [_contrast_against_white(color) for color in colors]
+    distances = [
+        math.dist(first, second) / math.sqrt(3 * 255**2)
+        for first, second in itertools.combinations(colors, 2)
+    ]
+    hue_coverage = _palette_hue_coverage(colors)
+    return (
+        min(min(contrasts), 3.0) * 1.5
+        + sum(min(contrast, 7.0) for contrast in contrasts) / len(contrasts) * 0.5
+        + (sum(distances) / len(distances) if distances else 0.0) * 4.0
+        + hue_coverage / 60.0
+    )
+
+
+def _contrast_against_white(color: Rgb) -> float:
+    channels = [channel / 255 for channel in color]
+    linear = [
+        channel / 12.92
+        if channel <= 0.04045
+        else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in channels
+    ]
+    luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    return 1.05 / (luminance + 0.05)
+
+
+def _palette_hue_coverage(colors: list[Rgb]) -> float:
+    hues = []
+    for red, green, blue in colors:
+        hue, saturation, _value = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
+        if saturation >= 0.15:
+            hues.append(hue * 360)
+    if len(hues) < 2:
+        return 0.0
+    hues.sort()
+    gaps = [second - first for first, second in itertools.pairwise(hues)]
+    gaps.append(360 - hues[-1] + hues[0])
+    return 360 - max(gaps)
 
 
 def auto_palette_notice(plot_count: int, palette_name: str) -> dict[str, Any]:

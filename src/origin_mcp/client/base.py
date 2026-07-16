@@ -49,6 +49,7 @@ TABLE_WORKSHEET_PLOT_IDS = {
     214,
     215,
     216,
+    219,
     225,
     249,
 }

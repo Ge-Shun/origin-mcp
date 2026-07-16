@@ -330,7 +330,10 @@ _COMMON_PARAMETER_DESCRIPTIONS = {
     "selected_cols": "Column names or zero-based indexes to include in the plot.",
     "sheet_name": "Origin worksheet name. Omit to use the active sheet or the tool default.",
     "show": "Whether Origin should be visible after connecting or querying capabilities.",
-    "show_legend": "Whether the graph legend should be shown; null leaves it unchanged.",
+    "show_legend": (
+        "Legend visibility override; null uses cross-chart rules based on series count "
+        "and chart type."
+    ),
     "skiprows": "Zero-based input row index or indexes to skip while reading the file.",
     "spec": "Declarative FigureSpec describing data, layout, plots, style, export, and QA.",
     "start_col": "Column name or zero-based column index at which writing begins.",

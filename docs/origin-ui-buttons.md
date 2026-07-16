@@ -27,6 +27,24 @@ folder in one step:
 python scripts\build_origin_app.py --force --install
 ```
 
+### Development update rule
+
+The installed Start App vendors its own copy of the `origin_mcp` package.
+Therefore, whenever development changes affect `addon.py`, the App
+launcher/installer/build scripts, or code executed by the Origin-side bridge,
+stop the bridge and run the command above again before testing with Origin.
+Restart **Origin MCP Bridge Start**, then verify the connection with:
+
+```powershell
+origin-mcp status
+origin-mcp doctor --ping-origin
+```
+
+For an App that is already registered on the development machine,
+`--force --install` is enough for normal source debugging. Repack and reinstall
+both OPX files when validating App packaging, metadata, registration, or a
+distributable installation.
+
 This creates `build\origin-app\Origin MCP Bridge Start` and
 `build\origin-app\Origin MCP Bridge Stop`, then copies both source folders to
 `%LOCALAPPDATA%\OriginLab\Apps`. As with the installed-package workflow, pack

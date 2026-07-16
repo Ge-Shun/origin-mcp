@@ -29,7 +29,7 @@ def test_plot_table_request_defaults(tmp_path: Path) -> None:
 
     assert req.x_col is None
     assert req.y_cols is None
-    assert req.show_legend is True
+    assert req.show_legend is None
 
 
 def test_figurespec_validates_references(tmp_path: Path) -> None:

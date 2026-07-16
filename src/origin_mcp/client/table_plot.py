@@ -4,7 +4,13 @@ from pathlib import Path
 from typing import Any
 
 from .. import template_library
-from ..errors import OriginOperationError
+from ..errors import OriginMcpError, OriginOperationError
+from ..text_format import humanize_field_name
+from ..visual_defaults import (
+    automatic_histogram_bin_width,
+    decision_value,
+    resolve_visual_defaults,
+)
 from .base import (
     MATRIX_PLOTM_IDS,
     TABLE_PLOTXYZ_IDS,
@@ -13,6 +19,8 @@ from .base import (
     WorksheetRef,
     _OriginClientBase,
 )
+
+DUAL_Y_NATURE_AXIS_TITLE_SIZE = 20
 
 
 class _TablePlotMixin(_OriginClientBase):
@@ -75,9 +83,10 @@ class _TablePlotMixin(_OriginClientBase):
         z_col: str | int | None = None,
         y_error_col: str | int | None = None,
         x_error_col: str | int | None = None,
-        show_legend: bool = True,
+        show_legend: bool | None = None,
         style_mode: str = "origin_default",
         palette_name: str | None = None,
+        histogram_bin_width: float | str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         path = self._normalize_user_path(path)
@@ -119,6 +128,25 @@ class _TablePlotMixin(_OriginClientBase):
         wks.from_df(df)
 
         style_mode_actual = self._normalize_style_mode(style_mode)
+        visual_defaults = resolve_visual_defaults(
+            chart_type=kind,
+            series_count=len(y_names),
+            row_count=len(df),
+            x_values=df[x_name].to_numpy(),
+            y_series=[df[name].to_numpy() for name in y_names],
+            show_legend=show_legend,
+            palette_name=palette_name,
+            style_mode=style_mode_actual,
+            x_name=x_name,
+            y_names=y_names,
+            table=df,
+            title_hint=title,
+            x_label=x_label,
+            y_label=y_label,
+        )
+        show_legend_actual = bool(
+            decision_value(visual_defaults, "legend", "show")
+        )
         graph_template = self._resolve_graph_template(kind=kind, template=template)
         graph = self._new_graph(kind=kind, graph_name=graph_name, template=graph_template)
         layer = graph[0] if hasattr(graph, "__getitem__") else graph
@@ -135,6 +163,18 @@ class _TablePlotMixin(_OriginClientBase):
                 x_error_name=xerr_name,
             )
 
+        # Add plots while Origin can still resolve the imported DataFrame
+        # headers. Some Origin builds silently add zero plots when ``colx`` or
+        # ``coly`` is addressed by the original header after the worksheet Long
+        # Name row has been changed. Display labels are safe to apply once the
+        # plot data ranges have already been bound.
+        series_labels = decision_value(visual_defaults, "legend", "series_labels")
+        self._set_worksheet_display_labels(
+            wks,
+            columns,
+            overrides=dict(zip(y_names, series_labels, strict=True)),
+        )
+
         actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
         if kind in {"column", "c"} and len(y_names) > 1:
             self._group_layer_plots(layer, graph_name=actual_graph_name, layer_index=0)
@@ -142,9 +182,9 @@ class _TablePlotMixin(_OriginClientBase):
         self.format_graph(
             graph=graph,
             title=title,
-            x_label=x_label or x_name,
-            y_label=y_label or ", ".join(y_names),
-            show_legend=show_legend,
+            x_label=decision_value(visual_defaults, "axes", "x_title"),
+            y_label=decision_value(visual_defaults, "axes", "y_title"),
+            show_legend=show_legend_actual,
             rescale=True,
         )
         self._remember_graph_alias(graph_name, actual_graph_name)
@@ -152,10 +192,33 @@ class _TablePlotMixin(_OriginClientBase):
             style_kwargs: dict[str, Any] = {
                 "graph_name": actual_graph_name,
                 "chart_type": kind,
+                "show_legend": show_legend_actual,
+                "palette_name": decision_value(visual_defaults, "palette_name"),
             }
-            if palette_name is not None:
-                style_kwargs["palette_name"] = palette_name
             self.apply_nature_style(**style_kwargs)
+        if kind == "histogram":
+            resolved_bin_width = histogram_bin_width
+            if histogram_bin_width == "auto" or (
+                histogram_bin_width is None and template is None
+            ):
+                resolved_bin_width = automatic_histogram_bin_width(df[y_names[0]].to_numpy())
+            if resolved_bin_width is not None:
+                if not isinstance(resolved_bin_width, (int, float)) or resolved_bin_width <= 0:
+                    raise OriginOperationError(
+                        "histogram_bin_width must be a positive number or 'auto'."
+                    )
+                self.set_plot_style(
+                    graph_name=actual_graph_name,
+                    histogram_bin_width=float(resolved_bin_width),
+                )
+                # Origin keeps the Y limits from its initial automatic binning.
+                # Recompute the axes after changing the bin width so count bars
+                # are not clipped against the old (often 0..1.1) range.
+                self._rescale(layer)
+        visual_defaults["applied"] = self._apply_smart_visual_defaults(
+            graph_name=actual_graph_name,
+            defaults=visual_defaults,
+        )
         exported: str | None = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, actual_graph_name)["path"]
@@ -168,6 +231,7 @@ class _TablePlotMixin(_OriginClientBase):
             style_mode=style_mode_actual,
             requested_graph_name=graph_name,
             display_name=self._object_long_name(graph, default=graph_name),
+            visual_defaults=visual_defaults,
         )
 
     def plot_dual_y(
@@ -191,7 +255,9 @@ class _TablePlotMixin(_OriginClientBase):
         y1_label: str | None = None,
         y2_label: str | None = None,
         plot_type: str = "line",
+        show_legend: bool | None = None,
         style_mode: str = "origin_default",
+        palette_name: str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef]:
         if not y1_cols or not y2_cols:
@@ -219,6 +285,25 @@ class _TablePlotMixin(_OriginClientBase):
         y1_names = [self._resolve_column(columns, col, default_index=1) for col in y1_cols]
         y2_names = [self._resolve_column(columns, col, default_index=1) for col in y2_cols]
         style_mode_actual = self._normalize_style_mode(style_mode)
+        visual_defaults = resolve_visual_defaults(
+            chart_type=plot_type,
+            series_count=len(y1_names) + len(y2_names),
+            row_count=len(df),
+            x_values=df[x_name].to_numpy(),
+            y_series=[df[name].to_numpy() for name in y1_names + y2_names],
+            show_legend=show_legend,
+            palette_name=palette_name,
+            style_mode=style_mode_actual,
+            x_name=x_name,
+            y_names=y1_names,
+            y2_names=y2_names,
+            table=df,
+            title_hint=title,
+            x_label=x_label,
+            y_label=y1_label,
+            y2_label=y2_label,
+        )
+        show_legend_actual = bool(decision_value(visual_defaults, "legend", "show"))
 
         actual_book_name = book_name or (
             self._safe_filename(f"{graph_name}_Data") if graph_name else None
@@ -237,22 +322,53 @@ class _TablePlotMixin(_OriginClientBase):
         for y_name in y2_names:
             self._add_plot(layer_right, wks, x_name=x_name, y_name=y_name, kind=plot_type)
 
-        actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
-        if len(y1_names) > 1:
-            self._group_layer_plots(layer_left, graph_name=actual_graph_name, layer_index=0)
-        if len(y2_names) > 1:
-            self._group_layer_plots(layer_right, graph_name=actual_graph_name, layer_index=1)
+        series_labels = decision_value(visual_defaults, "legend", "series_labels")
+        self._set_worksheet_display_labels(
+            wks,
+            columns,
+            overrides=dict(zip(y1_names + y2_names, series_labels, strict=True)),
+        )
 
-        layer_left.axis("x").title = self._label_text(x_label or x_name)
-        layer_left.axis("y").title = self._label_text(y1_label or ", ".join(y1_names))
-        layer_right.axis("y").title = self._label_text(y2_label or ", ".join(y2_names))
+        actual_graph_name = self._object_name(graph, default=graph_name or "Graph")
+        layer_left.axis("x").title = self._label_text(
+            decision_value(visual_defaults, "axes", "x_title")
+        )
+        layer_left.axis("y").title = self._label_text(
+            decision_value(visual_defaults, "axes", "y_title")
+        )
+        layer_right.axis("y").title = self._label_text(
+            decision_value(visual_defaults, "axes", "y2_title")
+        )
         if title:
             self._set_page_long_name(graph, title, force_labtalk=graph_name is not None)
         self._rescale(layer_left)
         self._rescale(layer_right)
         self._remember_graph_alias(graph_name, actual_graph_name)
         if style_mode_actual == "nature":
-            self.apply_nature_style(graph_name=actual_graph_name, chart_type=plot_type)
+            self.apply_nature_style(
+                graph_name=actual_graph_name,
+                chart_type=plot_type,
+                show_legend=show_legend_actual,
+                palette_name=decision_value(visual_defaults, "palette_name"),
+            )
+        try:
+            self.format_graph(
+                graph_name=actual_graph_name,
+                show_legend=show_legend_actual,
+                rescale=False,
+            )
+        except OriginMcpError:
+            pass
+        visual_defaults["applied"] = self._apply_smart_visual_defaults(
+            graph_name=actual_graph_name,
+            defaults=visual_defaults,
+        )
+        visual_defaults["applied"]["dual_y_titles"] = self._sync_dual_y_axis_titles(
+            graph_name=actual_graph_name,
+            left_title=decision_value(visual_defaults, "axes", "y_title"),
+            right_title=decision_value(visual_defaults, "axes", "y2_title"),
+            style_mode=style_mode_actual,
+        )
 
         exported: str | None = None
         if export_path is not None:
@@ -266,7 +382,45 @@ class _TablePlotMixin(_OriginClientBase):
             style_mode=style_mode_actual,
             requested_graph_name=graph_name,
             display_name=self._object_long_name(graph, default=graph_name),
+            visual_defaults=visual_defaults,
         )
+
+    def _sync_dual_y_axis_titles(
+        self,
+        *,
+        graph_name: str,
+        left_title: str,
+        right_title: str,
+        style_mode: str,
+    ) -> dict[str, Any]:
+        """Synchronize the visible title objects used by Origin's doubleY template."""
+
+        safe_graph = self._escape_labtalk(graph_name)
+        safe_left = self._labtalk_text(left_title).replace('"', '\\"')
+        safe_right = self._labtalk_text(right_title).replace('"', '\\"')
+        parts = [
+            f'win -a "{safe_graph}";',
+            "layer -s 1;",
+            f'yl.text$="{safe_left}";',
+            "layer -s 2;",
+            f'yr.text$="{safe_right}";',
+        ]
+        if style_mode == "nature":
+            parts.extend(
+                [
+                    "layer -s 1;",
+                    "yl.font=font(Arial);",
+                    f"yl.fsize={DUAL_Y_NATURE_AXIS_TITLE_SIZE};",
+                    "layer -s 2;",
+                    "yr.font=font(Arial);",
+                    f"yr.fsize={DUAL_Y_NATURE_AXIS_TITLE_SIZE};",
+                ]
+            )
+        script = " ".join(parts)
+        try:
+            return {"script": script, **self.run_labtalk(script)}
+        except OriginMcpError as exc:
+            return {"script": script, "warning": str(exc)}
 
     def plot_table_by_id(
         self,
@@ -287,8 +441,11 @@ class _TablePlotMixin(_OriginClientBase):
         title: str | None = None,
         x_label: str | None = None,
         y_label: str | None = None,
+        show_legend: bool | None = None,
         style_mode: str = "origin_default",
         palette_name: str | None = None,
+        colormap: str | None = None,
+        histogram_bin_width: float | str | None = None,
         export_path: Path | None = None,
     ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         path = self._normalize_user_path(path)
@@ -308,11 +465,55 @@ class _TablePlotMixin(_OriginClientBase):
 
         columns = [str(col) for col in df.columns]
         selected = self._resolve_selected_columns(columns, selected_cols)
+        style_mode_actual = self._normalize_style_mode(style_mode)
+        chart_type = self._nature_chart_type_for_plot_id(plot_type_id, template)
+        profile_x, profile_y, series_count = self._plot_type_visual_profile(
+            df,
+            selected,
+            plot_type_id,
+        )
+        axis_x_name, axis_y_names = self._plot_type_axis_fields(selected, plot_type_id)
+        smart_defaults = resolve_visual_defaults(
+            chart_type=chart_type,
+            series_count=series_count,
+            row_count=len(df),
+            x_values=profile_x,
+            y_series=profile_y,
+            show_legend=show_legend,
+            palette_name=palette_name,
+            style_mode=style_mode_actual,
+            x_name=axis_x_name,
+            y_names=axis_y_names,
+            table=df,
+            title_hint=title,
+            x_label=x_label,
+            y_label=y_label,
+        )
+        show_legend_actual = bool(decision_value(smart_defaults, "legend", "show"))
+        resolved_bin_width = histogram_bin_width
+        if histogram_bin_width == "auto":
+            resolved_bin_width = automatic_histogram_bin_width(df[selected[0]].to_numpy())
+        if resolved_bin_width is not None and (
+            not isinstance(resolved_bin_width, (int, float)) or resolved_bin_width <= 0
+        ):
+            raise OriginOperationError(
+                "histogram_bin_width must be a positive number or 'auto'."
+            )
         actual_book_name = book_name or (
             self._safe_filename(f"{graph_name}_Data") if graph_name else None
         )
         wks = self._new_sheet(book_name=actual_book_name, sheet_name=sheet_name)
         wks.from_df(df)
+        series_labels = decision_value(smart_defaults, "legend", "series_labels")
+        self._set_worksheet_display_labels(
+            wks,
+            columns,
+            overrides={
+                name: label
+                for name, label in zip(axis_y_names, series_labels, strict=True)
+                if name in columns
+            },
+        )
         if plot_type_id == 242:
             # Plot type 242 (3D Colormap Surface) consumes a matrix, not scattered
             # XYZ worksheet columns: plotxyz against XYZ produces an empty graph.
@@ -327,7 +528,9 @@ class _TablePlotMixin(_OriginClientBase):
                 x_label=x_label,
                 y_label=y_label,
                 style_mode=style_mode,
-                palette_name=palette_name,
+                palette_name=decision_value(smart_defaults, "palette_name"),
+                show_legend=show_legend_actual,
+                smart_defaults=smart_defaults,
                 export_path=export_path,
             )
         command, range_option = self._table_plot_command_options(plot_type_id)
@@ -340,20 +543,35 @@ class _TablePlotMixin(_OriginClientBase):
         reuse_existing_graph = existing_graph is not None and command != "worksheet"
         if reuse_existing_graph:
             self._clear_graph_plots(existing_graph, graph_name_actual)
-        if command == "worksheet":
-            script = self._worksheet_plot_command(columns, selected, plot_type_id, template)
-            result = self._execute_on_worksheet(wks, script)
-        else:
-            script = self._plot_command(
-                command=command,
-                range_option=range_option,
-                data_range=data_range,
-                plot_type_id=plot_type_id,
-                template=template,
-                graph_name=graph_name_actual,
-                reuse_existing=reuse_existing_graph,
-            )
-            result = self.run_labtalk(script)
+        creation_bin_width = (
+            float(resolved_bin_width)
+            if plot_type_id == 219 and resolved_bin_width is not None
+            else None
+        )
+        if creation_bin_width is not None:
+            # Origin calculates the derived Bin worksheet when the histogram is
+            # created. Setting @HBS beforehand gives the graph the correct bin
+            # counts and initial Y scale; changing -hbs afterward alone does not
+            # reliably rebuild those derived values in all Origin versions.
+            self.run_labtalk(f"@HBS={creation_bin_width:g};")
+        try:
+            if command == "worksheet":
+                script = self._worksheet_plot_command(columns, selected, plot_type_id, template)
+                result = self._execute_on_worksheet(wks, script)
+            else:
+                script = self._plot_command(
+                    command=command,
+                    range_option=range_option,
+                    data_range=data_range,
+                    plot_type_id=plot_type_id,
+                    template=template,
+                    graph_name=graph_name_actual,
+                    reuse_existing=reuse_existing_graph,
+                )
+                result = self.run_labtalk(script)
+        finally:
+            if creation_bin_width is not None:
+                self.run_labtalk("@HBS=-1;")
         self._assert_plot_type_command(
             plot_type_id=plot_type_id,
             template=template,
@@ -380,27 +598,59 @@ class _TablePlotMixin(_OriginClientBase):
             actual_graph_name=graph_name_actual,
         )
         self._remember_graph_alias(graph_name, graph_name_actual)
-        if title or x_label or y_label:
+        inferred_x_label = (
+            decision_value(smart_defaults, "axes", "x_title") if axis_x_name else None
+        )
+        inferred_y_label = (
+            decision_value(smart_defaults, "axes", "y_title") if axis_y_names else None
+        )
+        if title or inferred_x_label or inferred_y_label:
             try:
                 self.format_graph(
                     graph_name=graph_name_actual,
                     title=title,
-                    x_label=x_label,
-                    y_label=y_label,
+                    x_label=inferred_x_label,
+                    y_label=inferred_y_label,
                     rescale=True,
                 )
-            except OriginOperationError:
+            except OriginMcpError:
                 pass
         self._suppress_graph_title_text(graph_name=graph_name_actual, title=title)
-        style_mode_actual = self._normalize_style_mode(style_mode)
         if style_mode_actual == "nature":
             style_kwargs = {
                 "graph_name": graph_name_actual,
-                "chart_type": self._nature_chart_type_for_plot_id(plot_type_id, template),
+                "chart_type": chart_type,
+                "show_legend": show_legend_actual,
+                "palette_name": decision_value(smart_defaults, "palette_name"),
             }
-            if palette_name is not None:
-                style_kwargs["palette_name"] = palette_name
             self.apply_nature_style(**style_kwargs)
+        visual_defaults: dict[str, Any] = {"smart": smart_defaults}
+        if colormap is not None:
+            visual_defaults["colormap"] = self.set_plot_style(
+                graph_name=graph_name_actual,
+                colormap=colormap,
+            )
+        if resolved_bin_width is not None:
+            visual_defaults["histogram_bin_width"] = self.set_plot_style(
+                graph_name=graph_name_actual,
+                histogram_bin_width=float(resolved_bin_width),
+            )
+            # The plot is initially scaled for Origin's automatic bins. A
+            # custom width changes the counts and therefore requires a second
+            # rescale before export.
+            self.format_graph(graph_name=graph_name_actual, rescale=True)
+        try:
+            self.format_graph(
+                graph_name=graph_name_actual,
+                show_legend=show_legend_actual,
+                rescale=False,
+            )
+        except OriginMcpError:
+            pass
+        smart_defaults["applied"] = self._apply_smart_visual_defaults(
+            graph_name=graph_name_actual,
+            defaults=smart_defaults,
+        )
         exported = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
@@ -417,6 +667,7 @@ class _TablePlotMixin(_OriginClientBase):
                     graph_name_actual,
                     default=title or graph_name,
                 ),
+                visual_defaults=smart_defaults,
             ),
             {
                 "script": script,
@@ -427,6 +678,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "command": command,
                 "range_option": range_option,
                 "warning": output_warning,
+                "visual_defaults": visual_defaults,
             },
         )
 
@@ -443,6 +695,8 @@ class _TablePlotMixin(_OriginClientBase):
         y_label: str | None,
         style_mode: str,
         palette_name: str | None,
+        show_legend: bool,
+        smart_defaults: dict[str, Any],
         export_path: Path | None,
     ) -> tuple[WorksheetRef, GraphRef, dict[str, Any]]:
         """Grid scattered XYZ worksheet data into a matrix and plot a 3D
@@ -490,10 +744,22 @@ class _TablePlotMixin(_OriginClientBase):
             style_kwargs: dict[str, Any] = {
                 "graph_name": graph_name_actual,
                 "chart_type": self._nature_chart_type_for_plot_id(242, "glmesh"),
+                "show_legend": show_legend,
+                "palette_name": palette_name,
             }
-            if palette_name is not None:
-                style_kwargs["palette_name"] = palette_name
             self.apply_nature_style(**style_kwargs)
+        try:
+            self.format_graph(
+                graph_name=graph_name_actual,
+                show_legend=show_legend,
+                rescale=False,
+            )
+        except OriginMcpError:
+            pass
+        smart_defaults["applied"] = self._apply_smart_visual_defaults(
+            graph_name=graph_name_actual,
+            defaults=smart_defaults,
+        )
         exported = None
         if export_path is not None:
             exported = self._export_plot_command_graph(export_path, graph_name_actual)["path"]
@@ -510,6 +776,7 @@ class _TablePlotMixin(_OriginClientBase):
                     graph_name_actual,
                     default=title or graph_name,
                 ),
+                visual_defaults=smart_defaults,
             ),
             {
                 "script": script,
@@ -521,6 +788,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "range_option": "im",
                 "data_range": data_range,
                 "warning": output_warning,
+                "visual_defaults": {"smart": smart_defaults},
             },
         )
 
@@ -813,6 +1081,173 @@ class _TablePlotMixin(_OriginClientBase):
             if graph_name:
                 self._set_page_long_name(graph, graph_name)
             return graph
+
+    @staticmethod
+    def _plot_type_visual_profile(
+        df: Any,
+        selected: list[str],
+        plot_type_id: int,
+    ) -> tuple[Any, list[Any], int]:
+        """Return X values, value series, and visual series count for a Plot ID."""
+
+        if plot_type_id == 219:
+            values = df[selected[0]].to_numpy()
+            return values, [values], 1
+        if plot_type_id == 206:
+            return selected, [df[name].to_numpy() for name in selected], len(selected)
+        single_mark_ids = {
+            183,
+            184,
+            185,
+            186,
+            191,
+            193,
+            208,
+            218,
+            221,
+            240,
+            242,
+            243,
+            245,
+            247,
+            248,
+        }
+        if plot_type_id in single_mark_ids:
+            return df[selected[0]].to_numpy(), [df[selected[-1]].to_numpy()], 1
+        value_names = selected[1:] or selected
+        return (
+            df[selected[0]].to_numpy(),
+            [df[name].to_numpy() for name in value_names],
+            max(1, len(value_names)),
+        )
+
+    @staticmethod
+    def _plot_type_axis_fields(
+        selected: list[str],
+        plot_type_id: int,
+    ) -> tuple[str | None, list[str]]:
+        """Return semantic X/Y fields for safe automatic axis titles."""
+
+        if plot_type_id == 219:
+            return selected[0], ["count"]
+        if plot_type_id == 206:
+            return "category", selected
+        no_simple_xy_axes = {103, 183, 184, 185, 186, 191, 225, 240, 242, 243, 245}
+        if plot_type_id in no_simple_xy_axes:
+            return None, []
+        if plot_type_id == 221:
+            return selected[0], selected[1:]
+        if plot_type_id in {193, 208, 218, 247, 248}:
+            return selected[0], [selected[1] if len(selected) > 1 else selected[0]]
+        return selected[0], selected[1:] or selected
+
+    def _apply_smart_visual_defaults(
+        self,
+        *,
+        graph_name: str,
+        defaults: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply resolved low-risk cross-chart rules to an Origin graph."""
+
+        safe_graph = self._escape_labtalk(graph_name)
+        rotation = int(decision_value(defaults, "axes", "x_tick_rotation") or 0)
+        number_format = decision_value(defaults, "axes", "y_number_format")
+        decimal_places = int(decision_value(defaults, "axes", "y_decimal_places"))
+        zero_baseline = bool(decision_value(defaults, "axes", "y_zero_baseline"))
+        canvas = defaults.get("canvas", {})
+        page_aspect_ratio = (
+            decision_value(canvas, "page_aspect_ratio")
+            if "page_aspect_ratio" in canvas
+            else None
+        )
+        bottom_margin = (
+            decision_value(canvas, "bottom_margin") if "bottom_margin" in canvas else None
+        )
+        page_width_aspect_ratio = (
+            decision_value(canvas, "page_width_aspect_ratio")
+            if "page_width_aspect_ratio" in canvas
+            else None
+        )
+        right_margin = (
+            decision_value(canvas, "right_margin") if "right_margin" in canvas else None
+        )
+        script_parts = [
+            f'win -a "{safe_graph}";',
+            "layer -s 1;",
+            f"layer.x.label.rotate={rotation};",
+            f"layer.y.label.numFormat={2 if number_format == 'scientific' else 1};",
+            f"layer.y.label.decPlaces={decimal_places};",
+        ]
+        if zero_baseline:
+            script_parts.append("layer.y.from=0;")
+        if page_aspect_ratio is not None or page_width_aspect_ratio is not None:
+            script_parts.append("page.kar=0;")
+            if page_aspect_ratio is not None:
+                script_parts.append(
+                    f"page.height=page.width/{float(page_aspect_ratio):g};"
+                )
+            elif page_width_aspect_ratio is not None:
+                script_parts.append(
+                    f"page.width=page.height*{float(page_width_aspect_ratio):g};"
+                )
+        if bottom_margin is not None or right_margin is not None:
+            script_parts.append(
+                "page -fls -u -ml 0.08 -mt 0.05 "
+                f"-mr {float(right_margin if right_margin is not None else 0.05):g} "
+                f"-mb {float(bottom_margin if bottom_margin is not None else 0.08):g};"
+            )
+        axis_script = " ".join(script_parts)
+        try:
+            axis_result = self.run_labtalk(axis_script)
+        except OriginMcpError as exc:
+            axis_result = {"warning": str(exc)}
+
+        mark_result = None
+        symbol_size = decision_value(defaults, "marks", "symbol_size")
+        transparency = decision_value(defaults, "marks", "transparency")
+        if symbol_size is not None or transparency is not None:
+            try:
+                mark_result = self.set_plot_style(
+                    graph_name=graph_name,
+                    symbol_size=symbol_size,
+                    transparency=transparency,
+                )
+            except OriginMcpError as exc:
+                mark_result = {"warning": str(exc)}
+
+        legend_result = None
+        if decision_value(defaults, "legend", "show"):
+            position = decision_value(defaults, "legend", "position")
+            if position is not None:
+                try:
+                    legend_result = self.format_legend(
+                        graph_name=graph_name,
+                        show_frame=False,
+                        position=position,
+                    )
+                except OriginMcpError as exc:
+                    legend_result = {"warning": str(exc), "position": position}
+        return {
+            "axis_script": axis_script,
+            "axis_result": axis_result,
+            "marks": mark_result,
+            "legend": legend_result,
+        }
+
+    @staticmethod
+    def _set_worksheet_display_labels(
+        wks: Any,
+        columns: list[str],
+        overrides: dict[str, str] | None = None,
+    ) -> None:
+        setter = getattr(wks, "set_labels", None)
+        if callable(setter):
+            labels = overrides or {}
+            setter(
+                [labels.get(column, humanize_field_name(column)) for column in columns],
+                "L",
+                offset=0,
+            )
 
     @staticmethod
     def _default_graph_templates() -> dict[str, str]:

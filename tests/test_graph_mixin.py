@@ -48,6 +48,116 @@ def test_plot_table_creates_graph_and_plots(fake_client: OriginClient, tmp_path:
     # Axis titles were applied via format_graph.
     assert page[0].axis("x").title == "X axis"
     assert page[0].axis("y").title == "Y axis"
+    sheet = fake_client.op.books[-1][0]
+    assert sheet.label_calls[-1] == (["X", "Y1", "Y2"], "L", 0)
+
+
+def test_plot_table_humanizes_default_labels_and_units(
+    fake_client: OriginClient,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "dose.csv"
+    path.write_text("dose_uM,measured_response\n1,2\n2,4\n", encoding="utf-8")
+
+    fake_client.plot_table(
+        path=path,
+        kind="line",
+        x_col="dose_uM",
+        y_cols=["measured_response"],
+        show_legend=False,
+    )
+
+    page = fake_client.op.graphs[-1]
+    assert page[0].axis("x").title == r"Dose (\x(00B5)M)"
+    assert page[0].axis("y").title == "Measured response"
+    sheet = fake_client.op.books[-1][0]
+    assert sheet.label_calls[-1] == (
+        [r"Dose (\x(00B5)M)", "Measured response"],
+        "L",
+        0,
+    )
+
+
+def test_plot_table_uses_shared_axis_title_and_compact_legend_labels(
+    fake_client: OriginClient,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "temperature.csv"
+    path.write_text(
+        "time_s,temperature_control_C,temperature_treated_C\n0,20,21\n1,22,24\n",
+        encoding="utf-8",
+    )
+
+    _, graph = fake_client.plot_table(
+        path=path,
+        kind="line",
+        x_col="time_s",
+        y_cols=["temperature_control_C", "temperature_treated_C"],
+    )
+
+    page = fake_client.op.graphs[-1]
+    sheet = fake_client.op.books[-1][0]
+    assert page[0].axis("x").title == "Time (s)"
+    assert page[0].axis("y").title == r"Temperature (\x(00B0)C)"
+    assert sheet.label_calls[-1] == (
+        ["Time (s)", "Control", "Treated"],
+        "L",
+        0,
+    )
+    assert graph.visual_defaults is not None
+    assert graph.visual_defaults["axes"]["y_title"]["reason"] == "shared_metric_and_unit"
+
+
+def test_plot_table_binds_plots_before_setting_display_labels(
+    fake_client: OriginClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csv = _write_csv(tmp_path)
+    events: list[str] = []
+    original_add_plot = fake_client._add_plot
+    original_set_labels = fake_client._set_worksheet_display_labels
+
+    def record_add_plot(*args: Any, **kwargs: Any) -> None:
+        events.append("add_plot")
+        original_add_plot(*args, **kwargs)
+
+    def record_set_labels(*args: Any, **kwargs: Any) -> None:
+        events.append("set_labels")
+        original_set_labels(*args, **kwargs)
+
+    monkeypatch.setattr(fake_client, "_add_plot", record_add_plot)
+    monkeypatch.setattr(fake_client, "_set_worksheet_display_labels", record_set_labels)
+
+    fake_client.plot_table(
+        path=csv,
+        kind="line",
+        x_col="x",
+        y_cols=["y1", "y2"],
+    )
+
+    assert events == ["add_plot", "add_plot", "set_labels"]
+
+
+def test_plot_table_rescales_after_setting_histogram_bin_width(
+    fake_client: OriginClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csv = _write_csv(tmp_path)
+    rescale_calls: list[Any] = []
+    monkeypatch.setattr(fake_client, "_rescale", rescale_calls.append)
+
+    fake_client.plot_table(
+        path=csv,
+        kind="histogram",
+        y_cols=["y1"],
+        histogram_bin_width="auto",
+    )
+
+    # Once during general graph formatting, then again after the bin width
+    # changes the histogram counts.
+    assert len(rescale_calls) == 2
 
 
 def test_plot_table_exports_when_requested(fake_client: OriginClient, tmp_path: Path) -> None:
