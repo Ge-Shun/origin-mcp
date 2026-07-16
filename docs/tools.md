@@ -238,6 +238,58 @@ annotations 18 pt. FigureSpec annotations use the same 18 pt default unless
 `style.annotation_font_size` or an individual annotation `style.font_size`
 overrides it.
 
+Table plotting also applies readability defaults when the caller does not
+provide an explicit override. Machine-oriented headers such as
+`measured_response`, `duration_s`, and `dose_uM` are written to worksheet Long
+Name labels as `Measured response`, `Duration (s)`, and `Dose (µM)`. Common unit
+symbols use Origin Unicode escape notation so they survive export. A shared
+conservative rule resolver profiles chart family, series count, row count,
+category-label length, and numeric range. It hides redundant single-series
+legends, retains multi-series legends, moves line/scatter legends to the quieter
+upper corner, rotates crowded category ticks, selects scientific notation only
+for extreme magnitudes, keeps nonnegative bar-like charts on a zero baseline,
+and reduces marker size while increasing transparency for dense scatter plots.
+Plots with long categorical X labels remain vertically oriented; their page
+height and bottom margin grow automatically so rotated labels are not clipped.
+The height is set from a target page aspect ratio, so repeated formatting does
+not keep increasing the page size.
+Axis titles are inferred from field semantics instead of concatenating every
+series name. Fields such as `temperature_C`, `temperature_mean_C`, and
+`temperature_std_C` produce the shared axis title `Temperature (°C)`, while
+`Mean` and `SD` remain available as legend labels. Wide fields such as
+`glucose_control_mg_dL` and `glucose_treated_mg_dL` produce
+`Glucose (mg/dL)` with compact `Control` and `Treated` legend entries. Tidy
+`value`/`unit` data can also use a constant `metric`, `measure`, `measurement`,
+`variable`, or `parameter` column to recover the metric name and unit.
+
+Dual-Y plots infer the left and right titles independently from the columns
+assigned to each axis. Explicit `x_label`, `y_label`, `y1_label`, and `y2_label`
+values always take precedence. For line and scatter charts, legend placement
+first estimates the legend footprint and checks all four inside corners against
+the plotted data. Each Y-axis group is normalized independently so dual-axis
+units do not distort the occupancy test. The quietest data-free corner is used
+when it fits. Only when every candidate intersects data, or the legend footprint
+is too large, does it move to a reserved column outside the plot; the page then
+widens and the right margin grows so the legend does not cover data or clip
+during export.
+Each graph response includes `visual_defaults` with the selected values and the
+reason for every choice. Explicit `show_legend` and `palette_name` arguments
+take precedence.
+
+When `style_mode="nature"` and no palette is specified, table plotting uses
+`lcpmgh_auto` to choose an installed lcpmgh/colors palette whose color count
+matches the number of plotted series. Dedicated table plotting tools and the
+parameterized `origin_plot` entry point accept `palette_name`; an explicit
+registered palette name always overrides automatic selection. Origin or custom
+template palettes remain untouched in `origin_default` mode.
+
+Distribution and field-color tools use safer visual defaults: histograms choose
+a bounded Freedman-Diaconis bin width unless `bin_width` or a custom template is
+provided, and histogram/box/heatmap legends are hidden by default. Heatmaps use
+the perceptually uniform `viridis` colormap unless `colormap` or a custom
+template is supplied. Explicit arguments and FigureSpec plot styles always take
+precedence over these defaults.
+
 For existing plots, `origin_set_plot_style` controls color, line width/style,
 symbols, transparency, column/bar width, colormaps, contour levels and color
 scale limits, histogram bin width, error-bar cap width, and box-chart width on

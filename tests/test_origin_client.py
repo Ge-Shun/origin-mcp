@@ -8,7 +8,12 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from origin_mcp.chart_palette import normalize_palette_name, palette_catalog
+from origin_mcp.chart_palette import (
+    named_palette,
+    normalize_palette_name,
+    palette_catalog,
+    select_palette_for_count,
+)
 from origin_mcp.compat import PLOT_TYPE_CATALOG
 from origin_mcp.errors import OriginOperationError
 from origin_mcp.origin_client import GraphRef, OriginClient, WorksheetRef
@@ -992,6 +997,29 @@ def test_format_legend_positions_inside_layer_anchor_when_requested(
     assert "legend.top" not in scripts[-1]
 
 
+def test_format_legend_positions_outside_right_when_canvas_is_reserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    legend = FakeLabel("Legend")
+    layer = FakeLayer()
+    layer.labels["Legend"] = legend
+    graph = FakeGraph(layer)
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client.format_legend("Graph1", position="outside_right")
+
+    assert "layer.x.to+(layer.x.to-layer.x.from)*0.04+legend.dx/2" in scripts[-1]
+    assert "layer.y.to-legend.dy/2" in scripts[-1]
+    assert result["position"]["position"] == "outside_right"
+
+
 def test_format_legend_interprets_small_left_top_as_layer_percent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1485,7 +1513,128 @@ def test_plot_table_nature_style_applies_override(
     )
 
     assert graph_ref.style_mode == "nature"
-    assert nature_calls == [{"graph_name": "Graph1", "chart_type": "line"}]
+    assert graph_ref.visual_defaults is not None
+    assert graph_ref.visual_defaults["legend"]["show"]["source"] == "user"
+    assert graph_ref.visual_defaults["palette_name"]["value"] == "lcpmgh_auto"
+    assert nature_calls == [
+        {
+            "graph_name": "Graph1",
+            "chart_type": "line",
+            "show_legend": False,
+            "palette_name": "lcpmgh_auto",
+        }
+    ]
+
+
+def test_apply_smart_visual_defaults_formats_axes_marks_and_legend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    scripts = []
+    style_calls = []
+    legend_calls = []
+    defaults = {
+        "legend": {
+            "show": {"value": True},
+            "position": {"value": "inside_upper_left"},
+        },
+        "marks": {
+            "symbol_size": {"value": 3.5},
+            "transparency": {"value": 35.0},
+        },
+        "axes": {
+            "x_tick_rotation": {"value": 45},
+            "y_number_format": {"value": "scientific"},
+            "y_decimal_places": {"value": 2},
+            "y_zero_baseline": {"value": True},
+        },
+        "canvas": {
+            "page_aspect_ratio": {"value": 1.05},
+            "bottom_margin": {"value": 0.25},
+        },
+    }
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(
+        client,
+        "set_plot_style",
+        lambda **kwargs: style_calls.append(kwargs) or {"styled": True},
+    )
+    monkeypatch.setattr(
+        client,
+        "format_legend",
+        lambda **kwargs: legend_calls.append(kwargs) or {"formatted": True},
+    )
+
+    result = client._apply_smart_visual_defaults(
+        graph_name="Graph1",
+        defaults=defaults,
+    )
+
+    assert "layer.x.label.rotate=45;" in scripts[0]
+    assert "layer.y.label.numFormat=2;" in scripts[0]
+    assert "layer.y.label.decPlaces=2;" in scripts[0]
+    assert "layer.y.from=0;" in scripts[0]
+    assert "page.height=page.width/1.05;" in scripts[0]
+    assert "page -fls -u -ml 0.08 -mt 0.05 -mr 0.05 -mb 0.25;" in scripts[0]
+    assert style_calls == [{"graph_name": "Graph1", "symbol_size": 3.5, "transparency": 35.0}]
+    assert legend_calls == [
+        {
+            "graph_name": "Graph1",
+            "show_frame": False,
+            "position": "inside_upper_left",
+        }
+    ]
+    assert result["axis_result"]["result"] is True
+
+
+def test_apply_smart_visual_defaults_widens_canvas_for_external_legend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    scripts = []
+    legend_calls = []
+    defaults = {
+        "legend": {
+            "show": {"value": True},
+            "position": {"value": "outside_right"},
+        },
+        "marks": {
+            "symbol_size": {"value": None},
+            "transparency": {"value": None},
+        },
+        "axes": {
+            "x_tick_rotation": {"value": 0},
+            "y_number_format": {"value": "decimal"},
+            "y_decimal_places": {"value": 1},
+            "y_zero_baseline": {"value": False},
+        },
+        "canvas": {
+            "page_aspect_ratio": {"value": None},
+            "bottom_margin": {"value": None},
+            "page_width_aspect_ratio": {"value": 1.8},
+            "right_margin": {"value": 0.28},
+        },
+    }
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(
+        client,
+        "format_legend",
+        lambda **kwargs: legend_calls.append(kwargs) or {"formatted": True},
+    )
+
+    client._apply_smart_visual_defaults(graph_name="Graph1", defaults=defaults)
+
+    assert "page.width=page.height*1.8;" in scripts[0]
+    assert "-mr 0.28 -mb 0.08;" in scripts[0]
+    assert legend_calls[0]["position"] == "outside_right"
 
 
 def test_plot_table_exports_by_graph_name(
@@ -1626,8 +1775,8 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert "layer.x.ticklabel.font=font(Arial);" in scripts[-1]
     assert "xb.font=font(Arial);" in scripts[-1]
     assert "yl.font=font(Arial);" in scripts[-1]
-    assert 'xb.text$="\\f:Arial(Axis)";' in scripts[-1]
-    assert 'yl.text$="\\f:Arial(Axis)";' in scripts[-1]
+    assert 'xb.text$="Axis";' in scripts[-1]
+    assert 'yl.text$="Axis";' in scripts[-1]
     assert "layer.x.label.pt=20;" in scripts[-1]
     assert "layer.y.label.pt=20;" in scripts[-1]
     assert "layer.x.ticklabel.pt=18;" in scripts[-1]
@@ -1727,6 +1876,27 @@ def test_apply_nature_style_uses_semantic_palette_roles(
     assert result["diagnostics"]["checklist"][3]["passed"] is True
 
 
+def test_apply_nature_style_continues_palette_across_layers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plots = [FakePlot() for _ in range(4)]
+    graph = FakeGraph([FakeLayer(plots[:2]), FakeLayer(plots[2:])])
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", palette_name="nature")
+
+    assert [plot.color for plot in plots] == named_palette("nature")[:4]
+    assert result["applied_palette_roles"] == [
+        "category_1",
+        "category_2",
+        "category_3",
+        "category_4",
+    ]
+
+
 def test_palette_catalog_exposes_lcpmgh_nature_source() -> None:
     catalog = palette_catalog()
 
@@ -1763,6 +1933,13 @@ def test_palette_catalog_filters_lcpmgh_color_range() -> None:
     assert catalog
     assert all(6 <= entry["colors_count"] <= 8 for entry in catalog.values())
     assert all("colors" not in entry for entry in catalog.values())
+
+
+def test_auto_palette_prefers_readable_hue_separated_exact_count_palette() -> None:
+    palette_name, palette = select_palette_for_count(4)
+
+    assert palette_name == "lcpmgh_004_014"
+    assert palette["palette"] == ["#6A8EC9", "#E84446", "#59B78F", "#7A378A"]
 
 
 def test_apply_nature_style_uses_named_palette(
@@ -2365,6 +2542,90 @@ def test_plot_table_by_id_builds_labtalk_command(
     assert any('title.show=0; title.text$="";' in script for script in scripts)
 
 
+def test_plot_table_by_id_applies_requested_visual_defaults_before_export(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("duration_s\n0.2\n0.4\n0.5\n0.8\n1.3\n1.6\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    style_calls = []
+    format_calls = []
+    scripts: list[str] = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(
+        client,
+        "set_plot_style",
+        lambda **kwargs: style_calls.append(kwargs) or {"applied": kwargs},
+    )
+    monkeypatch.setattr(
+        client,
+        "format_graph",
+        lambda **kwargs: format_calls.append(kwargs) or {"formatted": True},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=219,
+        template="hist",
+        selected_cols=["duration_s"],
+        graph_name="Histogram",
+        histogram_bin_width="auto",
+    )
+
+    assert style_calls[0]["graph_name"] == "Histogram"
+    assert style_calls[0]["histogram_bin_width"] > 0
+    assert {"graph_name": "Histogram", "rescale": True} in format_calls
+    bin_width = style_calls[0]["histogram_bin_width"]
+    worksheet_script = "worksheet -s 1 0 1 0; worksheet -p 219 hist;"
+    assert scripts.index(f"@HBS={bin_width:g};") < next(
+        index for index, script in enumerate(scripts) if script == worksheet_script
+    )
+    assert scripts.index("@HBS=-1;") > next(
+        index for index, script in enumerate(scripts) if script == worksheet_script
+    )
+    assert command["command"] == "worksheet"
+    assert command["range_option"] == "selection"
+    assert not any("plotxy" in script and "plot:=219" in script for script in scripts)
+    assert "histogram_bin_width" in command["visual_defaults"]
+
+
+def test_plot_table_by_id_applies_explicit_heatmap_colormap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("x,y,z\n0,0,1\n0,1,2\n1,0,3\n1,1,4\n", encoding="utf-8")
+    client = OriginClient()
+    wks = FakeWorksheet()
+    style_calls = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: wks)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(
+        client,
+        "set_plot_style",
+        lambda **kwargs: style_calls.append(kwargs) or {"applied": kwargs},
+    )
+
+    _worksheet, _graph, command = client.plot_table_by_id(
+        path=path,
+        plot_type_id=243,
+        template="Contour",
+        selected_cols=["x", "y", "z"],
+        graph_name="Heatmap",
+        colormap="viridis",
+    )
+
+    assert style_calls == [{"graph_name": "Heatmap", "colormap": "viridis"}]
+    assert command["visual_defaults"]["colormap"]["applied"]["colormap"] == "viridis"
+
+
 def test_plot_table_by_id_reuses_named_graph_when_present(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2565,7 +2826,20 @@ def test_plot_table_by_id_worksheet_command_prefers_new_graph_over_existing_name
 def test_all_documented_table_plot_ids_use_expected_labtalk_routes() -> None:
     matrix_only_ids = {item["id"] for item in PLOT_TYPE_CATALOG if item["input"] == "Matrix Object"}
     expected_plotxyz_ids = {103, 185, 240, 242, 243, 245}
-    expected_worksheet_ids = {183, 184, 206, 210, 211, 212, 214, 215, 216, 225, 249}
+    expected_worksheet_ids = {
+        183,
+        184,
+        206,
+        210,
+        211,
+        212,
+        214,
+        215,
+        216,
+        219,
+        225,
+        249,
+    }
 
     for item in PLOT_TYPE_CATALOG:
         plot_type_id = item["id"]
@@ -2643,7 +2917,14 @@ def test_plot_table_by_id_nature_style_applies_override(
     )
 
     assert graph.style_mode == "nature"
-    assert nature_calls == [{"graph_name": "NatureLine", "chart_type": "line"}]
+    assert nature_calls == [
+        {
+            "graph_name": "NatureLine",
+            "chart_type": "line",
+            "show_legend": False,
+            "palette_name": "lcpmgh_auto",
+        }
+    ]
 
 
 def test_plot_table_by_id_exports_active_graph_when_named_graph_missing(
@@ -3224,7 +3505,64 @@ def test_plot_dual_y_nature_style_applies_override(
     assert len(right.added) == 1
     assert graph_ref.template == "doubleY"
     assert graph_ref.style_mode == "nature"
-    assert nature_calls == [{"graph_name": "Graph1", "chart_type": "line_symbol"}]
+    assert nature_calls == [
+        {
+            "graph_name": "Graph1",
+            "chart_type": "line_symbol",
+            "show_legend": True,
+            "palette_name": "lcpmgh_auto",
+        }
+    ]
+
+
+def test_plot_dual_y_infers_separate_concise_axis_titles(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "dual_semantic.csv"
+    path.write_text(
+        "time_s,temperature_control_C,temperature_treated_C,"
+        "pressure_control_kPa,pressure_treated_kPa\n"
+        "0,20,21,100,102\n1,22,24,105,108\n",
+        encoding="utf-8",
+    )
+    client = OriginClient()
+    worksheet = FakeWorksheet()
+    left = FakeLayer()
+    right = FakeLayer()
+    graph = FakeGraph([left, right])
+    scripts = []
+    monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: worksheet)
+    monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_rescale", lambda _layer: None)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    _, graph_ref = client.plot_dual_y(
+        path=path,
+        x_col="time_s",
+        y1_cols=["temperature_control_C", "temperature_treated_C"],
+        y2_cols=["pressure_control_kPa", "pressure_treated_kPa"],
+        show_legend=False,
+    )
+
+    assert left.axis("x").title == "Time (s)"
+    assert left.axis("y").title == r"Temperature (\x(00B0)C)"
+    assert right.axis("y").title == "Pressure (kPa)"
+    assert left.group_calls == 0
+    assert right.group_calls == 0
+    assert graph_ref.visual_defaults is not None
+    assert graph_ref.visual_defaults["axes"]["y2_title"]["value"] == "Pressure (kPa)"
+    assert graph_ref.visual_defaults["legend"]["series_labels"]["value"] == [
+        "Temperature control",
+        "Temperature treated",
+        "Pressure control",
+        "Pressure treated",
+    ]
+    assert any('yr.text$="Pressure (kPa)";' in script for script in scripts)
 
 
 def test_add_inset_layer_requires_x_and_y_cols() -> None:

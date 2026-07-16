@@ -385,6 +385,7 @@ def _deserialize_bridge_value(value: Any) -> Any:
                 style_mode=data.get("style_mode", "origin_default"),
                 requested_graph_name=data.get("requested_graph_name"),
                 display_name=data.get("display_name"),
+                visual_defaults=data.get("visual_defaults"),
             )
         if value_type == "Path":
             return Path(str(value["value"]))

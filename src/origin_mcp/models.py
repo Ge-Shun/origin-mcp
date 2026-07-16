@@ -125,7 +125,19 @@ class PlotTableRequest(TableImportRequest):
     title: str | None = Field(default=None, description="Optional graph page long name.")
     x_label: str | None = Field(default=None, description="Optional X axis title.")
     y_label: str | None = Field(default=None, description="Optional Y axis title.")
-    show_legend: bool = Field(default=True, description="Whether to refresh/show the graph legend.")
+    show_legend: bool | None = Field(
+        default=None,
+        description=(
+            "Legend visibility override. When omitted, cross-chart rules hide redundant "
+            "single-series legends and retain legends needed for multiple series."
+        ),
+    )
+    palette_name: str | None = Field(
+        default=None,
+        description=(
+            "Optional registered built-in palette name; nature mode selects one automatically."
+        ),
+    )
     style_mode: PlotStyleMode = Field(
         default=PlotStyleMode.origin_default,
         description=(

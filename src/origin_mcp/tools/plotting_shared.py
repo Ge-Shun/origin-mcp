@@ -72,13 +72,14 @@ def _plot_csv(
     title: str | None,
     x_label: str | None,
     y_label: str | None,
-    show_legend: bool,
+    show_legend: bool | None,
     style_mode: str,
     export_path: str | None,
     z_col: str | int | None = None,
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
     bar_gap: float | None = None,
+    palette_name: str | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:
         req = PlotTableRequest(
@@ -104,6 +105,7 @@ def _plot_csv(
             x_error_col=x_error_col,
             show_legend=show_legend,
             style_mode=PlotStyleMode(style_mode),
+            palette_name=palette_name,
             export_path=Path(export_path) if export_path else None,
         )
         worksheet, graph = client.plot_table(
@@ -130,6 +132,7 @@ def _plot_csv(
             x_error_col=req.x_error_col,
             show_legend=req.show_legend,
             style_mode=req.style_mode.value,
+            palette_name=req.palette_name,
             export_path=req.export_path,
         )
         if bar_gap is not None:
@@ -162,8 +165,11 @@ def _plot_table_id(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
     palette_name: str | None = None,
+    colormap: str | None = None,
+    histogram_bin_width: float | str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     def run() -> dict[str, Any]:
@@ -186,8 +192,11 @@ def _plot_table_id(
             title=title,
             x_label=x_label,
             y_label=y_label,
+            show_legend=show_legend,
             style_mode=style_mode_actual,
             palette_name=palette_name,
+            colormap=colormap,
+            histogram_bin_width=histogram_bin_width,
             export_path=Path(export_path) if export_path else None,
         )
         return _ok(

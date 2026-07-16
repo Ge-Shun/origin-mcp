@@ -30,8 +30,9 @@ def origin_plot_line(
     y_label: str | None = None,
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line graph."""
@@ -59,6 +60,7 @@ def origin_plot_line(
         x_error_col=x_error_col,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -84,8 +86,9 @@ def origin_plot_scatter(
     y_label: str | None = None,
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a scatter graph."""
@@ -113,6 +116,7 @@ def origin_plot_scatter(
         x_error_col=x_error_col,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -138,8 +142,9 @@ def origin_plot_line_symbol(
     y_label: str | None = None,
     y_error_col: str | int | None = None,
     x_error_col: str | int | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line+symbol graph."""
@@ -167,6 +172,7 @@ def origin_plot_line_symbol(
         x_error_col=x_error_col,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -192,8 +198,9 @@ def origin_plot_column(
     y_label: str | None = None,
     y_error_col: str | int | None = None,
     bar_gap: float | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a column/bar-style graph."""
@@ -221,6 +228,7 @@ def origin_plot_column(
         bar_gap=bar_gap,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -245,8 +253,9 @@ def origin_plot_contour(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a contour graph."""
@@ -273,6 +282,7 @@ def origin_plot_contour(
         z_col=z_col,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -298,8 +308,9 @@ def origin_plot_errorbar(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a line+symbol plot with error bars."""
@@ -327,6 +338,7 @@ def origin_plot_errorbar(
         x_error_col=x_error_col,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -350,8 +362,10 @@ def origin_plot_histogram(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
+    bin_width: float | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a histogram graph."""
@@ -375,22 +389,17 @@ def origin_plot_histogram(
             title=title,
             x_label=x_label,
             y_label=y_label,
+            show_legend=show_legend,
             style_mode=style_mode,
+            palette_name=palette_name,
+            histogram_bin_width=(
+                bin_width if bin_width is not None else ("auto" if template is None else None)
+            ),
             export_path=export_path,
         )
-        _apply_plot_id_legend_visibility(result, show_legend)
         return result
 
     return run()
-
-
-def _apply_plot_id_legend_visibility(result: dict[str, Any], show_legend: bool) -> None:
-    if not result.get("ok"):
-        return
-    graph_data = result.get("data", {}).get("graph", {})
-    graph_name = graph_data.get("graph_name")
-    if graph_name:
-        client.format_graph(graph_name=graph_name, show_legend=show_legend, rescale=False)
 
 
 @_mcp_tool()
@@ -412,8 +421,9 @@ def origin_plot_box(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a box plot."""
@@ -436,10 +446,11 @@ def origin_plot_box(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
-    _apply_plot_id_legend_visibility(result, show_legend)
     return result
 
 
@@ -463,14 +474,15 @@ def origin_plot_heatmap(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
+    colormap: str | None = None,
     style_mode: str = "origin_default",
     palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a heatmap graph."""
 
-    return _plot_table_id(
+    result = _plot_table_id(
         path=path,
         plot_type_id=243,
         template=template or "Contour",
@@ -488,10 +500,13 @@ def origin_plot_heatmap(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        show_legend=show_legend,
         style_mode=style_mode,
         palette_name=palette_name,
+        colormap=colormap or ("viridis" if template is None else None),
         export_path=export_path,
     )
+    return result
 
 
 @_mcp_tool()
@@ -514,8 +529,9 @@ def origin_plot_3d_scatter(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D scatter graph."""
@@ -538,7 +554,9 @@ def origin_plot_3d_scatter(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -563,8 +581,9 @@ def origin_plot_3d_surface(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import XYZ table data and create a 3D surface graph."""
@@ -587,7 +606,9 @@ def origin_plot_3d_surface(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -611,8 +632,9 @@ def origin_plot_polar(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
-    show_legend: bool = True,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a polar graph."""
@@ -638,6 +660,7 @@ def origin_plot_polar(
         y_label=y_label,
         show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -661,6 +684,7 @@ def origin_plot_table_id(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
     palette_name: str | None = None,
     export_path: str | None = None,
@@ -685,7 +709,9 @@ def origin_plot_table_id(
         title=title,
         x_label=x_label,
         y_label=y_label,
+        show_legend=show_legend,
         style_mode=style_mode,
+        palette_name=palette_name,
         export_path=export_path,
     )
 
@@ -711,7 +737,9 @@ def origin_plot_dual_y(
     y1_label: str | None = None,
     y2_label: str | None = None,
     plot_type: str = "line",
+    show_legend: bool | None = None,
     style_mode: str = "origin_default",
+    palette_name: str | None = None,
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Import table data and create a double-Y (two Y axes) graph.
@@ -742,7 +770,9 @@ def origin_plot_dual_y(
             y1_label=y1_label,
             y2_label=y2_label,
             plot_type=plot_type,
+            show_legend=show_legend,
             style_mode=style_mode,
+            palette_name=palette_name,
             export_path=Path(export_path) if export_path else None,
         )
         return _ok(

@@ -6,6 +6,7 @@ from typing import Any
 from origin_mcp.client.graph_style import NATURE_ANNOTATION_FONT_SIZE
 from origin_mcp.file_io import read_table
 from origin_mcp.models import FigureExportFormatSpec, FigureSpec
+from origin_mcp.visual_defaults import DEFAULT_HEATMAP_COLORMAP
 
 from ._shared import _mcp_tool, _ok, _wrap, client
 
@@ -382,8 +383,13 @@ def _create_base_graph(
             title=spec.figure.title or layer.title,
             x_label=layer.x.title,
             y_label=layer.y.title,
+            show_legend=_show_legend(spec),
             style_mode=_style_mode(spec),
             palette_name=spec.style.palette_name,
+            colormap=(
+                plot.style.get("colormap")
+                or (DEFAULT_HEATMAP_COLORMAP if spec.style.template is None else None)
+            ),
             export_path=None,
         )
         return worksheet, graph, command
@@ -464,6 +470,14 @@ def _create_base_graph(
         show_legend=_show_legend(spec),
         style_mode=_style_mode(spec),
         palette_name=spec.style.palette_name,
+        histogram_bin_width=(
+            plot.style.get(
+                "histogram_bin_width",
+                "auto" if spec.style.template is None else None,
+            )
+            if plot_type == "histogram"
+            else None
+        ),
         export_path=None,
     )
     return worksheet, graph, None
@@ -1077,7 +1091,12 @@ def _show_legend(spec: FigureSpec) -> bool:
     for item in spec.annotations:
         if item.type.strip().lower() == "legend":
             return True
-    return True
+    series_count = 0
+    for plot in spec.plots:
+        data = _data_by_id(spec, _plot_data_ref(spec, plot))
+        mapping = _plot_mapping(data, plot)
+        series_count += len(_y_columns(mapping) or [None])
+    return series_count > 1
 
 
 def _y_columns(mapping: dict[str, Any]) -> list[str | int] | None:

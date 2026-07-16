@@ -477,6 +477,8 @@ def test_heatmap_wrapper_routes_xyz_data_through_plot_type_id(
     assert calls[0]["template"] == "Contour"
     assert calls[0]["selected_cols"] == ["x", "y", "z"]
     assert calls[0]["graph_name"] == "Heat"
+    assert calls[0]["colormap"] == "viridis"
+    assert calls[0]["show_legend"] is None
 
 
 def test_origin_plot_routes_kind_through_plot_type_id(monkeypatch, tmp_path: Path) -> None:
@@ -495,6 +497,7 @@ def test_origin_plot_routes_kind_through_plot_type_id(monkeypatch, tmp_path: Pat
         kind="bar",
         selected_cols=["x", "y"],
         graph_name="Bar",
+        palette_name="lcpmgh_002_001",
     )
 
     assert result["ok"] is True
@@ -502,6 +505,7 @@ def test_origin_plot_routes_kind_through_plot_type_id(monkeypatch, tmp_path: Pat
     assert calls[0]["template"] == "bar"
     assert calls[0]["selected_cols"] == ["x", "y"]
     assert calls[0]["graph_name"] == "Bar"
+    assert calls[0]["palette_name"] == "lcpmgh_002_001"
 
 
 def test_origin_plot_routes_common_kind_through_table_plot(monkeypatch, tmp_path: Path) -> None:
@@ -520,6 +524,7 @@ def test_origin_plot_routes_common_kind_through_table_plot(monkeypatch, tmp_path
         kind="line",
         selected_cols=["x", "y"],
         graph_name="Line",
+        palette_name="nature",
     )
 
     assert result["ok"] is True
@@ -527,6 +532,7 @@ def test_origin_plot_routes_common_kind_through_table_plot(monkeypatch, tmp_path
     assert calls[0]["x_col"] == "x"
     assert calls[0]["y_cols"] == ["y"]
     assert calls[0]["graph_name"] == "Line"
+    assert calls[0]["palette_name"] == "nature"
 
 
 def test_origin_plot_rejects_unknown_kind(tmp_path: Path) -> None:
@@ -550,7 +556,6 @@ def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path:
     path = tmp_path / "distribution.csv"
     path.write_text("x,y,z\n0,1,2\n", encoding="utf-8")
     calls = []
-    legend_calls = []
 
     def fake_plot_table_id(**kwargs):
         calls.append(kwargs)
@@ -561,12 +566,6 @@ def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path:
         }
 
     monkeypatch.setattr(plotting_basic_tools, "_plot_table_id", fake_plot_table_id)
-    monkeypatch.setattr(
-        plotting_basic_tools.client,
-        "format_graph",
-        lambda **kwargs: legend_calls.append(kwargs) or {"formatted": True},
-    )
-
     histogram = server.origin_plot_histogram(
         str(path),
         x_col="y",
@@ -582,11 +581,10 @@ def test_distribution_wrappers_route_through_plot_type_id(monkeypatch, tmp_path:
         (206, "box"),
     ]
     assert calls[0]["selected_cols"] == ["y"]
+    assert calls[0]["histogram_bin_width"] == "auto"
+    assert calls[0]["show_legend"] is False
     assert calls[1]["selected_cols"] == ["y", "z"]
-    assert legend_calls == [
-        {"graph_name": "Hist", "show_legend": False, "rescale": False},
-        {"graph_name": "Box", "show_legend": True, "rescale": False},
-    ]
+    assert calls[1]["show_legend"] is None
 
 
 def test_dual_y_wrapper_passes_style_mode(monkeypatch, tmp_path: Path) -> None:

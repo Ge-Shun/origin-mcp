@@ -28,9 +28,10 @@ class GraphRef:
     style_mode: str = "origin_default"
     requested_graph_name: str | None = None
     display_name: str | None = None
+    visual_defaults: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        data = {
+        data: dict[str, Any] = {
             "graph_name": self.graph_name,
             "export_path": self.export_path,
             "template": self.template,
@@ -40,4 +41,6 @@ class GraphRef:
             data["requested_graph_name"] = self.requested_graph_name
         if self.display_name is not None:
             data["display_name"] = self.display_name
+        if self.visual_defaults is not None:
+            data["visual_defaults"] = self.visual_defaults
         return data
