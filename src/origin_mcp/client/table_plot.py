@@ -1144,10 +1144,17 @@ class _TablePlotMixin(_OriginClientBase):
         """Apply resolved low-risk cross-chart rules to an Origin graph."""
 
         safe_graph = self._escape_labtalk(graph_name)
-        rotation = int(decision_value(defaults, "axes", "x_tick_rotation") or 0)
-        number_format = decision_value(defaults, "axes", "y_number_format")
-        decimal_places = int(decision_value(defaults, "axes", "y_decimal_places"))
-        zero_baseline = bool(decision_value(defaults, "axes", "y_zero_baseline"))
+        axes = defaults.get("axes", {})
+
+        def axis_value(name: str, fallback: Any = None) -> Any:
+            if name not in axes:
+                return fallback
+            return decision_value(axes, name)
+
+        rotation = int(axis_value("x_tick_rotation", 0) or 0)
+        number_format = axis_value("y_number_format", "decimal")
+        decimal_places = int(axis_value("y_decimal_places", -1))
+        zero_baseline = bool(axis_value("y_zero_baseline", False))
         canvas = defaults.get("canvas", {})
         page_aspect_ratio = (
             decision_value(canvas, "page_aspect_ratio") if "page_aspect_ratio" in canvas else None
@@ -1160,6 +1167,7 @@ class _TablePlotMixin(_OriginClientBase):
             if "page_width_aspect_ratio" in canvas
             else None
         )
+        left_margin = decision_value(canvas, "left_margin") if "left_margin" in canvas else None
         right_margin = decision_value(canvas, "right_margin") if "right_margin" in canvas else None
         script_parts = [
             f'win -a "{safe_graph}";',
@@ -1168,17 +1176,76 @@ class _TablePlotMixin(_OriginClientBase):
             f"layer.y.label.numFormat={2 if number_format == 'scientific' else 1};",
             f"layer.y.label.decPlaces={decimal_places};",
         ]
+        top_axis_ticks = axis_value("top_axis_ticks")
+        if top_axis_ticks is not None:
+            script_parts.append(f"layer.x2.ticks={5 if top_axis_ticks else 0};")
+        x_number_format = axis_value("x_number_format")
+        x_decimal_places = axis_value("x_decimal_places")
+        if x_number_format is not None:
+            script_parts.extend(
+                [
+                    f"layer.x.label.numFormat={2 if x_number_format == 'scientific' else 1};",
+                    f"layer.x.label.decPlaces={int(x_decimal_places)};",
+                ]
+            )
+        for axis_name in ("x", "y"):
+            major_ticks = axis_value(f"{axis_name}_major_ticks")
+            minor_ticks = axis_value(f"{axis_name}_minor_ticks")
+            if major_ticks is not None:
+                script_parts.append(f"layer.{axis_name}.majorTicks={int(major_ticks)};")
+            if minor_ticks is not None:
+                script_parts.append(f"layer.{axis_name}.minorTicks={int(minor_ticks)};")
+            major_grid = axis_value(f"{axis_name}_major_grid")
+            if major_grid is not None:
+                script_parts.append(f"layer.{axis_name}.grid.show={1 if major_grid else 0};")
+                if major_grid:
+                    script_parts.extend(
+                        [
+                            f"layer.{axis_name}.grid.majorColor=color(235,235,235);",
+                            f"layer.{axis_name}.grid.majorType=1;",
+                            f"layer.{axis_name}.grid.majorWidth=0.5;",
+                        ]
+                    )
         if zero_baseline:
             script_parts.append("layer.y.from=0;")
+        y2_number_format = axis_value("y2_number_format")
+        if y2_number_format is not None:
+            script_parts.extend(
+                [
+                    "layer -s 2;",
+                    f"layer.y.label.numFormat={2 if y2_number_format == 'scientific' else 1};",
+                    f"layer.y.label.decPlaces={int(axis_value('y2_decimal_places', -1))};",
+                    f"layer.y2.label.numFormat={2 if y2_number_format == 'scientific' else 1};",
+                    f"layer.y2.label.decPlaces={int(axis_value('y2_decimal_places', -1))};",
+                ]
+            )
+            if top_axis_ticks is not None:
+                script_parts.append(f"layer.x2.ticks={5 if top_axis_ticks else 0};")
+            y2_major_ticks = axis_value("y2_major_ticks")
+            y2_minor_ticks = axis_value("y2_minor_ticks")
+            if y2_major_ticks is not None:
+                script_parts.append(f"layer.y.majorTicks={int(y2_major_ticks)};")
+                script_parts.append(f"layer.y2.majorTicks={int(y2_major_ticks)};")
+            if y2_minor_ticks is not None:
+                script_parts.append(f"layer.y.minorTicks={int(y2_minor_ticks)};")
+                script_parts.append(f"layer.y2.minorTicks={int(y2_minor_ticks)};")
+            script_parts.extend(
+                [
+                    "layer.x.grid.show=0;",
+                    f"layer.y.grid.show={1 if axis_value('y2_major_grid', False) else 0};",
+                    f"layer.y2.grid.show={1 if axis_value('y2_major_grid', False) else 0};",
+                ]
+            )
         if page_aspect_ratio is not None or page_width_aspect_ratio is not None:
             script_parts.append("page.kar=0;")
             if page_aspect_ratio is not None:
                 script_parts.append(f"page.height=page.width/{float(page_aspect_ratio):g};")
             elif page_width_aspect_ratio is not None:
                 script_parts.append(f"page.width=page.height*{float(page_width_aspect_ratio):g};")
-        if bottom_margin is not None or right_margin is not None:
+        if bottom_margin is not None or left_margin is not None or right_margin is not None:
             script_parts.append(
-                "page -fls -u -ml 0.08 -mt 0.05 "
+                f"page -fls -u -ml {float(left_margin if left_margin is not None else 0.08):g} "
+                "-mt 0.05 "
                 f"-mr {float(right_margin if right_margin is not None else 0.05):g} "
                 f"-mb {float(bottom_margin if bottom_margin is not None else 0.08):g};"
             )
