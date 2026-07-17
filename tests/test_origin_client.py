@@ -1778,6 +1778,76 @@ def test_apply_smart_visual_defaults_sets_datetime_ticks(
     assert "layer.x.label.type=4;" in script
 
 
+def test_apply_smart_visual_defaults_adds_sparse_labels_and_zero_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    scripts = []
+    defaults = {
+        "legend": {"show": {"value": False}},
+        "marks": {"symbol_size": {"value": None}, "transparency": {"value": None}},
+        "annotations": {
+            "data_labels": {
+                "show": {"value": True},
+                "scope": {"value": "end"},
+                "position": {"value": "right"},
+                "font_size": {"value": 8},
+                "layer_series_counts": {"value": [1]},
+                "layer_formats": {"value": [{"number_format": "decimal", "decimal_places": 2}]},
+            },
+            "reference_lines": {
+                "value": [
+                    {
+                        "axis": "y",
+                        "value": 0.0,
+                        "layer_index": 0,
+                        "role": "zero",
+                        "color_index": 19,
+                        "line_style": 0,
+                        "line_width": 1.0,
+                    }
+                ]
+            },
+        },
+        "axes": {
+            "x_tick_rotation": {"value": 0},
+            "y_number_format": {"value": "decimal"},
+            "y_decimal_places": {"value": 1},
+            "y_zero_baseline": {"value": False},
+        },
+        "canvas": {
+            "top_margin": {"value": 0.1},
+            "right_margin": {"value": 0.14},
+        },
+    }
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client._apply_smart_visual_defaults(graph_name="Graph1", defaults=defaults)
+
+    assert "-mt 0.1 -mr 0.14" in scripts[0]
+    assert plot.commands == [
+        "-q 1",
+        "-qm 5",
+        "-j -qms $(Y,.2)",
+        "-qp 3",
+        "-qs 8",
+        "-qc 1",
+        "-qw 0",
+        "-qmi 0",
+        "-qmie 1",
+    ]
+    assert "draw -n smart_zero_y_1 -c 19 -d 0 -w 1 -l y 0;" in scripts[1]
+    assert result["data_labels"]["applied"][0]["format"] == ".2"
+    assert result["reference_lines"]["result"] is True
+
+
 def test_plot_table_exports_by_graph_name(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

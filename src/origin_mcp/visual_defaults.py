@@ -30,6 +30,7 @@ _NICE_MANTISSAS = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0)
 @dataclass(frozen=True)
 class VisualContext:
     raw_chart_type: str
+    chart_variant: str
     chart_type: str
     series_count: int
     row_count: int
@@ -44,6 +45,7 @@ class VisualContext:
 def resolve_visual_defaults(
     *,
     chart_type: str,
+    chart_variant: str | None = None,
     series_count: int,
     row_count: int,
     x_values: Any = None,
@@ -69,6 +71,7 @@ def resolve_visual_defaults(
 
     context = _visual_context(
         chart_type=chart_type,
+        chart_variant=chart_variant,
         series_count=series_count,
         row_count=row_count,
         x_values=x_values,
@@ -271,6 +274,33 @@ def resolve_visual_defaults(
         y2_margin,
         temporal_endpoint_margin,
     )
+    data_labels = _data_label_defaults(
+        context,
+        y_min=y_min,
+        y_max=y_max,
+        layer_series_counts=[
+            len(y_names_actual) or context.series_count,
+            *([len(y2_names_actual)] if y2_names_actual else []),
+        ],
+        layer_formats=[
+            _data_label_numeric_format(y_series_actual[:y_split]),
+            *([_data_label_numeric_format(y_series_actual[y_split:])] if y2_names_actual else []),
+        ],
+    )
+    if decision_value(data_labels, "show"):
+        label_position = decision_value(data_labels, "position")
+        if label_position == "right":
+            right_margin = _max_optional(right_margin, 0.14)
+        top_margin = 0.1 if label_position == "above" else None
+    else:
+        top_margin = None
+    reference_lines = _reference_line_defaults(
+        context,
+        y_min=y_min,
+        y_max=y_max,
+        y2_min=y2_min,
+        y2_max=y2_max,
+    )
 
     aspect_ratios = {
         "line": 1.5,
@@ -298,6 +328,17 @@ def resolve_visual_defaults(
         "marks": {
             "symbol_size": symbol_size,
             "transparency": transparency,
+        },
+        "annotations": {
+            "data_labels": data_labels,
+            "reference_lines": _decision(
+                reference_lines,
+                (
+                    "emphasize_zero_when_values_cross_sign"
+                    if reference_lines
+                    else "no_semantic_reference_line_inferred"
+                ),
+            ),
         },
         "axes": {
             "x_title": _decision(
@@ -426,6 +467,14 @@ def resolve_visual_defaults(
             ),
             "page_aspect_ratio": page_aspect_ratio,
             "bottom_margin": bottom_margin,
+            "top_margin": _decision(
+                top_margin,
+                (
+                    "reserve_space_for_above_mark_data_labels"
+                    if top_margin is not None
+                    else "default_top_margin_fits"
+                ),
+            ),
             "page_width_aspect_ratio": legend_layout["page_width_aspect_ratio"],
             "left_margin": _decision(
                 left_margin,
@@ -634,6 +683,7 @@ def _decision(value: Any, reason: str, source: str = "smart_default") -> dict[st
 def _visual_context(
     *,
     chart_type: str,
+    chart_variant: str | None,
     series_count: int,
     row_count: int,
     x_values: Any,
@@ -644,6 +694,10 @@ def _visual_context(
     y_min, y_max = _numeric_extent(y_series)
     return VisualContext(
         raw_chart_type=raw_chart_type,
+        chart_variant=str(chart_variant or chart_type or "generic")
+        .strip()
+        .lower()
+        .replace("-", "_"),
         chart_type=normalize_chart_type(chart_type),
         series_count=max(0, int(series_count)),
         row_count=max(0, int(row_count)),
@@ -835,6 +889,167 @@ def _density_defaults(context: VisualContext) -> tuple[dict[str, Any], dict[str,
     if context.row_count <= 2000:
         return _decision(3.5, "dense_points"), _decision(35.0, "dense_points")
     return _decision(2.5, "very_dense_points"), _decision(55.0, "very_dense_points")
+
+
+def _data_label_defaults(
+    context: VisualContext,
+    *,
+    y_min: float | None,
+    y_max: float | None,
+    layer_series_counts: list[int],
+    layer_formats: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Choose a sparse, cross-chart data-label policy.
+
+    Labels intentionally show only numeric values.  Axis titles already carry
+    the metric and unit while legends identify series, so repeating either in
+    every mark label would add clutter rather than information.
+    """
+
+    show = False
+    scope = "none"
+    position = "above"
+    reason = "chart_or_density_does_not_benefit_from_automatic_labels"
+
+    if y_min is None or y_max is None:
+        reason = "no_numeric_values_to_label"
+    elif _is_3d_variant(context.chart_variant):
+        reason = "three_dimensional_labels_require_view_specific_layout"
+    elif context.raw_chart_type == "histogram":
+        reason = "histogram_shape_is_clearer_without_bin_labels"
+    elif context.chart_type == "bar":
+        mark_count = context.row_count * max(1, context.series_count)
+        crosses_zero = y_min < 0 < y_max
+        if context.series_count != 1:
+            reason = "grouped_or_stacked_bars_would_create_repeated_labels"
+        elif mark_count > 12:
+            reason = "too_many_bars_for_readable_value_labels"
+        elif crosses_zero:
+            reason = "mixed_sign_bars_need_per_mark_outside_end_positioning"
+        else:
+            show = True
+            scope = "all"
+            position = "right" if _is_horizontal_bar(context.chart_variant) else "above"
+            reason = "compact_single_series_bar_comparison"
+    elif context.chart_type == "line":
+        if context.row_count < 2:
+            reason = "single_point_is_not_a_trend"
+        elif context.series_count > 4:
+            reason = "too_many_line_endpoints_for_readable_labels"
+        else:
+            show = True
+            scope = "end"
+            position = "right"
+            reason = "label_only_the_latest_value_for_each_line"
+    elif context.chart_type == "scatter":
+        if context.series_count != 1:
+            reason = "multi_series_scatter_labels_would_compete_with_the_legend"
+        elif context.row_count > 80:
+            reason = "dense_scatter_should_rely_on_shape_and_outlier_inspection"
+        else:
+            show = True
+            scope = "all" if context.row_count <= 8 else "extrema"
+            position = "above"
+            reason = (
+                "small_scatter_supports_point_values"
+                if scope == "all"
+                else "label_only_scatter_extrema"
+            )
+
+    return {
+        "show": _decision(show, reason),
+        "scope": _decision(scope, reason),
+        "position": _decision(position if show else None, reason),
+        "font_size": _decision(8 if show else None, "quiet_annotation_typography"),
+        "value_source": _decision("y" if show else None, "axis_title_carries_metric_and_unit"),
+        "layer_series_counts": _decision(
+            layer_series_counts if show else [],
+            "apply_labels_only_to_primary_data_series",
+        ),
+        "layer_formats": _decision(
+            layer_formats if show else [],
+            "preserve_source_value_precision_independently_from_axis_ticks",
+        ),
+    }
+
+
+def _data_label_numeric_format(series: list[Any]) -> dict[str, Any]:
+    """Choose a compact label format from source values, not axis tick steps."""
+
+    finite_values: list[float] = []
+    for values in series:
+        try:
+            array = np.asarray(values, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            continue
+        finite_values.extend(float(value) for value in array[np.isfinite(array)])
+    if not finite_values:
+        return {"number_format": "decimal", "decimal_places": 0}
+
+    magnitude = max(abs(value) for value in finite_values)
+    if magnitude >= 100_000 or (0 < magnitude < 0.0001):
+        return {"number_format": "scientific", "decimal_places": 2}
+
+    decimals = 3
+    for candidate in range(4):
+        if all(
+            math.isclose(
+                value,
+                round(value, candidate),
+                rel_tol=1e-10,
+                abs_tol=1e-10,
+            )
+            for value in finite_values
+        ):
+            decimals = candidate
+            break
+    return {"number_format": "decimal", "decimal_places": decimals}
+
+
+def _reference_line_defaults(
+    context: VisualContext,
+    *,
+    y_min: float | None,
+    y_max: float | None,
+    y2_min: float | None,
+    y2_max: float | None,
+) -> list[dict[str, Any]]:
+    if (
+        context.raw_chart_type == "histogram"
+        or _is_3d_variant(context.chart_variant)
+        or context.chart_type
+        not in {
+            "line",
+            "scatter",
+            "bar",
+        }
+    ):
+        return []
+    lines = []
+    for layer_index, (lower, upper) in enumerate(((y_min, y_max), (y2_min, y2_max))):
+        if lower is not None and upper is not None and lower < 0 < upper:
+            lines.append(
+                {
+                    "axis": "y",
+                    "value": 0.0,
+                    "layer_index": layer_index,
+                    "role": "zero",
+                    "color_index": 19,
+                    "line_style": 0,
+                    "line_width": 1.0,
+                }
+            )
+    return lines
+
+
+def _is_horizontal_bar(chart_variant: str) -> bool:
+    value = chart_variant.strip().lower().replace("-", "_").replace(" ", "_")
+    return value in {"bar", "stack_bar", "floating_bar"} or value.endswith("_bar")
+
+
+def _is_3d_variant(chart_variant: str) -> bool:
+    value = chart_variant.strip().lower().replace("-", "_").replace(" ", "_")
+    return value == "3d" or "3d" in value or value.startswith("gl")
 
 
 def _x_tick_rotation(context: VisualContext) -> dict[str, Any]:
