@@ -10,7 +10,9 @@ import pytest
 
 from origin_mcp.chart_palette import (
     named_palette,
+    nature_series_distinction,
     normalize_palette_name,
+    palette_accessibility_metrics,
     palette_catalog,
     select_palette_for_count,
 )
@@ -1534,6 +1536,7 @@ def test_plot_table_nature_style_applies_override(
             "chart_type": "line",
             "show_legend": False,
             "palette_name": "lcpmgh_auto",
+            "transparency": 0.0,
         }
     ]
 
@@ -1778,6 +1781,76 @@ def test_apply_smart_visual_defaults_sets_datetime_ticks(
     assert "layer.x.label.type=4;" in script
 
 
+def test_apply_smart_visual_defaults_adds_sparse_labels_and_zero_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    scripts = []
+    defaults = {
+        "legend": {"show": {"value": False}},
+        "marks": {"symbol_size": {"value": None}, "transparency": {"value": None}},
+        "annotations": {
+            "data_labels": {
+                "show": {"value": True},
+                "scope": {"value": "end"},
+                "position": {"value": "right"},
+                "font_size": {"value": 8},
+                "layer_series_counts": {"value": [1]},
+                "layer_formats": {"value": [{"number_format": "decimal", "decimal_places": 2}]},
+            },
+            "reference_lines": {
+                "value": [
+                    {
+                        "axis": "y",
+                        "value": 0.0,
+                        "layer_index": 0,
+                        "role": "zero",
+                        "color_index": 19,
+                        "line_style": 0,
+                        "line_width": 1.0,
+                    }
+                ]
+            },
+        },
+        "axes": {
+            "x_tick_rotation": {"value": 0},
+            "y_number_format": {"value": "decimal"},
+            "y_decimal_places": {"value": 1},
+            "y_zero_baseline": {"value": False},
+        },
+        "canvas": {
+            "top_margin": {"value": 0.1},
+            "right_margin": {"value": 0.14},
+        },
+    }
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+
+    result = client._apply_smart_visual_defaults(graph_name="Graph1", defaults=defaults)
+
+    assert "-mt 0.1 -mr 0.14" in scripts[0]
+    assert plot.commands == [
+        "-q 1",
+        "-qm 5",
+        "-j -qms $(Y,.2)",
+        "-qp 3",
+        "-qs 8",
+        "-qc 1",
+        "-qw 0",
+        "-qmi 0",
+        "-qmie 1",
+    ]
+    assert "draw -n smart_zero_y_1 -c 19 -d 0 -w 1 -l y 0;" in scripts[1]
+    assert result["data_labels"]["applied"][0]["format"] == ".2"
+    assert result["reference_lines"]["result"] is True
+
+
 def test_plot_table_exports_by_graph_name(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1909,7 +1982,7 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert "-wp 3.0" in plot.commands
     assert plot.line_width == 3.0
     assert plot.width == 3.0
-    assert plot.symbol_size == 4.5
+    assert plot.symbol_size == 10.0
     assert plot.color == (39, 68, 124)
     assert plot.transparency == 0
     assert "layer.x.label.font=font(Arial);" in scripts[-1]
@@ -1920,8 +1993,8 @@ def test_apply_nature_style_updates_plots(monkeypatch: pytest.MonkeyPatch) -> No
     assert 'yl.text$="Axis";' in scripts[-1]
     assert "layer.x.label.pt=20;" in scripts[-1]
     assert "layer.y.label.pt=20;" in scripts[-1]
-    assert "layer.x.ticklabel.pt=18;" in scripts[-1]
-    assert "layer.y.ticklabel.pt=18;" in scripts[-1]
+    assert "layer.x.ticklabel.pt=20;" in scripts[-1]
+    assert "layer.y.ticklabel.pt=20;" in scripts[-1]
     assert "xb.fsize=20;" in scripts[-1]
     assert "yl.fsize=20;" in scripts[-1]
     assert "legend.font=font(Arial);" in scripts[-1]
@@ -1974,7 +2047,71 @@ def test_apply_nature_style_uses_chart_specific_scatter_rules(
     assert result["chart_type"] == "scatter"
     assert "-w 900" in plot.commands
     assert "-wp 1.8" in plot.commands
-    assert plot.symbol_size == 5.0
+    assert plot.symbol_size == 10.0
+
+
+def test_apply_nature_style_uses_journal_profile_and_explicit_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    scripts = []
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(
+        client,
+        "run_labtalk",
+        lambda script: scripts.append(script) or {"result": True},
+    )
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style(
+        "Graph1",
+        chart_type="line",
+        output_profile="journal_single_column",
+        axis_title_size=10,
+    )
+
+    assert result["output_profile"] == "journal_single_column"
+    assert result["style_profile"]["target_width_mm"] == 89.0
+    assert result["resolved_style"] == {
+        "axis_title_size": 10,
+        "tick_label_size": 20,
+        "legend_font_size": 20,
+        "line_width": 3.0,
+        "symbol_size": 10.0,
+        "tick_length": 3,
+    }
+    assert result["style_sources"]["axis_title_size"] == "user"
+    assert result["style_sources"]["tick_label_size"] == "output_profile"
+    assert plot.line_width == 3.0
+    assert plot.symbol_size == 10.0
+    assert "layer.x.label.pt=10;" in scripts[-1]
+    assert "layer.x.ticklabel.pt=20;" in scripts[-1]
+    assert "legend.fsize=20;" in scripts[-1]
+
+
+def test_apply_nature_style_respects_resolved_density_transparency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    graph = FakeGraph(FakeLayer([plot]))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style(
+        "Graph1",
+        chart_type="scatter",
+        transparency=55,
+    )
+
+    assert plot.transparency == 55.0
+    assert result["transparency"] == 55.0
+    assert all(
+        issue["code"] != "transparency_mismatch" for issue in result["diagnostics"]["issues"]
+    )
 
 
 def test_apply_nature_style_quotes_graph_names(
@@ -2043,6 +2180,13 @@ def test_palette_catalog_exposes_lcpmgh_nature_source() -> None:
 
     assert catalog["nature"]["semantic_roles"]["hero"] == "#27447C"
     assert catalog["nature"]["source_url"] == "https://github.com/lcpmgh/colors"
+    assert catalog["nature"]["accessibility"]["screening_status"] in {"pass", "review"}
+    assert catalog["nature"]["accessibility"]["min_oklab_distance"] > 0
+    assert set(catalog["nature"]["accessibility"]["cvd_simulations"]) == {
+        "protanopia",
+        "deuteranopia",
+        "tritanopia",
+    }
     assert "colors" not in catalog["nature"]
     with pytest.raises(OriginOperationError):
         normalize_palette_name("nature_skill")
@@ -2078,9 +2222,94 @@ def test_palette_catalog_filters_lcpmgh_color_range() -> None:
 
 def test_auto_palette_prefers_readable_hue_separated_exact_count_palette() -> None:
     palette_name, palette = select_palette_for_count(4)
+    metrics = palette_accessibility_metrics(palette["palette"])
 
-    assert palette_name == "lcpmgh_004_014"
-    assert palette["palette"] == ["#6A8EC9", "#E84446", "#59B78F", "#7A378A"]
+    assert palette_name == "lcpmgh_004_023"
+    assert metrics["screening_passed"] is True
+    assert metrics["min_contrast_against_white"] >= 2.0
+    assert metrics["min_oklab_distance"] >= 8.0
+    assert metrics["worst_cvd_min_oklab_distance"] >= 4.0
+
+
+def test_palette_accessibility_metrics_flags_indistinguishable_colors() -> None:
+    metrics = palette_accessibility_metrics(["#27447C", "#27447C"])
+
+    assert metrics["screening_status"] == "review"
+    assert metrics["screening_passed"] is False
+    assert metrics["min_oklab_distance"] == 0
+    assert metrics["worst_cvd_min_oklab_distance"] == 0
+    assert any("perceptual separation" in warning for warning in metrics["warnings"])
+
+
+def test_nature_series_distinction_uses_chart_appropriate_encodings() -> None:
+    line = nature_series_distinction("line", 3)
+    scatter = nature_series_distinction("scatter", 3)
+    line_symbol = nature_series_distinction("line_symbol", 3)
+
+    assert [item["line_style"] for item in line["assignments"]] == [0, 1, 2]
+    assert all("symbol_kind" not in item for item in line["assignments"])
+    assert [item["symbol_kind"] for item in scatter["assignments"]] == [1, 2, 3]
+    assert all("line_style" not in item for item in scatter["assignments"])
+    assert line_symbol["strategy"] == "line_style_and_symbol"
+
+
+def test_apply_nature_style_adds_non_color_series_distinction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plots = [FakePlot(), FakePlot(), FakePlot()]
+    graph = FakeGraph(FakeLayer(plots))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    result = client.apply_nature_style("Graph1", chart_type="line_symbol")
+
+    assert [f"-d {index}" in plot.commands for index, plot in enumerate(plots)] == [
+        True,
+        True,
+        True,
+    ]
+    assert [plot.symbol_kind for plot in plots] == [1, 2, 3]
+    assert result["series_distinction"]["strategy"] == "line_style_and_symbol"
+    assert result["diagnostics"]["series_distinction"] == result["series_distinction"]
+
+
+def test_apply_nature_style_uses_direct_symbol_properties_for_origin_plots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+
+    class PlotWithTypedSetters(FakePlot):
+        def __init__(self) -> None:
+            super().__init__()
+            self.symbol_kind = 0
+            self.typed_calls: list[tuple[str, str, float | int]] = []
+
+        def set_float(self, name: str, value: float) -> None:
+            self.typed_calls.append(("float", name, value))
+
+        def set_int(self, name: str, value: int) -> None:
+            self.typed_calls.append(("int", name, value))
+
+    plots = [PlotWithTypedSetters(), PlotWithTypedSetters()]
+    graph = FakeGraph(FakeLayer(plots))
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+    monkeypatch.setattr(client, "run_labtalk", lambda _script: {"result": True})
+    monkeypatch.setattr(client, "format_legend", lambda *_args, **_kwargs: {"legend": True})
+
+    client.apply_nature_style(
+        "Graph1",
+        chart_type="line_symbol",
+        output_profile="journal_single_column",
+    )
+
+    assert [plot.symbol_size for plot in plots] == [10.0, 10.0]
+    assert [plot.symbol_kind for plot in plots] == [1, 2]
+    assert all(
+        not any(name in {"symbol_size", "symbol_kind"} for _kind, name, _value in plot.typed_calls)
+        for plot in plots
+    )
 
 
 def test_apply_nature_style_uses_named_palette(
@@ -2188,6 +2417,56 @@ def test_diagnose_graph_reports_semantic_palette_mismatch(
 
     assert result["issues"][0]["code"] == "semantic_palette_mismatch"
     assert result["checklist"][3]["passed"] is False
+
+
+def test_diagnose_graph_accepts_resolved_nonzero_transparency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    plot.color = (39, 68, 124)
+    plot.transparency = 55
+    layer = FakeLayer([plot])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = "Value"
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    matched = client.diagnose_graph(
+        "Graph1",
+        style="nature",
+        expected_transparency=55,
+    )
+    mismatched = client.diagnose_graph(
+        "Graph1",
+        style="nature",
+        expected_transparency=0,
+    )
+    unconstrained = client.diagnose_graph("Graph1", style="nature")
+
+    assert all(issue["code"] != "transparency_mismatch" for issue in matched["issues"])
+    assert any(issue["code"] == "transparency_mismatch" for issue in mismatched["issues"])
+    assert all(issue["code"] != "transparency_mismatch" for issue in unconstrained["issues"])
+
+
+def test_diagnose_graph_checks_resolved_symbol_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OriginClient()
+    plot = FakePlot()
+    plot.symbol_size = 5.5
+    layer = FakeLayer([plot])
+    layer.axis("x").title = "Time"
+    layer.axis("y").title = "Value"
+    graph = FakeGraph(layer)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
+
+    result = client.diagnose_graph("Graph1", expected_symbol_size=3.5)
+
+    assert any(issue["code"] == "symbol_size_mismatch" for issue in result["issues"])
+    assert (
+        next(item for item in result["checklist"] if item["name"] == "symbols")["passed"] is False
+    )
 
 
 def test_diagnose_graph_checks_export_quality(
@@ -2381,7 +2660,12 @@ def test_plot_chart_atlas_applies_nature_only_when_requested(
     path.write_text("x,y\n0,1\n", encoding="utf-8")
     client = OriginClient()
     worksheet = WorksheetRef("Book1", "Sheet1", ["x", "y"], 1)
-    graph = GraphRef("AtlasGraph", template="scatter", style_mode="origin_default")
+    graph = GraphRef(
+        "AtlasGraph",
+        template="scatter",
+        style_mode="origin_default",
+        visual_defaults={"marks": {"transparency": {"value": 55.0}}},
+    )
     calls = {}
 
     def fake_plot_table(**kwargs: object) -> tuple[WorksheetRef, GraphRef]:
@@ -2407,7 +2691,9 @@ def test_plot_chart_atlas_applies_nature_only_when_requested(
 
     assert calls["plot_table"]["style_mode"] == "origin_default"
     assert calls["style"]["palette_role"] == "hero"
+    assert calls["style"]["transparency"] == 55.0
     assert result["graph"]["style_mode"] == "nature"
+    assert result["graph"]["visual_defaults"] == graph.visual_defaults
 
 
 def test_apply_image_panel_style_adds_panel_metadata(
@@ -2435,10 +2721,10 @@ def test_apply_image_panel_style_adds_panel_metadata(
     label_texts = {label.text for label in graph.layer.labels.values()}
     assert {"A", "Channel 1", "10 um", "min-max matched"} <= label_texts
     labels_by_text = {label.text: label for label in graph.layer.labels.values()}
-    assert labels_by_text["A"].properties["fsize"] == 20
-    assert labels_by_text["Channel 1"].properties["fsize"] == 18
-    assert labels_by_text["10 um"].properties["fsize"] == 18
-    assert labels_by_text["min-max matched"].properties["fsize"] == 18
+    assert labels_by_text["A"].properties["fsize"] == 22
+    assert labels_by_text["Channel 1"].properties["fsize"] == 20
+    assert labels_by_text["10 um"].properties["fsize"] == 20
+    assert labels_by_text["min-max matched"].properties["fsize"] == 20
     scale_bar = next(
         item for item in result["diagnostics"]["checklist"] if item["name"] == "scale_bar"
     )
@@ -3064,6 +3350,7 @@ def test_plot_table_by_id_nature_style_applies_override(
             "chart_type": "line",
             "show_legend": False,
             "palette_name": "lcpmgh_auto",
+            "transparency": 0.0,
         }
     ]
 
@@ -3652,6 +3939,7 @@ def test_plot_dual_y_nature_style_applies_override(
             "chart_type": "line_symbol",
             "show_legend": True,
             "palette_name": "lcpmgh_auto",
+            "transparency": 0.0,
         }
     ]
 

@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import OriginOperationError
+from ..nature_style_profiles import resolve_nature_style_profile
 from .base import _OriginClientBase
 
-NATURE_LEGEND_FONT_SIZE = 20
-NATURE_AXIS_TITLE_SIZE = 20
-NATURE_TICK_LABEL_SIZE = 18
-NATURE_ANNOTATION_FONT_SIZE = 18
+_SCREEN_STYLE_PROFILE = resolve_nature_style_profile("screen")
+NATURE_LEGEND_FONT_SIZE = _SCREEN_STYLE_PROFILE.legend_font_size
+NATURE_AXIS_TITLE_SIZE = _SCREEN_STYLE_PROFILE.axis_title_size
+NATURE_TICK_LABEL_SIZE = _SCREEN_STYLE_PROFILE.tick_label_size
+NATURE_ANNOTATION_FONT_SIZE = _SCREEN_STYLE_PROFILE.annotation_font_size
 
 
 class _GraphStyleMixin(_OriginClientBase):
@@ -30,18 +32,49 @@ class _GraphStyleMixin(_OriginClientBase):
         chart_type: str | None = None,
         page_width: float | None = None,
         page_height: float | None = None,
+        output_profile: str = "screen",
         font_family: str = "Arial",
-        axis_title_size: int = NATURE_AXIS_TITLE_SIZE,
-        tick_label_size: int = NATURE_TICK_LABEL_SIZE,
-        legend_font_size: int = NATURE_LEGEND_FONT_SIZE,
-        line_width: float = 3.0,
-        symbol_size: float = 4.5,
-        tick_length: int = 3,
+        axis_title_size: int | None = None,
+        tick_label_size: int | None = None,
+        legend_font_size: int | None = None,
+        line_width: float | None = None,
+        symbol_size: float | None = None,
+        transparency: float = 0.0,
+        tick_length: int | None = None,
         show_legend: bool = True,
         palette_role: str | list[str] | None = None,
         palette_name: str | None = None,
+        differentiate_series: bool = True,
         run_diagnostics: bool = True,
     ) -> dict[str, Any]:
+        profile = resolve_nature_style_profile(output_profile)
+        explicit_style = {
+            "axis_title_size": axis_title_size is not None,
+            "tick_label_size": tick_label_size is not None,
+            "legend_font_size": legend_font_size is not None,
+            "line_width": line_width is not None,
+            "symbol_size": symbol_size is not None,
+            "tick_length": tick_length is not None,
+        }
+        axis_title_size = int(
+            profile.axis_title_size if axis_title_size is None else axis_title_size
+        )
+        tick_label_size = int(
+            profile.tick_label_size if tick_label_size is None else tick_label_size
+        )
+        legend_font_size = int(
+            profile.legend_font_size if legend_font_size is None else legend_font_size
+        )
+        line_width = float(profile.line_width if line_width is None else line_width)
+        symbol_size = float(profile.symbol_size if symbol_size is None else symbol_size)
+        tick_length = int(profile.tick_length if tick_length is None else tick_length)
+        if min(axis_title_size, tick_label_size, legend_font_size) <= 0:
+            raise OriginOperationError("Nature font sizes must be positive.")
+        if line_width <= 0 or symbol_size <= 0 or tick_length < 0:
+            raise OriginOperationError(
+                "Nature line_width and symbol_size must be positive; "
+                "tick_length must be nonnegative."
+            )
         graph = self._find_or_active_graph(graph_name)
         graph_name_actual = self._object_name(graph, default=graph_name or "")
         palette_name_actual = self._normalize_palette_name(palette_name)
@@ -63,6 +96,19 @@ class _GraphStyleMixin(_OriginClientBase):
         chart_style = self._nature_chart_style(chart_type, line_width, symbol_size)
         actual_line_width = chart_style["line_width"]
         actual_symbol_size = chart_style["symbol_size"]
+        series_distinction = (
+            self._nature_series_distinction(chart_type, total_plots)
+            if differentiate_series
+            else {
+                "enabled": False,
+                "strategy": "none",
+                "assignments": [],
+                "warning": None,
+            }
+        )
+        actual_transparency = float(transparency)
+        if not 0 <= actual_transparency <= 100:
+            raise OriginOperationError("transparency must be between 0 and 100.")
         styled_plots = 0
         applied_roles: list[str] = []
         roles = self._palette_roles(palette_role, total_plots, palette_name_actual)
@@ -74,16 +120,24 @@ class _GraphStyleMixin(_OriginClientBase):
                 if actual_line_width is not None:
                     self._set_nature_plot_line_width(plot, actual_line_width)
                 if actual_symbol_size is not None:
-                    self._set_origin_property(plot, "symbol_size", actual_symbol_size)
+                    self._set_nature_plot_symbol_size(plot, actual_symbol_size)
                 role = roles[global_plot_index]
                 color = (
                     semantic_palette[role] if role else palette[global_plot_index % len(palette)]
                 )
                 self._set_origin_property(plot, "color", color)
                 try:
-                    self._set_origin_property(plot, "transparency", 0)
+                    self._set_origin_property(plot, "transparency", actual_transparency)
                 except OriginOperationError:
                     pass
+                if series_distinction["enabled"]:
+                    distinction = series_distinction["assignments"][global_plot_index]
+                    line_style = distinction.get("line_style")
+                    if line_style is not None:
+                        self._set_plot_command(plot, f"-d {line_style}")
+                    symbol_kind = distinction.get("symbol_kind")
+                    if symbol_kind is not None:
+                        self._set_nature_plot_symbol_kind(plot, symbol_kind)
                 applied_roles.append(role or f"category_{global_plot_index + 1}")
                 global_plot_index += 1
             styled_plots += len(plots)
@@ -145,13 +199,29 @@ class _GraphStyleMixin(_OriginClientBase):
         response = {
             "graph_name": graph_name_actual,
             "style": "nature",
+            "output_profile": profile.name,
+            "style_profile": profile.as_dict(),
+            "resolved_style": {
+                "axis_title_size": axis_title_size,
+                "tick_label_size": tick_label_size,
+                "legend_font_size": legend_font_size,
+                "line_width": actual_line_width,
+                "symbol_size": actual_symbol_size,
+                "tick_length": tick_length,
+            },
+            "style_sources": {
+                key: "user" if explicit else "output_profile"
+                for key, explicit in explicit_style.items()
+            },
             "palette_name": palette_name_actual,
             "chart_type": chart_style["chart_type"],
             "font_family": font_family,
+            "transparency": actual_transparency,
             "palette": palette,
             "semantic_palette": semantic_palette,
             "palette_role": palette_role,
             "applied_palette_roles": applied_roles,
+            "series_distinction": series_distinction,
             "styled_layers": indexes,
             "styled_plots": styled_plots,
             "script": script,
@@ -165,9 +235,12 @@ class _GraphStyleMixin(_OriginClientBase):
                 style="nature",
                 palette_role=palette_role,
                 palette_name=palette_name_actual,
+                expected_transparency=actual_transparency,
+                expected_symbol_size=actual_symbol_size,
             )
             if auto_palette is not None:
                 response["diagnostics"]["auto_palette"] = auto_palette
+            response["diagnostics"]["series_distinction"] = series_distinction
         return response
 
     def _nature_axis_title_text(self, layer: Any, axis_name: str, _safe_font: str) -> str:
@@ -180,6 +253,22 @@ class _GraphStyleMixin(_OriginClientBase):
 
     def _set_nature_plot_line_width(self, plot: Any, line_width: float) -> None:
         self._set_plot_line_width(plot, line_width)
+
+    def _set_nature_plot_symbol_size(self, plot: Any, symbol_size: float) -> None:
+        # originpro's generic set_float("symbol_size", ...) can return without
+        # changing a GDataPlot. Its public property setter is the reliable path.
+        try:
+            plot.symbol_size = symbol_size
+        except Exception:
+            self._set_origin_property(plot, "symbol_size", symbol_size)
+
+    def _set_nature_plot_symbol_kind(self, plot: Any, symbol_kind: int) -> None:
+        # As with symbol_size, set_int("symbol_kind", ...) is silently ignored
+        # by some Origin builds while direct assignment updates the plot.
+        try:
+            plot.symbol_kind = symbol_kind
+        except Exception:
+            self._set_origin_property(plot, "symbol_kind", symbol_kind)
 
     def _nature_plot_line_width_script(self, plot_count: int, line_width: float) -> list[str]:
         native_width = self._origin_line_width_units(line_width)
@@ -199,6 +288,8 @@ class _GraphStyleMixin(_OriginClientBase):
         style: str | None = None,
         palette_role: str | list[str] | None = None,
         palette_name: str | None = None,
+        expected_transparency: float | None = None,
+        expected_symbol_size: float | None = None,
         require_axis_titles: bool = True,
         require_plots: bool = True,
         require_legend: bool = False,
@@ -218,6 +309,16 @@ class _GraphStyleMixin(_OriginClientBase):
             strict=style_actual == "nature",
         )
         palette_validation_name = "nature" if palette_warning else palette_name_actual
+        expected_transparency_actual = self._numeric_or_none(expected_transparency)
+        if expected_transparency is not None and (
+            expected_transparency_actual is None or not 0 <= expected_transparency_actual <= 100
+        ):
+            raise OriginOperationError("expected_transparency must be between 0 and 100.")
+        expected_symbol_size_actual = self._numeric_or_none(expected_symbol_size)
+        if expected_symbol_size is not None and (
+            expected_symbol_size_actual is None or expected_symbol_size_actual <= 0
+        ):
+            raise OriginOperationError("expected_symbol_size must be positive.")
         if palette_warning:
             issues.append(palette_warning)
         layers = info.get("layers", [])
@@ -355,15 +456,37 @@ class _GraphStyleMixin(_OriginClientBase):
                                 palette_role=expected_role,
                             )
                         )
-                    transparency = plot.get("transparency")
-                    if transparency not in (None, 0):
+                    transparency = self._numeric_or_none(plot.get("transparency"))
+                    if transparency is not None and not 0 <= transparency <= 100:
                         issues.append(
                             self._diagnostic_issue(
-                                "plot_transparency",
+                                "invalid_transparency",
                                 "warning",
-                                "Plot transparency is not zero.",
+                                "Plot transparency is outside the supported 0..100 range.",
                                 layer_index=layer_index,
                                 plot_index=plot.get("index"),
+                                actual_transparency=transparency,
+                            )
+                        )
+                    elif (
+                        transparency is not None
+                        and expected_transparency_actual is not None
+                        and not math.isclose(
+                            transparency,
+                            expected_transparency_actual,
+                            rel_tol=0.0,
+                            abs_tol=1e-6,
+                        )
+                    ):
+                        issues.append(
+                            self._diagnostic_issue(
+                                "transparency_mismatch",
+                                "warning",
+                                "Plot transparency does not match the resolved style decision.",
+                                layer_index=layer_index,
+                                plot_index=plot.get("index"),
+                                actual_transparency=transparency,
+                                expected_transparency=expected_transparency_actual,
                             )
                         )
                 symbol_size_value = self._numeric_or_none(plot.get("symbol_size"))
@@ -375,6 +498,27 @@ class _GraphStyleMixin(_OriginClientBase):
                             "Plot symbol size is negative.",
                             layer_index=layer_index,
                             plot_index=plot.get("index"),
+                        )
+                    )
+                elif (
+                    symbol_size_value is not None
+                    and expected_symbol_size_actual is not None
+                    and not math.isclose(
+                        symbol_size_value,
+                        expected_symbol_size_actual,
+                        rel_tol=0.0,
+                        abs_tol=1e-6,
+                    )
+                ):
+                    issues.append(
+                        self._diagnostic_issue(
+                            "symbol_size_mismatch",
+                            "warning",
+                            "Plot symbol size does not match the resolved style decision.",
+                            layer_index=layer_index,
+                            plot_index=plot.get("index"),
+                            actual_symbol_size=symbol_size_value,
+                            expected_symbol_size=expected_symbol_size_actual,
                         )
                     )
 
@@ -560,7 +704,8 @@ class _GraphStyleMixin(_OriginClientBase):
                 "palette",
                 {"non_nature_palette_color", "semantic_palette_mismatch"},
             ),
-            check("transparency", {"plot_transparency"}),
+            check("transparency", {"invalid_transparency", "transparency_mismatch"}),
+            check("symbols", {"invalid_symbol_size", "symbol_size_mismatch"}),
             check("legend", {"missing_legend"}, active=require_legend),
             check("panel_label", {"missing_panel_label"}, active=require_panel_label),
             check("scale_bar", {"missing_scale_bar"}, active=require_scale_bar),

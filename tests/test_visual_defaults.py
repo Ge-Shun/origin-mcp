@@ -269,6 +269,54 @@ def test_smart_defaults_reduce_dense_scatter_marks() -> None:
     assert decision_value(defaults, "marks", "transparency") == 55.0
 
 
+def test_nature_theme_keeps_density_transparency_as_final_decision() -> None:
+    dense = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=2500,
+        x_values=np.arange(2500),
+        y_series=[np.arange(2500)],
+        style_mode="nature",
+    )
+    line = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=[1, 2, 3],
+        y_series=[[1, 2, 3]],
+        style_mode="nature",
+    )
+    origin_default = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=[1, 2, 3],
+        y_series=[[1, 2, 3]],
+    )
+
+    assert decision_value(dense, "marks", "transparency") == 55.0
+    assert dense["marks"]["transparency"]["reason"] == "very_dense_points"
+    assert decision_value(line, "marks", "transparency") == 0.0
+    assert line["marks"]["transparency"]["source"] == "theme"
+    assert decision_value(origin_default, "marks", "transparency") is None
+
+
+def test_explicit_transparency_overrides_density_and_theme() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=2500,
+        x_values=np.arange(2500),
+        y_series=[np.arange(2500)],
+        mark_transparency=20,
+        style_mode="nature",
+    )
+
+    assert decision_value(defaults, "marks", "transparency") == 20.0
+    assert defaults["marks"]["transparency"]["source"] == "user"
+    assert defaults["marks"]["transparency"]["reason"] == "explicit_user_value"
+
+
 def test_smart_defaults_use_scientific_notation_for_large_values() -> None:
     defaults = resolve_visual_defaults(
         chart_type="line",
@@ -340,7 +388,7 @@ def test_smart_defaults_format_dual_y_axes_independently_and_align_ticks() -> No
     assert left_scale["from"] < 20.1 and left_scale["to"] > 20.4
     assert right_scale["from"] < 100_000 and right_scale["to"] > 400_000
     assert decision_value(defaults, "axes", "y2_major_grid") is False
-    assert decision_value(defaults, "canvas", "right_margin") == 0.12
+    assert decision_value(defaults, "canvas", "right_margin") == 0.14
 
 
 def test_smart_defaults_preserve_datetime_labels_with_temporal_tick_density() -> None:
@@ -362,7 +410,7 @@ def test_smart_defaults_preserve_datetime_labels_with_temporal_tick_density() ->
     assert decision_value(defaults, "axes", "x_major_ticks") == datetime_scale["tick_count"]
     assert decision_value(defaults, "axes", "x_minor_ticks") == 0
     assert decision_value(defaults, "canvas", "left_margin") == 0.1
-    assert decision_value(defaults, "canvas", "right_margin") == 0.1
+    assert decision_value(defaults, "canvas", "right_margin") == 0.14
 
 
 def test_smart_defaults_recognize_iso_datetime_strings() -> None:
@@ -409,3 +457,125 @@ def test_histogram_count_axis_uses_integer_ticks_and_zero_baseline() -> None:
     assert decision_value(defaults, "axes", "y_number_format") == "decimal"
     assert decision_value(defaults, "axes", "y_decimal_places") == 0
     assert decision_value(defaults, "axes", "y_zero_baseline") is True
+
+
+def test_smart_line_labels_only_latest_values_and_reserves_right_space() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=2,
+        row_count=12,
+        x_values=np.arange(12),
+        y_series=[np.arange(12) + 0.5, np.arange(12) * 2 + 0.25],
+        y_names=["temperature_control_C", "temperature_treated_C"],
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "show") is True
+    assert decision_value(defaults, "annotations", "data_labels", "scope") == "end"
+    assert decision_value(defaults, "annotations", "data_labels", "position") == "right"
+    assert decision_value(defaults, "annotations", "data_labels", "value_source") == "y"
+    assert decision_value(defaults, "annotations", "data_labels", "layer_formats") == [
+        {"number_format": "decimal", "decimal_places": 2}
+    ]
+    assert decision_value(defaults, "canvas", "right_margin") == 0.14
+
+
+def test_nature_data_labels_use_large_annotation_typography() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=2,
+        row_count=12,
+        x_values=np.arange(12),
+        y_series=[np.arange(12), np.arange(12) * 2],
+        style_mode="nature",
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "font_size") == 20
+    assert defaults["annotations"]["data_labels"]["font_size"]["reason"] == (
+        "nature_annotation_typography"
+    )
+
+
+def test_smart_column_labels_compact_single_series_and_reserves_top_space() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="column",
+        chart_variant="column",
+        series_count=1,
+        row_count=5,
+        x_values=["A", "B", "C", "D", "E"],
+        y_series=[[2.4, 4.1, 3.8, 6.2, 5.5]],
+        y_names=["revenue_USD"],
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "show") is True
+    assert decision_value(defaults, "annotations", "data_labels", "scope") == "all"
+    assert decision_value(defaults, "annotations", "data_labels", "position") == "above"
+    assert decision_value(defaults, "annotations", "data_labels", "layer_formats") == [
+        {"number_format": "decimal", "decimal_places": 1}
+    ]
+    assert decision_value(defaults, "canvas", "top_margin") == 0.1
+
+
+def test_smart_horizontal_bar_labels_reserve_right_space() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="bar",
+        chart_variant="bar",
+        series_count=1,
+        row_count=4,
+        x_values=["A", "B", "C", "D"],
+        y_series=[[2, 4, 3, 6]],
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "position") == "right"
+    assert decision_value(defaults, "canvas", "right_margin") == 0.14
+
+
+def test_smart_scatter_labels_small_sets_or_only_extrema() -> None:
+    small = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=6,
+        x_values=np.arange(6),
+        y_series=[[1, 4, 2, 5, 3, 6]],
+    )
+    moderate = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=20,
+        x_values=np.arange(20),
+        y_series=[np.arange(20)],
+    )
+    dense = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=81,
+        x_values=np.arange(81),
+        y_series=[np.arange(81)],
+    )
+
+    assert decision_value(small, "annotations", "data_labels", "scope") == "all"
+    assert decision_value(moderate, "annotations", "data_labels", "scope") == "extrema"
+    assert decision_value(dense, "annotations", "data_labels", "show") is False
+
+
+def test_smart_mixed_sign_bar_uses_zero_reference_without_crowded_labels() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="column",
+        chart_variant="column",
+        series_count=1,
+        row_count=4,
+        x_values=["A", "B", "C", "D"],
+        y_series=[[-3, -1, 2, 5]],
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "show") is False
+    assert decision_value(defaults, "annotations", "reference_lines") == [
+        {
+            "axis": "y",
+            "value": 0.0,
+            "layer_index": 0,
+            "role": "zero",
+            "color_index": 19,
+            "line_style": 0,
+            "line_width": 1.0,
+        }
+    ]

@@ -145,6 +145,7 @@ class _TablePlotMixin(_OriginClientBase):
         style_mode_actual = self._normalize_style_mode(style_mode)
         visual_defaults = resolve_visual_defaults(
             chart_type=kind,
+            chart_variant=template or kind,
             series_count=len(y_names),
             row_count=len(df),
             x_values=df[x_name].to_numpy(),
@@ -207,6 +208,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": kind,
                 "show_legend": show_legend_actual,
                 "palette_name": decision_value(visual_defaults, "palette_name"),
+                "transparency": decision_value(visual_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         if kind == "histogram":
@@ -299,6 +301,7 @@ class _TablePlotMixin(_OriginClientBase):
         style_mode_actual = self._normalize_style_mode(style_mode)
         visual_defaults = resolve_visual_defaults(
             chart_type=plot_type,
+            chart_variant=plot_type,
             series_count=len(y1_names) + len(y2_names),
             row_count=len(df),
             x_values=df[x_name].to_numpy(),
@@ -362,6 +365,7 @@ class _TablePlotMixin(_OriginClientBase):
                 chart_type=plot_type,
                 show_legend=show_legend_actual,
                 palette_name=decision_value(visual_defaults, "palette_name"),
+                transparency=decision_value(visual_defaults, "marks", "transparency"),
             )
         try:
             self.format_graph(
@@ -489,6 +493,7 @@ class _TablePlotMixin(_OriginClientBase):
         )
         smart_defaults = resolve_visual_defaults(
             chart_type=chart_type,
+            chart_variant=template,
             series_count=series_count,
             row_count=len(df),
             x_values=profile_x,
@@ -634,6 +639,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": chart_type,
                 "show_legend": show_legend_actual,
                 "palette_name": decision_value(smart_defaults, "palette_name"),
+                "transparency": decision_value(smart_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         visual_defaults: dict[str, Any] = {"smart": smart_defaults}
@@ -758,6 +764,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": self._nature_chart_type_for_plot_id(242, "glmesh"),
                 "show_legend": show_legend,
                 "palette_name": palette_name,
+                "transparency": decision_value(smart_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         try:
@@ -1180,6 +1187,7 @@ class _TablePlotMixin(_OriginClientBase):
         bottom_margin = (
             decision_value(canvas, "bottom_margin") if "bottom_margin" in canvas else None
         )
+        top_margin = decision_value(canvas, "top_margin") if "top_margin" in canvas else None
         page_width_aspect_ratio = (
             decision_value(canvas, "page_width_aspect_ratio")
             if "page_width_aspect_ratio" in canvas
@@ -1294,10 +1302,15 @@ class _TablePlotMixin(_OriginClientBase):
                 script_parts.append(f"page.height=page.width/{float(page_aspect_ratio):g};")
             elif page_width_aspect_ratio is not None:
                 script_parts.append(f"page.width=page.height*{float(page_width_aspect_ratio):g};")
-        if bottom_margin is not None or left_margin is not None or right_margin is not None:
+        if (
+            bottom_margin is not None
+            or top_margin is not None
+            or left_margin is not None
+            or right_margin is not None
+        ):
             script_parts.append(
                 f"page -fls -u -ml {float(left_margin if left_margin is not None else 0.08):g} "
-                "-mt 0.05 "
+                f"-mt {float(top_margin if top_margin is not None else 0.05):g} "
                 f"-mr {float(right_margin if right_margin is not None else 0.05):g} "
                 f"-mb {float(bottom_margin if bottom_margin is not None else 0.08):g};"
             )
@@ -1306,6 +1319,21 @@ class _TablePlotMixin(_OriginClientBase):
             axis_result = self.run_labtalk(axis_script)
         except OriginMcpError as exc:
             axis_result = {"warning": str(exc)}
+
+        annotations = defaults.get("annotations", {})
+        data_label_result = self._apply_smart_data_labels(
+            graph_name=graph_name,
+            policy=annotations.get("data_labels", {}),
+            axes=axes,
+        )
+        reference_line_result = self._apply_smart_reference_lines(
+            graph_name=graph_name,
+            lines=(
+                decision_value(annotations, "reference_lines")
+                if "reference_lines" in annotations
+                else []
+            ),
+        )
 
         mark_result = None
         symbol_size = decision_value(defaults, "marks", "symbol_size")
@@ -1335,9 +1363,137 @@ class _TablePlotMixin(_OriginClientBase):
         return {
             "axis_script": axis_script,
             "axis_result": axis_result,
+            "data_labels": data_label_result,
+            "reference_lines": reference_line_result,
             "marks": mark_result,
             "legend": legend_result,
         }
+
+    def _apply_smart_data_labels(
+        self,
+        *,
+        graph_name: str,
+        policy: dict[str, Any],
+        axes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not policy or not decision_value(policy, "show"):
+            return None
+        scope = str(decision_value(policy, "scope") or "none")
+        position = str(decision_value(policy, "position") or "above")
+        font_size = int(decision_value(policy, "font_size") or 8)
+        layer_series_counts = list(decision_value(policy, "layer_series_counts") or [])
+        layer_formats = list(decision_value(policy, "layer_formats") or [])
+        position_code = {"right": 3, "above": 4}.get(position, 4)
+        try:
+            graph = self._find_or_active_graph(graph_name)
+        except (OriginMcpError, RuntimeError, AttributeError, TypeError, ValueError) as exc:
+            return {
+                "scope": scope,
+                "position": position,
+                "applied": [],
+                "warnings": [str(exc)],
+            }
+        applied: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for layer_index, series_count in enumerate(layer_series_counts):
+            try:
+                layer = self._graph_layer(graph, layer_index)
+                plots = list(layer.plot_list())[: max(0, int(series_count))]
+            except (IndexError, OriginMcpError, RuntimeError) as exc:
+                warnings.append(f"layer {layer_index}: {exc}")
+                continue
+            if layer_index < len(layer_formats):
+                number_format = layer_formats[layer_index].get("number_format", "decimal")
+                decimal_places = int(layer_formats[layer_index].get("decimal_places", 0))
+            else:
+                number_format = decision_value(
+                    axes,
+                    "y2_number_format" if layer_index else "y_number_format",
+                )
+                decimal_places = int(
+                    decision_value(
+                        axes,
+                        "y2_decimal_places" if layer_index else "y_decimal_places",
+                    )
+                    or 0
+                )
+            display_format = (
+                f"S.{max(0, decimal_places)}"
+                if number_format == "scientific"
+                else f".{max(0, decimal_places)}"
+            )
+            for plot_index, plot in enumerate(plots):
+                commands = [
+                    "-q 1",
+                    "-qm 5",
+                    f"-j -qms $(Y,{display_format})",
+                    f"-qp {position_code}",
+                    f"-qs {font_size}",
+                    "-qc 1",
+                    "-qw 0",
+                ]
+                if scope == "all":
+                    commands.append("-qmie 0")
+                elif scope == "end":
+                    commands.extend(["-qmi 0", "-qmie 1"])
+                elif scope == "extrema":
+                    commands.extend(["-qmi Max Min", "-qmie 1"])
+                else:
+                    commands = ["-q 0"]
+                try:
+                    for command in commands:
+                        self._set_plot_command(plot, command)
+                    applied.append(
+                        {
+                            "layer_index": layer_index,
+                            "plot_index": plot_index,
+                            "scope": scope,
+                            "position": position,
+                            "format": display_format,
+                        }
+                    )
+                except (OriginMcpError, RuntimeError, AttributeError, TypeError, ValueError) as exc:
+                    warnings.append(f"layer {layer_index} plot {plot_index}: {exc}")
+        return {
+            "scope": scope,
+            "position": position,
+            "applied": applied,
+            "warnings": warnings,
+        }
+
+    def _apply_smart_reference_lines(
+        self,
+        *,
+        graph_name: str,
+        lines: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if not lines:
+            return None
+        safe_graph = self._escape_labtalk(graph_name)
+        script_parts = [f'win -a "{safe_graph}";']
+        for line in lines:
+            layer_index = int(line.get("layer_index", 0))
+            axis = "x" if str(line.get("axis", "y")).lower() == "x" else "y"
+            value = _labtalk_number(line.get("value", 0))
+            color_index = int(line.get("color_index", 19))
+            line_style = int(line.get("line_style", 0))
+            line_width = float(line.get("line_width", 1.0))
+            role = str(line.get("role", "reference")).replace("-", "_")
+            name = f"smart_{role}_{axis}_{layer_index + 1}"
+            script_parts.extend(
+                [
+                    f"layer -s {layer_index + 1};",
+                    (
+                        f"draw -n {name} -c {color_index} -d {line_style} "
+                        f"-w {line_width:g} -l {axis} {value};"
+                    ),
+                ]
+            )
+        script = " ".join(script_parts)
+        try:
+            return {"script": script, **self.run_labtalk(script)}
+        except OriginMcpError as exc:
+            return {"script": script, "warning": str(exc)}
 
     @staticmethod
     def _coerce_x_datetime(df: Any, x_name: str) -> Any:
