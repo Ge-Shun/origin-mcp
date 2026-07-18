@@ -10,6 +10,7 @@ from ..chart_router import profile_table
 from ..chart_router import recommend_chart as recommend_chart_route
 from ..errors import OriginOperationError
 from ..template_library import TemplateRecord
+from ..visual_defaults import decision_value
 from .base import GraphRef, WorksheetRef, _OriginClientBase
 
 
@@ -167,6 +168,7 @@ class _PlotRoutingMixin(_OriginClientBase):
             style=style_mode_actual if style_mode_actual == "nature" else None,
             palette_role=selected.get("palette_role"),
             palette_name=palette_name,
+            expected_transparency=self._graph_mark_transparency(graph),
             export_path=export_path,
         )
         return {
@@ -291,11 +293,13 @@ class _PlotRoutingMixin(_OriginClientBase):
 
         style_result = None
         if style_mode_actual == "nature":
+            resolved_transparency = self._graph_mark_transparency(graph)
             style_result = self.apply_nature_style(
                 graph_name=graph.graph_name,
                 chart_type=str(route["chart_type"]),
                 palette_role=route_palette,
                 palette_name=palette_name,
+                transparency=resolved_transparency if resolved_transparency is not None else 0.0,
             )
             if export_path is not None:
                 self._export_plot_command_graph(export_path, graph.graph_name)
@@ -304,6 +308,9 @@ class _PlotRoutingMixin(_OriginClientBase):
                 export_path=graph.export_path,
                 template=graph.template,
                 style_mode=style_mode_actual,
+                requested_graph_name=graph.requested_graph_name,
+                display_name=graph.display_name,
+                visual_defaults=graph.visual_defaults,
             )
 
         regression = None
@@ -320,6 +327,7 @@ class _PlotRoutingMixin(_OriginClientBase):
             style=style_mode_actual if style_mode_actual == "nature" else None,
             palette_role=route_palette,
             palette_name=palette_name,
+            expected_transparency=self._graph_mark_transparency(graph),
             export_path=export_path,
         )
         return {
@@ -331,6 +339,17 @@ class _PlotRoutingMixin(_OriginClientBase):
             "regression": regression,
             "diagnostics": diagnostics,
         }
+
+    @staticmethod
+    def _graph_mark_transparency(graph: GraphRef) -> float | None:
+        defaults = graph.visual_defaults
+        if not defaults:
+            return None
+        try:
+            value = decision_value(defaults, "marks", "transparency")
+        except (KeyError, TypeError):
+            return None
+        return float(value) if value is not None else None
 
     def plot_range(
         self,

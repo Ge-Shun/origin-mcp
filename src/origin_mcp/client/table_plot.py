@@ -208,6 +208,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": kind,
                 "show_legend": show_legend_actual,
                 "palette_name": decision_value(visual_defaults, "palette_name"),
+                "transparency": decision_value(visual_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         if kind == "histogram":
@@ -364,6 +365,7 @@ class _TablePlotMixin(_OriginClientBase):
                 chart_type=plot_type,
                 show_legend=show_legend_actual,
                 palette_name=decision_value(visual_defaults, "palette_name"),
+                transparency=decision_value(visual_defaults, "marks", "transparency"),
             )
         try:
             self.format_graph(
@@ -637,6 +639,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": chart_type,
                 "show_legend": show_legend_actual,
                 "palette_name": decision_value(smart_defaults, "palette_name"),
+                "transparency": decision_value(smart_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         visual_defaults: dict[str, Any] = {"smart": smart_defaults}
@@ -761,6 +764,7 @@ class _TablePlotMixin(_OriginClientBase):
                 "chart_type": self._nature_chart_type_for_plot_id(242, "glmesh"),
                 "show_legend": show_legend,
                 "palette_name": palette_name,
+                "transparency": decision_value(smart_defaults, "marks", "transparency"),
             }
             self.apply_nature_style(**style_kwargs)
         try:

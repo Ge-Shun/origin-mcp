@@ -27,6 +27,26 @@ from .lcpmgh_palettes import (
 
 Rgb = tuple[int, int, int]
 
+_CVD_LINEAR_RGB_MATRICES: dict[str, tuple[tuple[float, float, float], ...]] = {
+    # Machado et al. severity-1.0 matrices. They are used as a conservative
+    # screening aid, not as a clinical model of an individual viewer.
+    "protanopia": (
+        (0.152286, 1.052583, -0.204868),
+        (0.114503, 0.786281, 0.099216),
+        (-0.003882, -0.048116, 1.051998),
+    ),
+    "deuteranopia": (
+        (0.367322, 0.860646, -0.227968),
+        (0.280085, 0.672501, 0.047413),
+        (-0.011820, 0.042940, 0.968881),
+    ),
+    "tritanopia": (
+        (1.255528, -0.076749, -0.178779),
+        (-0.078411, 0.930809, 0.147602),
+        (0.004733, 0.691367, 0.303900),
+    ),
+}
+
 
 def _rgb(hex_color: str) -> Rgb:
     value = hex_color.strip().lstrip("#")
@@ -136,6 +156,7 @@ def _palette_colors_count(palette: dict[str, Any]) -> int:
 
 
 def _catalog_entry(name: str, palette: dict[str, Any], *, include_colors: bool) -> dict[str, Any]:
+    accessibility = palette_accessibility_metrics(list(palette["palette"]))
     entry = {
         "name": name,
         "display_name": palette["display_name"],
@@ -148,6 +169,7 @@ def _catalog_entry(name: str, palette: dict[str, Any], *, include_colors: bool) 
         "best_for": palette.get("best_for"),
         "colors_count": _palette_colors_count(palette),
         "semantic_roles": dict(palette["semantic"]),
+        "accessibility": accessibility,
     }
     if include_colors:
         entry["colors"] = list(palette["palette"])
@@ -228,6 +250,7 @@ def select_palette_for_count(plot_count: int) -> tuple[str, dict[str, Any]]:
     # ``lcpmgh_auto`` does not accidentally choose a nearly white first match.
     matches.sort(
         key=lambda item: (
+            -int(palette_accessibility_metrics(list(item[1]["palette"]))["screening_passed"]),
             -_palette_readability_score(item[1]),
             int(item[1].get("source_index") or 0),
         )
@@ -236,21 +259,127 @@ def select_palette_for_count(plot_count: int) -> tuple[str, dict[str, Any]]:
 
 
 def _palette_readability_score(palette: dict[str, Any]) -> float:
-    colors = [_rgb(color) for color in palette.get("palette", [])]
-    if not colors:
+    raw_colors = list(palette.get("palette", []))
+    if not raw_colors:
         return float("-inf")
-    contrasts = [_contrast_against_white(color) for color in colors]
-    distances = [
-        math.dist(first, second) / math.sqrt(3 * 255**2)
-        for first, second in itertools.combinations(colors, 2)
-    ]
-    hue_coverage = _palette_hue_coverage(colors)
-    return (
-        min(min(contrasts), 3.0) * 1.5
-        + sum(min(contrast, 7.0) for contrast in contrasts) / len(contrasts) * 0.5
-        + (sum(distances) / len(distances) if distances else 0.0) * 4.0
-        + hue_coverage / 60.0
+    return float(palette_accessibility_metrics(raw_colors)["readability_score"])
+
+
+def palette_accessibility_metrics(colors: list[str] | list[Rgb]) -> dict[str, Any]:
+    """Return white-page and color-vision screening metrics for a palette.
+
+    Distances use OKLab and are scaled by 100 for readable values. The color
+    vision simulations are an automated preflight check; charts still need a
+    non-color distinction such as markers, line styles, or direct labels.
+    """
+    rgb_colors = [_rgb(color) if isinstance(color, str) else color for color in colors]
+    if not rgb_colors:
+        return {
+            "screening_status": "review",
+            "screening_passed": False,
+            "readability_score": float("-inf"),
+            "warnings": ["Palette contains no colors."],
+        }
+
+    linear_colors = [_linear_rgb(color) for color in rgb_colors]
+    oklab_colors = [_oklab(color) for color in linear_colors]
+    normal_min, normal_mean = _pairwise_oklab_summary(oklab_colors)
+    contrasts = [_contrast_against_white(color) for color in rgb_colors]
+    cvd_metrics = {}
+    for mode, matrix in _CVD_LINEAR_RGB_MATRICES.items():
+        simulated = [_oklab(_matrix_transform(color, matrix)) for color in linear_colors]
+        minimum, mean = _pairwise_oklab_summary(simulated)
+        cvd_metrics[mode] = {
+            "min_oklab_distance": round(minimum, 3),
+            "mean_oklab_distance": round(mean, 3),
+        }
+
+    worst_cvd_minimum = min(metrics["min_oklab_distance"] for metrics in cvd_metrics.values())
+    mean_cvd_separation = sum(
+        metrics["mean_oklab_distance"] for metrics in cvd_metrics.values()
+    ) / len(cvd_metrics)
+    min_contrast = min(contrasts)
+    mean_contrast = sum(contrasts) / len(contrasts)
+    hue_coverage = _palette_hue_coverage(rgb_colors)
+
+    # Minimum separations carry more weight than averages: one confusing pair
+    # is enough to make a categorical palette difficult to read.
+    score = (
+        min(min_contrast, 4.5) * 1.2
+        + min(mean_contrast, 7.0) * 0.3
+        + min(normal_min, 30.0) * 0.15
+        + min(normal_mean, 40.0) * 0.05
+        + min(worst_cvd_minimum, 24.0) * 0.25
+        + min(mean_cvd_separation, 35.0) * 0.03
+        + hue_coverage / 90.0
     )
+
+    warnings = []
+    if min_contrast < 2.0:
+        warnings.append("At least one color has low contrast against a white page.")
+    if normal_min < 8.0:
+        warnings.append("At least one color pair has weak perceptual separation.")
+    if worst_cvd_minimum < 4.0:
+        warnings.append(
+            "At least one color pair may merge under a color-vision-deficiency simulation."
+        )
+    screening_passed = not warnings
+    return {
+        "screening_status": "pass" if screening_passed else "review",
+        "screening_passed": screening_passed,
+        "min_contrast_against_white": round(min_contrast, 3),
+        "mean_contrast_against_white": round(mean_contrast, 3),
+        "min_oklab_distance": round(normal_min, 3),
+        "mean_oklab_distance": round(normal_mean, 3),
+        "cvd_simulations": cvd_metrics,
+        "worst_cvd_min_oklab_distance": round(worst_cvd_minimum, 3),
+        "hue_coverage_degrees": round(hue_coverage, 3),
+        "readability_score": round(score, 4),
+        "warnings": warnings,
+    }
+
+
+def _linear_rgb(color: Rgb) -> tuple[float, float, float]:
+    def linearize(channel: int) -> float:
+        value = channel / 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    return linearize(color[0]), linearize(color[1]), linearize(color[2])
+
+
+def _oklab(color: tuple[float, float, float]) -> tuple[float, float, float]:
+    red, green, blue = color
+    long = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue
+    medium = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue
+    short = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue
+    long_root = math.copysign(abs(long) ** (1 / 3), long)
+    medium_root = math.copysign(abs(medium) ** (1 / 3), medium)
+    short_root = math.copysign(abs(short) ** (1 / 3), short)
+    return (
+        100 * (0.2104542553 * long_root + 0.793617785 * medium_root - 0.0040720468 * short_root),
+        100 * (1.9779984951 * long_root - 2.428592205 * medium_root + 0.4505937099 * short_root),
+        100 * (0.0259040371 * long_root + 0.7827717662 * medium_root - 0.808675766 * short_root),
+    )
+
+
+def _matrix_transform(
+    color: tuple[float, float, float],
+    matrix: tuple[tuple[float, float, float], ...],
+) -> tuple[float, float, float]:
+    def transform(row: tuple[float, float, float]) -> float:
+        value = sum(weight * channel for weight, channel in zip(row, color, strict=True))
+        return min(1.0, max(0.0, value))
+
+    return transform(matrix[0]), transform(matrix[1]), transform(matrix[2])
+
+
+def _pairwise_oklab_summary(
+    colors: list[tuple[float, float, float]],
+) -> tuple[float, float]:
+    distances = [math.dist(first, second) for first, second in itertools.combinations(colors, 2)]
+    if not distances:
+        return 0.0, 0.0
+    return min(distances), sum(distances) / len(distances)
 
 
 def _contrast_against_white(color: Rgb) -> float:
@@ -278,11 +407,13 @@ def _palette_hue_coverage(colors: list[Rgb]) -> float:
 
 
 def auto_palette_notice(plot_count: int, palette_name: str) -> dict[str, Any]:
+    accessibility = palette_accessibility_metrics(list(_PALETTES[palette_name]["palette"]))
     return {
         "requested_palette_name": "lcpmgh_auto",
         "resolved_palette_name": palette_name,
         "plot_count": plot_count,
         "colors_count": 2 if plot_count <= 1 else min(plot_count, 16),
+        "accessibility": accessibility,
         "warning": (
             "Plot count exceeds the recommended lcpmgh/colors range of 16; "
             "the selected 16-color palette is reused cyclically."
@@ -399,6 +530,58 @@ def nature_chart_style(
         "chart_type": normalized,
         "line_width": selected["line_width"] if line_default else line_width,
         "symbol_size": selected["symbol_size"] if symbol_default else symbol_size,
+    }
+
+
+def nature_series_distinction(chart_type: str | None, plot_count: int) -> dict[str, Any]:
+    """Choose non-color encodings for multi-series Nature-style plots."""
+    raw = (chart_type or "").strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = normalize_chart_type(chart_type)
+    line_symbol = raw in {"line_symbol", "linesymbol", "line_scatter"}
+    if plot_count <= 1 or normalized not in {"line", "scatter", "polar"}:
+        return {
+            "enabled": False,
+            "strategy": "none",
+            "assignments": [],
+            "warning": None,
+        }
+
+    if line_symbol or normalized == "polar":
+        strategy = "line_style_and_symbol"
+    elif normalized == "line":
+        strategy = "line_style"
+    else:
+        strategy = "symbol"
+
+    line_styles = (0, 1, 2, 3, 4, 5)
+    symbol_kinds = (1, 2, 3, 4, 5, 6, 7, 8)
+    assignments = []
+    for index in range(plot_count):
+        assignment: dict[str, int] = {"plot_index": index}
+        if strategy in {"line_style", "line_style_and_symbol"}:
+            assignment["line_style"] = line_styles[index % len(line_styles)]
+        if strategy in {"symbol", "line_style_and_symbol"}:
+            assignment["symbol_kind"] = symbol_kinds[index % len(symbol_kinds)]
+        assignments.append(assignment)
+
+    unique_capacity = (
+        len(line_styles) * len(symbol_kinds)
+        if strategy == "line_style_and_symbol"
+        else len(line_styles)
+        if strategy == "line_style"
+        else len(symbol_kinds)
+    )
+    warning = (
+        "Non-color encodings repeat for this series count; prefer direct labels, grouping, "
+        "or facets."
+        if plot_count > unique_capacity
+        else None
+    )
+    return {
+        "enabled": True,
+        "strategy": strategy,
+        "assignments": assignments,
+        "warning": warning,
     }
 
 

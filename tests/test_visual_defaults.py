@@ -269,6 +269,54 @@ def test_smart_defaults_reduce_dense_scatter_marks() -> None:
     assert decision_value(defaults, "marks", "transparency") == 55.0
 
 
+def test_nature_theme_keeps_density_transparency_as_final_decision() -> None:
+    dense = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=2500,
+        x_values=np.arange(2500),
+        y_series=[np.arange(2500)],
+        style_mode="nature",
+    )
+    line = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=[1, 2, 3],
+        y_series=[[1, 2, 3]],
+        style_mode="nature",
+    )
+    origin_default = resolve_visual_defaults(
+        chart_type="line",
+        series_count=1,
+        row_count=3,
+        x_values=[1, 2, 3],
+        y_series=[[1, 2, 3]],
+    )
+
+    assert decision_value(dense, "marks", "transparency") == 55.0
+    assert dense["marks"]["transparency"]["reason"] == "very_dense_points"
+    assert decision_value(line, "marks", "transparency") == 0.0
+    assert line["marks"]["transparency"]["source"] == "theme"
+    assert decision_value(origin_default, "marks", "transparency") is None
+
+
+def test_explicit_transparency_overrides_density_and_theme() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="scatter",
+        series_count=1,
+        row_count=2500,
+        x_values=np.arange(2500),
+        y_series=[np.arange(2500)],
+        mark_transparency=20,
+        style_mode="nature",
+    )
+
+    assert decision_value(defaults, "marks", "transparency") == 20.0
+    assert defaults["marks"]["transparency"]["source"] == "user"
+    assert defaults["marks"]["transparency"]["reason"] == "explicit_user_value"
+
+
 def test_smart_defaults_use_scientific_notation_for_large_values() -> None:
     defaults = resolve_visual_defaults(
         chart_type="line",
@@ -429,6 +477,22 @@ def test_smart_line_labels_only_latest_values_and_reserves_right_space() -> None
         {"number_format": "decimal", "decimal_places": 2}
     ]
     assert decision_value(defaults, "canvas", "right_margin") == 0.14
+
+
+def test_nature_data_labels_use_large_annotation_typography() -> None:
+    defaults = resolve_visual_defaults(
+        chart_type="line",
+        series_count=2,
+        row_count=12,
+        x_values=np.arange(12),
+        y_series=[np.arange(12), np.arange(12) * 2],
+        style_mode="nature",
+    )
+
+    assert decision_value(defaults, "annotations", "data_labels", "font_size") == 20
+    assert defaults["annotations"]["data_labels"]["font_size"]["reason"] == (
+        "nature_annotation_typography"
+    )
 
 
 def test_smart_column_labels_compact_single_series_and_reserves_top_space() -> None:

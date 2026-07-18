@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from .chart_palette import normalize_chart_type
+from .nature_style_profiles import resolve_nature_style_profile
 from .text_format import humanize_field_name, infer_axis_title, infer_series_labels
 
 DEFAULT_HEATMAP_COLORMAP = "viridis"
@@ -52,6 +53,7 @@ def resolve_visual_defaults(
     y_series: list[Any] | None = None,
     show_legend: bool | None = None,
     palette_name: str | None = None,
+    mark_transparency: float | None = None,
     style_mode: str = "origin_default",
     x_name: str | None = None,
     y_names: list[str] | None = None,
@@ -146,7 +148,12 @@ def resolve_visual_defaults(
     else:
         legend_position = _decision("inside_upper_right", "stable_compact_anchor")
 
-    symbol_size, transparency = _density_defaults(context)
+    symbol_size, density_transparency = _density_defaults(context)
+    transparency = _resolve_transparency_default(
+        density_transparency,
+        explicit=mark_transparency,
+        style_mode=style_mode,
+    )
     x_rotation = _x_tick_rotation(context)
     page_aspect_ratio, bottom_margin = _rotated_label_canvas(
         context,
@@ -278,6 +285,11 @@ def resolve_visual_defaults(
         context,
         y_min=y_min,
         y_max=y_max,
+        font_size=(
+            resolve_nature_style_profile("screen").annotation_font_size
+            if style_mode == "nature"
+            else 8
+        ),
         layer_series_counts=[
             len(y_names_actual) or context.series_count,
             *([len(y2_names_actual)] if y2_names_actual else []),
@@ -891,11 +903,32 @@ def _density_defaults(context: VisualContext) -> tuple[dict[str, Any], dict[str,
     return _decision(2.5, "very_dense_points"), _decision(55.0, "very_dense_points")
 
 
+def _resolve_transparency_default(
+    density_default: dict[str, Any],
+    *,
+    explicit: float | None,
+    style_mode: str,
+) -> dict[str, Any]:
+    """Resolve mark transparency once so themes, density rules, and QA agree."""
+
+    if explicit is not None:
+        value = float(explicit)
+        if not 0 <= value <= 100:
+            raise ValueError("mark_transparency must be between 0 and 100.")
+        return _decision(value, "explicit_user_value", "user")
+    if density_default.get("value") is not None:
+        return density_default
+    if style_mode == "nature":
+        return _decision(0.0, "nature_theme_opaque_marks", "theme")
+    return density_default
+
+
 def _data_label_defaults(
     context: VisualContext,
     *,
     y_min: float | None,
     y_max: float | None,
+    font_size: int,
     layer_series_counts: list[int],
     layer_formats: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -960,7 +993,10 @@ def _data_label_defaults(
         "show": _decision(show, reason),
         "scope": _decision(scope, reason),
         "position": _decision(position if show else None, reason),
-        "font_size": _decision(8 if show else None, "quiet_annotation_typography"),
+        "font_size": _decision(
+            font_size if show else None,
+            ("nature_annotation_typography" if font_size >= 20 else "quiet_annotation_typography"),
+        ),
         "value_source": _decision("y" if show else None, "axis_title_carries_metric_and_unit"),
         "layer_series_counts": _decision(
             layer_series_counts if show else [],

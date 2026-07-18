@@ -218,8 +218,22 @@ the right axis.
 
 For Nature-style graph formatting, `origin_palette_catalog()` lists the built-in
 palette registry, including semantic roles, source links, color counts, and
-license notes. By default the catalog returns a lightweight summary and omits
-full HEX color arrays; pass `include_colors=true` when exact colors are needed.
+license notes. Each entry also includes `accessibility`: white-page contrast,
+OKLab perceptual separation, and minimum separation under protanopia,
+deuteranopia, and tritanopia simulations. `screening_status="pass"` means the
+palette clears the automated preflight thresholds; `review` includes specific
+warnings. This is a screening aid rather than a guarantee, so multi-series
+figures should still combine color with markers, line styles, or direct labels.
+By default the catalog returns a lightweight summary and omits full HEX color
+arrays; pass `include_colors=true` when exact colors are needed.
+
+Nature styling also applies non-color distinctions by default when a layer has
+multiple series: line charts cycle line styles, scatter charts cycle marker
+shapes, and line-symbol or polar charts use both. The response and diagnostics
+include `series_distinction` with the exact per-plot assignments and warn when
+the available patterns must repeat. Pass `differentiate_series=false` to
+`origin_apply_nature_style` when an existing template already owns these
+encodings.
 `origin_apply_nature_style`, `origin_diagnose_graph`, `origin_plot_auto`,
 `origin_plot_chart_atlas`, and FigureSpec `style.palette_name` can select a
 palette such as `nature`, `lcpmgh_auto`, or a local `lcpmgh_006_001` style
@@ -232,11 +246,30 @@ to browse the local 2-16 color snapshot without returning every HEX value. Set
 `ORIGIN_MCP_NATURE_PALETTE` or `ORIGIN_MCP_PALETTE` to change the process-wide
 default.
 
-Nature-style typography uses the legend size as the visual anchor. Defaults are
-legend 20 pt, axis titles 20 pt, tick labels 18 pt, and general graph/image
-annotations 18 pt. FigureSpec annotations use the same 18 pt default unless
+Nature-style typography uses 20 pt as the minimum visual size across every
+output profile: legends, axis titles, tick labels, and general graph/image
+annotations are all at least 20 pt. FigureSpec annotations use the same 20 pt default unless
 `style.annotation_font_size` or an individual annotation `style.font_size`
 overrides it.
+
+Nature styling resolves mark transparency before applying the preset. Dense
+scatter and line-symbol plots retain their data-driven transparency, while
+other Nature plots default to opaque marks. An explicit `transparency` passed
+to `origin_apply_nature_style` takes precedence, and graph diagnostics compare
+against the resolved value instead of assuming that every plot must be opaque.
+
+`origin_apply_nature_style(output_profile=...)` also provides output-aware
+geometry presets. `screen` preserves the existing 20/18 pt interactive style;
+`journal_single_column` targets compact figures near 89 mm wide and
+`journal_double_column` targets figures near 183 mm wide, while retaining the
+project-wide 20 pt minimum and a 3 pt line width. `presentation` uses 24 pt axis
+titles, 20 pt supporting text, and 3.5 pt lines for projected slides. Explicit
+font sizes, line width, symbol size, and tick length override the selected profile.
+Nature-style line and scatter markers use a 10 pt default, and automatically
+generated numeric value labels use the same 20 pt minimum as other annotations.
+Nature-style diagnostics verify the resolved symbol size and transparency
+against the values Origin reports after applying the style, so a silently
+ignored Origin property assignment is surfaced as a warning.
 
 Table plotting also applies readability defaults when the caller does not
 provide an explicit override. Machine-oriented headers such as
@@ -289,10 +322,14 @@ take precedence.
 
 When `style_mode="nature"` and no palette is specified, table plotting uses
 `lcpmgh_auto` to choose an installed lcpmgh/colors palette whose color count
-matches the number of plotted series. Dedicated table plotting tools and the
-parameterized `origin_plot` entry point accept `palette_name`; an explicit
-registered palette name always overrides automatic selection. Origin or custom
-template palettes remain untouched in `origin_default` mode.
+matches the number of plotted series. Exact-count candidates that pass the
+accessibility preflight are preferred, then ranked by minimum and average OKLab
+separation, simulated color-vision separation, white-page contrast, and hue
+coverage. The selection notice exposes the same metrics. Dedicated table
+plotting tools and the parameterized `origin_plot` entry point accept
+`palette_name`; an explicit registered palette name always overrides automatic
+selection. Origin or custom template palettes remain untouched in
+`origin_default` mode.
 
 Distribution and field-color tools use safer visual defaults: histograms choose
 a bounded Freedman-Diaconis bin width unless `bin_width` or a custom template is

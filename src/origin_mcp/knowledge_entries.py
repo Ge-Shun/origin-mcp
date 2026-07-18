@@ -218,9 +218,10 @@ REFERENCE_ENTRIES: tuple[KnowledgeEntry, ...] = (
         body=(
             "style_mode='origin_default' lets Origin resolve the graph template and keeps Origin "
             "styling. The aliases 'template', 'theme', and 'none' also preserve Origin defaults. "
-            "style_mode='nature' applies a Nature-style scientific preset with colorblind-safe "
-            "colors, Arial-compatible typography, Nature line weights, short ticks, and QA "
-            "diagnostics."
+            "style_mode='nature' applies a Nature-style scientific preset with colors screened "
+            "for perceptual and simulated color-vision separation, Arial-compatible typography, "
+            "Nature line weights, short ticks, and QA diagnostics. Color should still be paired "
+            "with markers, line styles, or direct labels for important distinctions."
         ),
         keywords=("style_mode", "origin_default", "nature", "template"),
     ),

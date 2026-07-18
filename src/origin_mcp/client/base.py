@@ -25,6 +25,7 @@ from ..chart_palette import (
     nature_chart_type_for_plot_id,
     nature_palette,
     nature_semantic_palette,
+    nature_series_distinction,
     normalize_chart_intent,
     normalize_chart_type,
     normalize_palette_name,
@@ -128,6 +129,7 @@ class _OriginClientBase:
     _auto_palette_notice = staticmethod(auto_palette_notice)
     _normalize_chart_type = staticmethod(normalize_chart_type)
     _nature_chart_style = staticmethod(nature_chart_style)
+    _nature_series_distinction = staticmethod(nature_series_distinction)
     _nature_chart_type_for_plot_id = staticmethod(nature_chart_type_for_plot_id)
     _chart_atlas_routes = staticmethod(chart_atlas_routes)
     _normalize_chart_intent = staticmethod(normalize_chart_intent)

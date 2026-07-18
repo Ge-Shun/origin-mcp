@@ -37,6 +37,25 @@ class FakeGraphClient:
         return {"styled_layers": 1, **kwargs}
 
 
+def test_apply_nature_style_tool_forwards_output_profile(monkeypatch) -> None:
+    fake = FakeGraphClient()
+    monkeypatch.setattr(graph_tools, "client", fake)
+
+    result = graph_tools.origin_apply_nature_style(
+        graph_name="Graph1",
+        output_profile="journal_single_column",
+        axis_title_size=10,
+    )
+
+    assert result["ok"] is True
+    call_name, kwargs = fake.calls[0]
+    assert call_name == "apply_nature_style"
+    assert kwargs["output_profile"] == "journal_single_column"
+    assert kwargs["axis_title_size"] == 10
+    assert kwargs["tick_label_size"] is None
+    assert kwargs["differentiate_series"] is True
+
+
 def test_json_safe_replaces_non_finite_floats() -> None:
     data = {
         "ok": 1.0,
@@ -102,6 +121,11 @@ def test_palette_catalog_tool_filters_by_color_count() -> None:
     assert len(palettes) == 3
     assert all(entry["colors_count"] == 6 for entry in palettes.values())
     assert all(len(entry["colors"]) == 6 for entry in palettes.values())
+    assert all("accessibility" in entry for entry in palettes.values())
+    assert all(
+        entry["accessibility"]["screening_status"] in {"pass", "review"}
+        for entry in palettes.values()
+    )
 
 
 def test_plot_style_capabilities_tool_finds_bar_gap() -> None:
