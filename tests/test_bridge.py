@@ -401,6 +401,36 @@ def test_bridge_rejects_stale_generation() -> None:
         thread.join(timeout=2)
 
 
+def test_bridge_ignores_stale_generation_when_authentication_is_disabled() -> None:
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token=None,
+        generation="current-generation",
+        lease_id="current-generation",
+        client=FakeOriginClient(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        config = OriginBridgeConfig(
+            host=host,
+            port=port,
+            token="stale-token",
+            timeout=2.0,
+            generation="stale-generation",
+            lease_id="stale-generation",
+        )
+
+        result = OriginBridgeClient(config).request("ping")
+
+        assert result["generation"] == "current-generation"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_bridge_port_cannot_be_bound_twice() -> None:
     first = OriginBridgeServer(("127.0.0.1", 0), client=FakeOriginClient())
     try:
@@ -764,6 +794,37 @@ def test_embedded_bridge_shutdown_preserves_host_origin() -> None:
     assert result["origin_release_method"] == "embedded_noop"
     assert result["origin_release"] == {"preserved": True, "closed": False}
     assert fake_client.detached is False
+    assert fake_client.force_closed is False
+
+
+def test_embedded_bridge_shutdown_detaches_attached_host_origin() -> None:
+    import types
+
+    fake_client = FakeOriginClient()
+    op_mod = types.ModuleType("originpro")
+    cfg = types.ModuleType("originpro.config")
+    cfg.oext = True
+    cfg._origin_mcp_attached_host = True
+    op_mod.config = cfg
+    fake_client._op = op_mod  # type: ignore[attr-defined]
+
+    server = OriginEmbeddedBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["embedded_origin"] is True
+    assert result["external_origin"] is False
+    assert result["origin_release_method"] == "detach"
+    assert result["origin_release"] == {"detached": True, "closed": False}
+    assert fake_client.detached is True
     assert fake_client.force_closed is False
 
 

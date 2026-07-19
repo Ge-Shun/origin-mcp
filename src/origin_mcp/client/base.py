@@ -65,46 +65,82 @@ ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth", "interpolate", "normalize"}
 _MIN_TRUNCATION_PREFIX_LEN = 12
 
 
-def _embedded_origin_api() -> Any | None:
-    """Expose Origin's embedded API under the name expected by originpro.
+def _embedded_origin_api_mode() -> str | None:
+    """Return the usable embedded Origin API mode for this interpreter.
 
-    Origin 2026 can provide the host API as ``_PyOrigin`` while originpro still
-    imports ``PyOrigin``. Without the alias, originpro falls back to OriginExt;
-    its first real API call then starts a separate ``Origin64.exe -Embedding``
-    process even though the bridge is already running inside Origin.
+    Some Origin 2026 installations expose only the low-level ``_PyOrigin``
+    extension, not the generated ``PyOrigin`` wrapper that ``originpro``
+    expects. Aliasing the extension directly is unsafe: its functions return
+    bare ``SwigPyObject`` handles without properties such as ``Layers``.
     """
 
     try:
-        return importlib.import_module("PyOrigin")
+        low_level = importlib.import_module("_PyOrigin")
     except ImportError:
-        try:
-            embedded = importlib.import_module("_PyOrigin")
-        except ImportError:
-            return None
-        sys.modules["PyOrigin"] = embedded
-        return embedded
+        low_level = None
+    try:
+        high_level = importlib.import_module("PyOrigin")
+    except ImportError:
+        high_level = None
+    if high_level is not None and high_level is not low_level:
+        return "pyorigin"
+    if low_level is not None:
+        if high_level is low_level:
+            sys.modules.pop("PyOrigin", None)
+        return "low_level"
+    return None
+
+
+def _clear_cached_originpro() -> None:
+    for name in tuple(sys.modules):
+        if name == "originpro" or name.startswith("originpro."):
+            sys.modules.pop(name, None)
+
+
+def _attach_originext_to_host(config: Any) -> None:
+    controller = getattr(config, "po", None)
+    attach = getattr(controller, "Attach", None)
+    if not callable(attach):
+        raise OriginDependencyError(
+            "Origin's embedded Python exposes only the low-level _PyOrigin module, "
+            "and originpro's OriginExt controller cannot attach to the host Origin instance."
+        )
+    try:
+        attach()
+        config._origin_mcp_attached_host = True
+    except Exception as exc:
+        raise OriginDependencyError(
+            "originpro could not attach OriginExt.ApplicationSI to the running host Origin "
+            "instance. Repair Origin's embedded Python/originpro installation."
+        ) from exc
 
 
 def _load_originpro() -> Any:
-    embedded = _embedded_origin_api()
+    embedded_mode = _embedded_origin_api_mode()
     cached_config = sys.modules.get("originpro.config")
-    if embedded is not None and bool(getattr(cached_config, "oext", False)):
-        # A previous bridge generation may already have imported originpro via
-        # its OriginExt fallback. Drop that package generation after installing
-        # the PyOrigin alias so the next import binds to the host process.
-        for name in tuple(sys.modules):
-            if name == "originpro" or name.startswith("originpro."):
-                sys.modules.pop(name, None)
+    if embedded_mode == "pyorigin" and bool(getattr(cached_config, "oext", False)):
+        # A previous bridge generation may have imported originpro before the
+        # native wrapper became available. Reload it against PyOrigin.
+        _clear_cached_originpro()
+    elif (
+        embedded_mode == "low_level"
+        and cached_config is not None
+        and not bool(getattr(cached_config, "oext", False))
+    ):
+        # Remove a package generation created by the old unsafe
+        # ``sys.modules['PyOrigin'] = _PyOrigin`` compatibility alias.
+        _clear_cached_originpro()
 
     op = importlib.import_module("originpro")
-    if embedded is not None:
+    if embedded_mode is not None:
         config = importlib.import_module("originpro.config")
-        if bool(getattr(config, "oext", False)):
-            raise OriginDependencyError(
-                "Origin's embedded Python could not bind originpro to PyOrigin. "
-                "Refusing to fall back to OriginExt because that would start a separate "
-                "Origin automation process."
-            )
+        if embedded_mode == "low_level":
+            if not bool(getattr(config, "oext", False)):
+                raise OriginDependencyError(
+                    "originpro bound to the low-level _PyOrigin extension without its "
+                    "required PyOrigin wrapper."
+                )
+            _attach_originext_to_host(config)
     return op
 
 
