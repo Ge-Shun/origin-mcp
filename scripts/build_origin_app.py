@@ -261,6 +261,7 @@ def _write_package_ini(path: Path, app_name: str, description: str) -> None:
         "Copyrightyear": "2026",
     }
     config["Log"] = {
+        "v0.1.4": "Add smart plotting and harden bridge lifecycle recovery.",
         "v0.1.3": "Improve MCP tool schemas and expand Origin workflow coverage.",
         "v0.1.2": "Split bridge startup and shutdown into two App buttons.",
         "v0.1.1": "Single-button bridge toggle with corrected OPX install root.",

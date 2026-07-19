@@ -20,6 +20,8 @@ from .nature_style_profiles import resolve_nature_style_profile
 from .text_format import humanize_field_name, infer_axis_title, infer_series_labels
 
 DEFAULT_HEATMAP_COLORMAP = "viridis"
+DEFAULT_SMART_ANNOTATION_FONT_SIZE = 20
+DEFAULT_SMART_LINE_WIDTH = 2.5
 
 _ISO_DATETIME_PATTERN = re.compile(
     r"^\d{4}[-/]\d{2}[-/]\d{2}"
@@ -154,6 +156,21 @@ def resolve_visual_defaults(
         explicit=mark_transparency,
         style_mode=style_mode,
     )
+    if context.chart_type == "line":
+        line_width = _decision(
+            (
+                resolve_nature_style_profile("screen").line_width
+                if style_mode == "nature"
+                else DEFAULT_SMART_LINE_WIDTH
+            ),
+            (
+                "nature_series_stroke"
+                if style_mode == "nature"
+                else "minimum_readable_series_stroke"
+            ),
+        )
+    else:
+        line_width = _decision(None, "chart_type_has_no_default_series_line")
     x_rotation = _x_tick_rotation(context)
     page_aspect_ratio, bottom_margin = _rotated_label_canvas(
         context,
@@ -288,7 +305,12 @@ def resolve_visual_defaults(
         font_size=(
             resolve_nature_style_profile("screen").annotation_font_size
             if style_mode == "nature"
-            else 8
+            else DEFAULT_SMART_ANNOTATION_FONT_SIZE
+        ),
+        font_reason=(
+            "nature_annotation_typography"
+            if style_mode == "nature"
+            else "match_axis_tick_typography"
         ),
         layer_series_counts=[
             len(y_names_actual) or context.series_count,
@@ -303,6 +325,11 @@ def resolve_visual_defaults(
         label_position = decision_value(data_labels, "position")
         if label_position == "right":
             right_margin = _max_optional(right_margin, 0.14)
+            if x_scale is not None and x_min is not None and x_max is not None:
+                x_span = max(x_max - x_min, 1e-12)
+                padded_to = x_max + (x_span * 0.12)
+                if float(x_scale["to"]) < padded_to:
+                    x_scale = {**x_scale, "to": padded_to}
         top_margin = 0.1 if label_position == "above" else None
     else:
         top_margin = None
@@ -338,6 +365,7 @@ def resolve_visual_defaults(
         },
         "palette_name": palette,
         "marks": {
+            "line_width": line_width,
             "symbol_size": symbol_size,
             "transparency": transparency,
         },
@@ -929,6 +957,7 @@ def _data_label_defaults(
     y_min: float | None,
     y_max: float | None,
     font_size: int,
+    font_reason: str,
     layer_series_counts: list[int],
     layer_formats: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -995,7 +1024,7 @@ def _data_label_defaults(
         "position": _decision(position if show else None, reason),
         "font_size": _decision(
             font_size if show else None,
-            ("nature_annotation_typography" if font_size >= 20 else "quiet_annotation_typography"),
+            font_reason,
         ),
         "value_source": _decision("y" if show else None, "axis_title_carries_metric_and_unit"),
         "layer_series_counts": _decision(
