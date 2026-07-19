@@ -473,6 +473,13 @@ def test_smart_line_labels_only_latest_values_and_reserves_right_space() -> None
     assert decision_value(defaults, "annotations", "data_labels", "scope") == "end"
     assert decision_value(defaults, "annotations", "data_labels", "position") == "right"
     assert decision_value(defaults, "annotations", "data_labels", "value_source") == "y"
+    assert decision_value(defaults, "annotations", "data_labels", "font_size") == 20
+    assert defaults["annotations"]["data_labels"]["font_size"]["reason"] == (
+        "match_axis_tick_typography"
+    )
+    assert decision_value(defaults, "marks", "line_width") == 2.5
+    assert defaults["marks"]["line_width"]["reason"] == "minimum_readable_series_stroke"
+    assert decision_value(defaults, "axes", "x_scale")["to"] >= 12.32
     assert decision_value(defaults, "annotations", "data_labels", "layer_formats") == [
         {"number_format": "decimal", "decimal_places": 2}
     ]
@@ -493,6 +500,7 @@ def test_nature_data_labels_use_large_annotation_typography() -> None:
     assert defaults["annotations"]["data_labels"]["font_size"]["reason"] == (
         "nature_annotation_typography"
     )
+    assert decision_value(defaults, "marks", "line_width") == 3.0
 
 
 def test_smart_column_labels_compact_single_series_and_reserves_top_space() -> None:

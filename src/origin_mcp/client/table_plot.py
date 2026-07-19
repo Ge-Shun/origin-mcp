@@ -1336,12 +1336,15 @@ class _TablePlotMixin(_OriginClientBase):
         )
 
         mark_result = None
+        marks = defaults.get("marks", {})
+        line_width = decision_value(marks, "line_width") if "line_width" in marks else None
         symbol_size = decision_value(defaults, "marks", "symbol_size")
         transparency = decision_value(defaults, "marks", "transparency")
-        if symbol_size is not None or transparency is not None:
+        if line_width is not None or symbol_size is not None or transparency is not None:
             try:
                 mark_result = self.set_plot_style(
                     graph_name=graph_name,
+                    line_width=line_width,
                     symbol_size=symbol_size,
                     transparency=transparency,
                 )
