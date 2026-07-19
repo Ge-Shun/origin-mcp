@@ -14,7 +14,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from . import __version__
 from ._bridge_dispatch import TASKABLE_METHODS, call_client_method, call_origin_method
@@ -189,9 +189,14 @@ class _OriginBridgeServerState(_StateBase):
         self.request_replay = _RequestReplayCache()
 
     def server_bind(self) -> None:
+        tcp_server = cast(socketserver.TCPServer, self)
         if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+            tcp_server.socket.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_EXCLUSIVEADDRUSE,
+                1,
+            )
+        socketserver.TCPServer.server_bind(tcp_server)
 
     def request_shutdown(self) -> None:
         self.shutdown_requested.set()

@@ -140,14 +140,26 @@ class OriginBridgeConfig:
             )
         )
 
+        handshake_host = handshake.get("host")
+        handshake_port = _optional_int(handshake.get("port"))
+        handshake_token = handshake.get("token")
+        handshake_matches_connection = (
+            isinstance(handshake_host, str)
+            and handshake_host == resolved_host
+            and handshake_port == resolved_port
+            and isinstance(handshake_token, str)
+            and handshake_token == resolved_token
+        )
+        lifecycle = handshake if handshake_matches_connection else {}
+
         return cls(
             host=resolved_host,
             port=resolved_port,
             token=resolved_token,
             timeout=resolved_timeout,
-            generation=_optional_string(handshake.get("generation")),
-            lease_id=_optional_string(handshake.get("lease_id")),
-            origin_pid=_optional_int(handshake.get("origin_pid") or handshake.get("pid")),
+            generation=_optional_string(lifecycle.get("generation")),
+            lease_id=_optional_string(lifecycle.get("lease_id")),
+            origin_pid=_optional_int(lifecycle.get("origin_pid") or lifecycle.get("pid")),
             handshake_managed=handshake_managed,
         )
 
@@ -177,6 +189,7 @@ class OriginBridgeClient:
                     or not self.config.handshake_managed
                     or exc.error_code
                     not in {
+                        "origin_bridge_unavailable",
                         "origin_bridge_unauthorized",
                         "origin_bridge_generation_mismatch",
                     }

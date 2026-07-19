@@ -113,6 +113,48 @@ def test_from_env_explicit_arg_overrides_everything(
 
     assert config.token == "explicit-token"
     assert config.port == 12345
+    assert config.generation is None
+    assert config.lease_id is None
+    assert config.origin_pid is None
+    assert config.handshake_managed is False
+
+
+def test_explicit_connection_ignores_unrelated_handshake_lifecycle(
+    isolated_handshake: Path,
+) -> None:
+    bridge_handshake.write_handshake(
+        "127.0.0.1",
+        50000,
+        "stale-token",
+        generation="stale-generation",
+        lease_id="stale-generation",
+    )
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token="live-token",
+        generation="live-generation",
+        lease_id="live-generation",
+        client=FakeOriginClient(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        config = OriginBridgeConfig.from_env(
+            host=host,
+            port=port,
+            token="live-token",
+            timeout=2.0,
+        )
+
+        assert config.generation is None
+        assert config.lease_id is None
+        result = OriginBridgeClient(config).request("ping")
+        assert result["generation"] == "live-generation"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_from_env_falls_back_to_defaults_without_handshake(isolated_handshake: Path) -> None:
@@ -248,6 +290,64 @@ def test_handshake_managed_client_refreshes_rotated_token(
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_handshake_managed_client_refreshes_moved_endpoint(
+    isolated_handshake: Path,
+) -> None:
+    first = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token="token-one",
+        generation="generation-one",
+        lease_id="generation-one",
+        client=FakeOriginClient(),
+    )
+    first_thread = threading.Thread(target=first.serve_forever, daemon=True)
+    first_thread.start()
+    second = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token="token-two",
+        generation="generation-two",
+        lease_id="generation-two",
+        client=FakeOriginClient(),
+    )
+    second_thread = threading.Thread(target=second.serve_forever, daemon=True)
+    second_thread.start()
+    try:
+        first_host, first_port = first.server_address
+        second_host, second_port = second.server_address
+        assert first_port != second_port
+        bridge_handshake.write_handshake(
+            first_host,
+            first_port,
+            "token-one",
+            generation="generation-one",
+            lease_id="generation-one",
+        )
+        client = OriginBridgeClient(OriginBridgeConfig.from_env(timeout=0.25))
+
+        bridge_handshake.write_handshake(
+            second_host,
+            second_port,
+            "token-two",
+            generation="generation-two",
+            lease_id="generation-two",
+        )
+        first.shutdown()
+        first.server_close()
+        first_thread.join(timeout=2)
+
+        result = client.request("ping")
+        assert result["generation"] == "generation-two"
+        assert client.config.port == second_port
+        assert client.config.token == "token-two"
+    finally:
+        first.shutdown()
+        first.server_close()
+        first_thread.join(timeout=2)
+        second.shutdown()
+        second.server_close()
+        second_thread.join(timeout=2)
 
 
 def test_bridge_clients_have_distinct_client_ids() -> None:
