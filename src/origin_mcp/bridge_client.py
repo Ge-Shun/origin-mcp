@@ -6,7 +6,7 @@ import os
 import socket
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +64,44 @@ def _optional_int(value: Any) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _matching_handshake_lifecycle(
+    handshake: dict[str, Any],
+    *,
+    host: str,
+    port: int,
+    token: str | None,
+) -> dict[str, Any]:
+    handshake_host = handshake.get("host")
+    handshake_port = _optional_int(handshake.get("port"))
+    handshake_token = handshake.get("token")
+    if (
+        isinstance(handshake_host, str)
+        and handshake_host == host
+        and handshake_port == port
+        and isinstance(handshake_token, str)
+        and handshake_token == token
+    ):
+        return handshake
+    return {}
+
+
+def _refresh_matching_lifecycle(config: OriginBridgeConfig) -> OriginBridgeConfig:
+    lifecycle = _matching_handshake_lifecycle(
+        read_handshake() or {},
+        host=config.host,
+        port=config.port,
+        token=config.token,
+    )
+    if not lifecycle:
+        return config
+    return replace(
+        config,
+        generation=_optional_string(lifecycle.get("generation")),
+        lease_id=_optional_string(lifecycle.get("lease_id")),
+        origin_pid=_optional_int(lifecycle.get("origin_pid") or lifecycle.get("pid")),
+    )
 
 
 @dataclass(frozen=True)
@@ -140,17 +178,12 @@ class OriginBridgeConfig:
             )
         )
 
-        handshake_host = handshake.get("host")
-        handshake_port = _optional_int(handshake.get("port"))
-        handshake_token = handshake.get("token")
-        handshake_matches_connection = (
-            isinstance(handshake_host, str)
-            and handshake_host == resolved_host
-            and handshake_port == resolved_port
-            and isinstance(handshake_token, str)
-            and handshake_token == resolved_token
+        lifecycle = _matching_handshake_lifecycle(
+            handshake,
+            host=resolved_host,
+            port=resolved_port,
+            token=resolved_token,
         )
-        lifecycle = handshake if handshake_matches_connection else {}
 
         return cls(
             host=resolved_host,
@@ -184,18 +217,17 @@ class OriginBridgeClient:
             try:
                 return self._request_once(method, params)
             except OriginBridgeError as exc:
-                if (
-                    refresh_attempt
-                    or not self.config.handshake_managed
-                    or exc.error_code
-                    not in {
-                        "origin_bridge_unavailable",
-                        "origin_bridge_unauthorized",
-                        "origin_bridge_generation_mismatch",
-                    }
-                ):
+                if refresh_attempt:
                     raise
-                refreshed = OriginBridgeConfig.from_env(timeout=self.config.timeout)
+                if exc.error_code == "origin_bridge_generation_mismatch":
+                    refreshed = _refresh_matching_lifecycle(self.config)
+                elif self.config.handshake_managed and exc.error_code in {
+                    "origin_bridge_unavailable",
+                    "origin_bridge_unauthorized",
+                }:
+                    refreshed = OriginBridgeConfig.from_env(timeout=self.config.timeout)
+                else:
+                    raise
                 if refreshed == self.config:
                     raise
                 self.close()

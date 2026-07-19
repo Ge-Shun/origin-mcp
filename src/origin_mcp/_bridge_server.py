@@ -356,7 +356,8 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                 )
         supplied_generation = request.get("generation")
         if (
-            self.server.generation
+            self.server.token
+            and self.server.generation
             and supplied_generation
             and not hmac.compare_digest(str(supplied_generation), self.server.generation)
         ):
@@ -366,7 +367,8 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             )
         supplied_lease_id = request.get("lease_id")
         if (
-            self.server.lease_id
+            self.server.token
+            and self.server.lease_id
             and supplied_lease_id
             and not hmac.compare_digest(str(supplied_lease_id), self.server.lease_id)
         ):
@@ -429,6 +431,18 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             error_code="unsupported_bridge_method",
         )
 
+    def _originpro_config(self) -> Any | None:
+        op = getattr(self.server.client, "_op", None)
+        if op is None:
+            return None
+        config = getattr(op, "config", None) if op is not None else None
+        if config is None:
+            try:
+                config = importlib.import_module("originpro.config")
+            except Exception:
+                config = None
+        return config
+
     def _bridge_is_external_origin(self) -> bool:
         """True when originpro is driving a separately-spawned OriginExt instance.
 
@@ -441,16 +455,10 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
         available ``po.Exit`` release handle as external automation too.
         """
 
-        op = getattr(self.server.client, "_op", None)
-        if op is None:
+        config = self._originpro_config()
+        if config is None:
             return False
-        config = getattr(op, "config", None) if op is not None else None
-        if config is None:
-            try:
-                config = importlib.import_module("originpro.config")
-            except Exception:
-                config = None
-        if config is None:
+        if bool(getattr(config, "_origin_mcp_attached_host", False)):
             return False
         if bool(getattr(config, "oext", False)):
             return True
@@ -462,6 +470,8 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
         close_origin = bool(params.get("close_origin", False))
         external = self._bridge_is_external_origin()
         embedded = not self.server.tasks_use_worker_thread
+        config = self._originpro_config() if embedded else None
+        attached_host = bool(getattr(config, "_origin_mcp_attached_host", False))
         result: dict[str, Any] = {
             "shutdown_requested": True,
             "release_origin": release_origin,
@@ -477,7 +487,7 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             # Opt out of the external auto-close with ORIGIN_MCP_KEEP_EXTERNAL=1.
             close_spawned = close_origin or (external and not _keep_external_origin())
             release_method = "force_quit" if close_spawned else "detach"
-            if embedded and not close_origin:
+            if embedded and not close_origin and not attached_host:
                 result["origin_release"] = {"preserved": True, "closed": False}
                 result["origin_release_method"] = "embedded_noop"
                 self.server.request_shutdown()

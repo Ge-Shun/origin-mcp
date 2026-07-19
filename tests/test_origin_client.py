@@ -20,44 +20,42 @@ from origin_mcp.chart_palette import (
 )
 from origin_mcp.client import base as client_base
 from origin_mcp.compat import PLOT_TYPE_CATALOG
-from origin_mcp.errors import OriginDependencyError, OriginOperationError
+from origin_mcp.errors import OriginOperationError
 from origin_mcp.origin_client import GraphRef, OriginClient, WorksheetRef
 
 
-def test_origin_client_aliases_embedded_api_before_importing_originpro(
+def test_origin_client_uses_native_pyorigin_wrapper(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    embedded = SimpleNamespace(name="embedded-pyorigin")
+    low_level = SimpleNamespace(name="low-level-pyorigin")
+    high_level = SimpleNamespace(name="native-pyorigin")
     originpro = SimpleNamespace(name="originpro")
     config = SimpleNamespace(oext=False)
     imports: list[str] = []
 
     def fake_import(name: str) -> Any:
         imports.append(name)
-        if name == "PyOrigin":
-            raise ModuleNotFoundError("No module named 'PyOrigin'", name="PyOrigin")
         if name == "_PyOrigin":
-            return embedded
+            return low_level
+        if name == "PyOrigin":
+            return high_level
         if name == "originpro":
-            assert sys.modules["PyOrigin"] is embedded
             return originpro
         if name == "originpro.config":
             return config
         raise AssertionError(f"Unexpected import: {name}")
 
     monkeypatch.setattr(client_base.importlib, "import_module", fake_import)
-    try:
-        assert OriginClient().op is originpro
-    finally:
-        sys.modules.pop("PyOrigin", None)
+    assert OriginClient().op is originpro
 
-    assert imports == ["PyOrigin", "_PyOrigin", "originpro", "originpro.config"]
+    assert imports == ["_PyOrigin", "PyOrigin", "originpro", "originpro.config"]
 
 
-def test_origin_client_reloads_cached_originext_after_embedded_api_appears(
+def test_origin_client_reloads_cached_originext_after_native_wrapper_appears(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    embedded = SimpleNamespace(name="embedded-pyorigin")
+    low_level = SimpleNamespace(name="low-level-pyorigin")
+    high_level = SimpleNamespace(name="native-pyorigin")
     stale_originpro = SimpleNamespace(name="stale-originpro")
     stale_config = SimpleNamespace(oext=True)
     fresh_originpro = SimpleNamespace(name="fresh-originpro")
@@ -66,10 +64,10 @@ def test_origin_client_reloads_cached_originext_after_embedded_api_appears(
     monkeypatch.setitem(sys.modules, "originpro.config", stale_config)
 
     def fake_import(name: str) -> Any:
-        if name == "PyOrigin":
-            raise ModuleNotFoundError("No module named 'PyOrigin'", name="PyOrigin")
         if name == "_PyOrigin":
-            return embedded
+            return low_level
+        if name == "PyOrigin":
+            return high_level
         if name == "originpro":
             assert "originpro" not in sys.modules
             assert "originpro.config" not in sys.modules
@@ -79,18 +77,19 @@ def test_origin_client_reloads_cached_originext_after_embedded_api_appears(
         raise AssertionError(f"Unexpected import: {name}")
 
     monkeypatch.setattr(client_base.importlib, "import_module", fake_import)
-    try:
-        assert OriginClient().op is fresh_originpro
-    finally:
-        sys.modules.pop("PyOrigin", None)
+    assert OriginClient().op is fresh_originpro
 
 
-def test_origin_client_refuses_originext_fallback_inside_origin(
+def test_origin_client_attaches_originext_when_only_low_level_api_is_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    embedded = SimpleNamespace(name="embedded-pyorigin")
+    embedded = SimpleNamespace(name="low-level-pyorigin")
     originpro = SimpleNamespace(name="originpro")
-    config = SimpleNamespace(oext=True)
+    attached: list[bool] = []
+    config = SimpleNamespace(
+        oext=True,
+        po=SimpleNamespace(Attach=lambda: attached.append(True)),
+    )
 
     def fake_import(name: str) -> Any:
         if name == "PyOrigin":
@@ -104,11 +103,43 @@ def test_origin_client_refuses_originext_fallback_inside_origin(
         raise AssertionError(f"Unexpected import: {name}")
 
     monkeypatch.setattr(client_base.importlib, "import_module", fake_import)
-    try:
-        with pytest.raises(OriginDependencyError, match="Refusing to fall back to OriginExt"):
-            _ = OriginClient().op
-    finally:
-        sys.modules.pop("PyOrigin", None)
+    assert OriginClient().op is originpro
+    assert attached == [True]
+    assert config._origin_mcp_attached_host is True
+
+
+def test_origin_client_discards_unsafe_low_level_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    low_level = SimpleNamespace(name="low-level-pyorigin")
+    stale_originpro = SimpleNamespace(name="stale-originpro")
+    stale_config = SimpleNamespace(oext=False)
+    fresh_originpro = SimpleNamespace(name="fresh-originpro")
+    attached: list[bool] = []
+    fresh_config = SimpleNamespace(
+        oext=True,
+        po=SimpleNamespace(Attach=lambda: attached.append(True)),
+    )
+    monkeypatch.setitem(sys.modules, "PyOrigin", low_level)
+    monkeypatch.setitem(sys.modules, "originpro", stale_originpro)
+    monkeypatch.setitem(sys.modules, "originpro.config", stale_config)
+
+    def fake_import(name: str) -> Any:
+        if name in {"_PyOrigin", "PyOrigin"}:
+            return low_level
+        if name == "originpro":
+            assert "PyOrigin" not in sys.modules
+            assert "originpro" not in sys.modules
+            return fresh_originpro
+        if name == "originpro.config":
+            return fresh_config
+        raise AssertionError(f"Unexpected import: {name}")
+
+    monkeypatch.setattr(client_base.importlib, "import_module", fake_import)
+
+    assert OriginClient().op is fresh_originpro
+    assert attached == [True]
+    assert fresh_config._origin_mcp_attached_host is True
 
 
 def test_origin_client_keeps_originext_available_outside_origin(
@@ -128,7 +159,7 @@ def test_origin_client_keeps_originext_available_outside_origin(
     monkeypatch.setattr(client_base.importlib, "import_module", fake_import)
 
     assert OriginClient().op is originpro
-    assert imports == ["PyOrigin", "_PyOrigin", "originpro"]
+    assert imports == ["_PyOrigin", "PyOrigin", "originpro"]
 
 
 def test_read_table_csv(tmp_path: Path) -> None:

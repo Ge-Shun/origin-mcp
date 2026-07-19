@@ -292,6 +292,55 @@ def test_handshake_managed_client_refreshes_rotated_token(
         thread.join(timeout=2)
 
 
+def test_env_token_client_refreshes_rotated_lifecycle_metadata(
+    isolated_handshake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "stable-env-token"
+    monkeypatch.setenv("ORIGIN_MCP_BRIDGE_TOKEN", token)
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token=token,
+        generation="generation-one",
+        lease_id="generation-one",
+        client=FakeOriginClient(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        bridge_handshake.write_handshake(
+            host,
+            port,
+            token,
+            generation="generation-one",
+            lease_id="generation-one",
+        )
+        client = OriginBridgeClient(OriginBridgeConfig.from_env(timeout=2.0))
+        assert client.config.handshake_managed is False
+
+        server.generation = "generation-two"
+        server.lease_id = "generation-two"
+        bridge_handshake.write_handshake(
+            host,
+            port,
+            token,
+            generation="generation-two",
+            lease_id="generation-two",
+        )
+
+        result = client.request("ping")
+
+        assert result["generation"] == "generation-two"
+        assert client.config.token == token
+        assert client.config.generation == "generation-two"
+        assert client.config.lease_id == "generation-two"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_handshake_managed_client_refreshes_moved_endpoint(
     isolated_handshake: Path,
 ) -> None:
