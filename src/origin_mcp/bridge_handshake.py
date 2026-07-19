@@ -47,6 +47,12 @@ def generate_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_generation() -> str:
+    """Return a fresh bridge generation identifier."""
+
+    return secrets.token_urlsafe(16)
+
+
 def write_handshake(
     host: str,
     port: int,
@@ -54,6 +60,9 @@ def write_handshake(
     *,
     path: Path | None = None,
     status_path: Path | None = None,
+    generation: str | None = None,
+    lease_id: str | None = None,
+    origin_pid: int | None = None,
 ) -> Path:
     """Atomically write the bridge handshake file and return its path.
 
@@ -64,12 +73,18 @@ def write_handshake(
 
     target = path or default_handshake_path()
     target.parent.mkdir(parents=True, exist_ok=True)
+    resolved_generation = generation or generate_generation()
+    resolved_lease_id = lease_id or resolved_generation
+    resolved_origin_pid = os.getpid() if origin_pid is None else int(origin_pid)
     payload: dict[str, Any] = {
-        "handshake_version": 1,
+        "handshake_version": 2,
         "host": host,
         "port": int(port),
         "token": token,
-        "pid": os.getpid(),
+        "pid": resolved_origin_pid,
+        "origin_pid": resolved_origin_pid,
+        "generation": resolved_generation,
+        "lease_id": resolved_lease_id,
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     if status_path is not None:

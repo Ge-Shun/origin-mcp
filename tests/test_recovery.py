@@ -11,6 +11,7 @@ from origin_mcp.recovery import recovery_guidance
         ("origin_bridge_unavailable", True, "Start App"),
         ("origin_bridge_timeout", True, "modal dialog"),
         ("origin_bridge_unauthorized", True, "handshake token"),
+        ("origin_bridge_generation_mismatch", True, "handshake"),
         ("invalid_request", True, "tool schema"),
         ("worksheet_not_found", True, "project objects"),
         ("path_not_allowed", True, "ORIGIN_MCP_ALLOWED_ROOTS"),

@@ -60,6 +60,10 @@ def test_write_read_clear_roundtrip(isolated_handshake: Path) -> None:
     assert data["host"] == "127.0.0.1"
     assert data["port"] == 47631
     assert data["token"] == "tok-123"
+    assert data["handshake_version"] == 2
+    assert data["generation"]
+    assert data["lease_id"] == data["generation"]
+    assert data["origin_pid"] == data["pid"]
     assert data["status_path"] == str(status_path.resolve())
     assert bridge_handshake.read_handshake_token() == "tok-123"
 
@@ -201,3 +205,51 @@ def test_handshake_token_authenticates_against_running_bridge(isolated_handshake
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_handshake_managed_client_refreshes_rotated_token(
+    isolated_handshake: Path,
+) -> None:
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token="token-one",
+        generation="generation-one",
+        lease_id="generation-one",
+        client=FakeOriginClient(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        bridge_handshake.write_handshake(
+            host,
+            port,
+            "token-one",
+            generation="generation-one",
+            lease_id="generation-one",
+        )
+        client = OriginBridgeClient(OriginBridgeConfig.from_env(timeout=2.0))
+
+        server.token = "token-two"
+        server.generation = "generation-two"
+        server.lease_id = "generation-two"
+        bridge_handshake.write_handshake(
+            host,
+            port,
+            "token-two",
+            generation="generation-two",
+            lease_id="generation-two",
+        )
+
+        result = client.request("ping")
+        assert result["generation"] == "generation-two"
+        assert client.config.token == "token-two"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_bridge_clients_have_distinct_client_ids() -> None:
+    config = OriginBridgeConfig()
+    assert OriginBridgeClient(config).client_id != OriginBridgeClient(config).client_id

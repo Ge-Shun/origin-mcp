@@ -372,6 +372,45 @@ def test_bridge_rejects_request_id_reuse_with_different_content() -> None:
     assert responses[1]["error_code"] == "bridge_request_id_conflict"
 
 
+def test_bridge_rejects_stale_generation() -> None:
+    server = OriginBridgeServer(
+        ("127.0.0.1", 0),
+        token="shared-token",
+        generation="current-generation",
+        lease_id="current-generation",
+        client=FakeOriginClient(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        config = OriginBridgeConfig(
+            host=host,
+            port=port,
+            token="shared-token",
+            timeout=2.0,
+            generation="stale-generation",
+            lease_id="stale-generation",
+        )
+        with pytest.raises(OriginBridgeError) as excinfo:
+            OriginBridgeClient(config).request("ping")
+        assert excinfo.value.error_code == "origin_bridge_generation_mismatch"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_bridge_port_cannot_be_bound_twice() -> None:
+    first = OriginBridgeServer(("127.0.0.1", 0), client=FakeOriginClient())
+    try:
+        host, port = first.server_address
+        with pytest.raises(OSError):
+            OriginBridgeServer((host, port), client=FakeOriginClient())
+    finally:
+        first.server_close()
+
+
 def test_embedded_bridge_server_handles_request_without_handler_threads() -> None:
     server = OriginEmbeddedBridgeServer(
         ("127.0.0.1", 0),
@@ -703,7 +742,29 @@ def test_bridge_shutdown_can_keep_origin_alive() -> None:
         "release_origin": False,
         "close_origin": False,
         "external_origin": False,
+        "embedded_origin": False,
     }
+
+
+def test_embedded_bridge_shutdown_preserves_host_origin() -> None:
+    fake_client = FakeOriginClient()
+    server = OriginEmbeddedBridgeServer(
+        ("127.0.0.1", 0),
+        client=fake_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = bridge_client(server).request("shutdown")
+        thread.join(timeout=2)
+    finally:
+        server.server_close()
+
+    assert result["embedded_origin"] is True
+    assert result["origin_release_method"] == "embedded_noop"
+    assert result["origin_release"] == {"preserved": True, "closed": False}
+    assert fake_client.detached is False
+    assert fake_client.force_closed is False
 
 
 def test_bridge_shutdown_closes_spawned_external_origin() -> None:

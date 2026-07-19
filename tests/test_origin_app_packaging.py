@@ -97,6 +97,8 @@ def test_build_origin_app_sources() -> None:
     assert "close_origin = $false" in stop_powershell
     assert "Bridge stop requested." in stop_powershell
     assert "$env:ORIGIN_MCP_BRIDGE_HANDSHAKE" in stop_powershell
+    assert "[System.Guid]::NewGuid()" in stop_powershell
+    assert 'id = "origin-mcp-stop-button-" +' in stop_powershell
 
     stop_vbs = (stop_app_dir / "stop_bridge.vbs").read_text(encoding="utf-8")
     assert "WScript.Shell" in stop_vbs

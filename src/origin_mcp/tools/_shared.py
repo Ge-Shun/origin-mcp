@@ -195,6 +195,7 @@ DATA_TOOL_NAMES = COMPACT_TOOL_NAMES | frozenset(
         "origin_connect_selection",
         "origin_disconnect_connector",
         "origin_refresh_all_connectors",
+        "origin_export_worksheet_csv",
         "origin_create_matrix",
         "origin_get_matrix_info",
         "origin_read_matrix",

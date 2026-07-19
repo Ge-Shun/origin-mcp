@@ -55,12 +55,27 @@ def _parse_bridge_timeout(value: Any, source: str) -> float:
     return timeout
 
 
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass(frozen=True)
 class OriginBridgeConfig:
     host: str = DEFAULT_BRIDGE_HOST
     port: int = DEFAULT_BRIDGE_PORT
     token: str | None = None
     timeout: float = DEFAULT_BRIDGE_TIMEOUT
+    generation: str | None = None
+    lease_id: str | None = None
+    origin_pid: int | None = None
+    handshake_managed: bool = False
 
     def __post_init__(self) -> None:
         if not str(self.host).strip():
@@ -107,11 +122,14 @@ class OriginBridgeConfig:
 
         if token is not None:
             resolved_token: str | None = token
+            handshake_managed = False
         elif "ORIGIN_MCP_BRIDGE_TOKEN" in env:
             resolved_token = env["ORIGIN_MCP_BRIDGE_TOKEN"] or None
+            handshake_managed = False
         else:
             handshake_token = handshake.get("token")
             resolved_token = handshake_token if isinstance(handshake_token, str) else None
+            handshake_managed = True
 
         resolved_timeout = (
             timeout
@@ -127,6 +145,10 @@ class OriginBridgeConfig:
             port=resolved_port,
             token=resolved_token,
             timeout=resolved_timeout,
+            generation=_optional_string(handshake.get("generation")),
+            lease_id=_optional_string(handshake.get("lease_id")),
+            origin_pid=_optional_int(handshake.get("origin_pid") or handshake.get("pid")),
+            handshake_managed=handshake_managed,
         )
 
 
@@ -140,19 +162,51 @@ class OriginBridgeClient:
 
     def __init__(self, config: OriginBridgeConfig | None = None) -> None:
         self.config = config or OriginBridgeConfig.from_env()
+        self.client_id = str(uuid.uuid4())
         self._lock = threading.Lock()
         self._socket: socket.socket | None = None
         self._stream: Any = None
 
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        for refresh_attempt in (0, 1):
+            try:
+                return self._request_once(method, params)
+            except OriginBridgeError as exc:
+                if (
+                    refresh_attempt
+                    or not self.config.handshake_managed
+                    or exc.error_code
+                    not in {
+                        "origin_bridge_unauthorized",
+                        "origin_bridge_generation_mismatch",
+                    }
+                ):
+                    raise
+                refreshed = OriginBridgeConfig.from_env(timeout=self.config.timeout)
+                if refreshed == self.config:
+                    raise
+                self.close()
+                self.config = refreshed
+        raise OriginBridgeError("Origin bridge authentication refresh failed.")
+
+    def _request_once(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         request_id = str(uuid.uuid4())
         payload: dict[str, Any] = {
             "id": request_id,
             "method": method,
             "params": _bridge_json_safe(params or {}),
+            "client_id": self.client_id,
         }
         if self.config.token:
             payload["token"] = self.config.token
+        if self.config.generation:
+            payload["generation"] = self.config.generation
+        if self.config.lease_id:
+            payload["lease_id"] = self.config.lease_id
         encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
         with self._lock:

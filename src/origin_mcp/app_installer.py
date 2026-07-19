@@ -118,10 +118,13 @@ try {
     $writer.AutoFlush = $true
     $reader = [System.IO.StreamReader]::new($stream, $utf8)
     $request = @{
-        id = "origin-mcp-stop-button"
+        id = "origin-mcp-stop-button-" + [System.Guid]::NewGuid().ToString("N")
         method = "shutdown"
         params = @{ release_origin = $true; close_origin = $false }
         token = [string]$handshake.token
+        client_id = "origin-mcp-stop-app"
+        generation = [string]$handshake.generation
+        lease_id = [string]$handshake.lease_id
     }
     $writer.WriteLine(($request | ConvertTo-Json -Compress -Depth 5))
     $raw = $reader.ReadLine()

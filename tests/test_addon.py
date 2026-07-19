@@ -57,6 +57,19 @@ def test_addon_can_disable_dependency_install(monkeypatch) -> None:
     assert addon._env_bool("ORIGIN_MCP_INSTALL_MISSING", True) is False
 
 
+def test_addon_rejects_an_occupied_bridge_port() -> None:
+    addon = load_addon_module()
+    listener = addon.socket.socket(addon.socket.AF_INET, addon.socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    try:
+        host, port = listener.getsockname()
+        with pytest.raises(RuntimeError, match="already in use"):
+            addon._assert_bridge_port_available(host, port)
+    finally:
+        listener.close()
+
+
 def test_addon_auto_detects_adjacent_src(monkeypatch) -> None:
     addon = load_addon_module()
     monkeypatch.delenv("ORIGIN_MCP_SRC", raising=False)
@@ -228,6 +241,7 @@ def test_start_records_runtime_probe_before_import_fail(monkeypatch) -> None:
     }
 
     monkeypatch.setattr(addon, "_origin_runtime_probe", lambda: probe)
+    monkeypatch.setattr(addon, "_assert_bridge_port_available", lambda *_args: None)
     monkeypatch.setattr(
         addon,
         "_emit",
@@ -277,6 +291,7 @@ def test_start_records_successful_start_diagnostics(monkeypatch) -> None:
         addon, "_notify", lambda message, fields=None: emitted.append((message, fields))
     )
     monkeypatch.setattr(addon, "_clear_origin_mcp_imports", lambda: None)
+    monkeypatch.setattr(addon, "_assert_bridge_port_available", lambda *_args: None)
     monkeypatch.setattr(addon, "_ensure_origin_mcp_importable", lambda _src=None: "source")
     monkeypatch.setattr(addon, "_install_missing_runtime_packages", lambda: None)
     monkeypatch.setattr(addon, "_load_bridge_server", lambda install_missing=True: FakeServer)
@@ -319,13 +334,14 @@ def test_start_aborts_when_generated_token_cannot_be_published(monkeypatch) -> N
     monkeypatch.setattr(addon, "_emit", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(addon, "_notify", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(addon, "_clear_origin_mcp_imports", lambda: None)
+    monkeypatch.setattr(addon, "_assert_bridge_port_available", lambda *_args: None)
     monkeypatch.setattr(addon, "_ensure_origin_mcp_importable", lambda _src=None: "source")
     monkeypatch.setattr(addon, "_missing_runtime_packages", lambda: [])
     monkeypatch.setattr(addon, "_load_bridge_server", lambda install_missing=True: make_server)
     monkeypatch.setattr(
         bridge_handshake,
         "write_handshake",
-        lambda *_args: (_ for _ in ()).throw(OSError("read-only temp")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("read-only temp")),
     )
 
     with pytest.raises(RuntimeError, match="automatically generated"):
