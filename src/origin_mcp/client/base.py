@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,49 @@ ANALYSIS_XY_OUTPUTS = {"polynomial_fit", "smooth", "interpolate", "normalize"}
 _MIN_TRUNCATION_PREFIX_LEN = 12
 
 
+def _embedded_origin_api() -> Any | None:
+    """Expose Origin's embedded API under the name expected by originpro.
+
+    Origin 2026 can provide the host API as ``_PyOrigin`` while originpro still
+    imports ``PyOrigin``. Without the alias, originpro falls back to OriginExt;
+    its first real API call then starts a separate ``Origin64.exe -Embedding``
+    process even though the bridge is already running inside Origin.
+    """
+
+    try:
+        return importlib.import_module("PyOrigin")
+    except ImportError:
+        try:
+            embedded = importlib.import_module("_PyOrigin")
+        except ImportError:
+            return None
+        sys.modules["PyOrigin"] = embedded
+        return embedded
+
+
+def _load_originpro() -> Any:
+    embedded = _embedded_origin_api()
+    cached_config = sys.modules.get("originpro.config")
+    if embedded is not None and bool(getattr(cached_config, "oext", False)):
+        # A previous bridge generation may already have imported originpro via
+        # its OriginExt fallback. Drop that package generation after installing
+        # the PyOrigin alias so the next import binds to the host process.
+        for name in tuple(sys.modules):
+            if name == "originpro" or name.startswith("originpro."):
+                sys.modules.pop(name, None)
+
+    op = importlib.import_module("originpro")
+    if embedded is not None:
+        config = importlib.import_module("originpro.config")
+        if bool(getattr(config, "oext", False)):
+            raise OriginDependencyError(
+                "Origin's embedded Python could not bind originpro to PyOrigin. "
+                "Refusing to fall back to OriginExt because that would start a separate "
+                "Origin automation process."
+            )
+    return op
+
+
 class _OriginClientBase:
     """Shared state and helpers for OriginClient mixins."""
 
@@ -83,7 +127,9 @@ class _OriginClientBase:
     def op(self) -> Any:
         if self._op is None:
             try:
-                self._op = importlib.import_module("originpro")
+                self._op = _load_originpro()
+            except OriginDependencyError:
+                raise
             except ImportError as exc:
                 raise OriginDependencyError(
                     "The 'originpro' package is not available. Install Origin/OriginPro and "

@@ -142,6 +142,11 @@ def test_focused_profiles_register_their_declared_allow_lists() -> None:
         assert _registered_tool_names(profile) == set(names)
 
 
+def test_data_profile_includes_worksheet_csv_export() -> None:
+    names = _registered_tool_names("data")
+    assert "origin_export_worksheet_csv" in names
+
+
 def test_plot_profile_includes_template_tools() -> None:
     """The focused plot profile includes the user template library."""
 

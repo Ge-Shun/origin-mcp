@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import site
+import socket
 import sys
 import sysconfig
 import threading
@@ -65,6 +66,20 @@ def _env_int(name: str, default: int) -> int:
         return int(value)
     except ValueError as exc:
         raise RuntimeError(f"{name} must be an integer, got {value!r}.") from exc
+
+
+def _assert_bridge_port_available(host: str, port: int) -> None:
+    if int(port) == 0:
+        return
+    try:
+        connection = socket.create_connection((host, int(port)), timeout=0.25)
+    except OSError:
+        return
+    connection.close()
+    raise RuntimeError(
+        f"Origin MCP bridge port {host}:{port} is already in use. "
+        "Stop the existing bridge before starting another Origin instance."
+    )
 
 
 def _emit(message: str, fields: dict[str, Any] | None = None) -> None:
@@ -519,6 +534,7 @@ def start_origin_mcp_bridge(
     )
     auto_token_generated = False
     try:
+        _assert_bridge_port_available(host, port)
         # Drop any stale cached origin_mcp modules first -- Origin's Python
         # Console commonly reruns this addon during development -- then resolve
         # src onto sys.path and confirm the bridge import. Clearing before
@@ -526,7 +542,10 @@ def start_origin_mcp_bridge(
         # checkout instead of continuing to serve an older installed copy.
         _clear_origin_mcp_imports()
         package_source = _ensure_origin_mcp_importable(src_dir)
-        from origin_mcp.bridge_handshake import generate_token
+        from origin_mcp.bridge_handshake import generate_generation, generate_token
+
+        generation = generate_generation()
+        lease_id = generation
 
         if token is None and not _env_bool("ORIGIN_MCP_BRIDGE_NO_AUTH", False):
             # Generate a per-session token so the bridge is not reachable by any
@@ -550,7 +569,14 @@ def start_origin_mcp_bridge(
                 raise RuntimeError(_missing_dependency_message(still_missing))
         _emit("loading bridge server", fields={"install_phase": "loading_bridge_server"})
         OriginBridgeServer = _load_bridge_server(install_missing=install_missing)
-        server = OriginBridgeServer((host, port), token=token, max_tasks=max_tasks)
+        server = OriginBridgeServer(
+            (host, port),
+            token=token,
+            max_tasks=max_tasks,
+            generation=generation,
+            lease_id=lease_id,
+            origin_pid=os.getpid(),
+        )
     except Exception as exc:
         _emit(
             "failed to start inside Origin Python",
@@ -581,6 +607,9 @@ def start_origin_mcp_bridge(
                 actual_port,
                 token,
                 status_path=_status_path(),
+                generation=generation,
+                lease_id=lease_id,
+                origin_pid=os.getpid(),
             )
         except Exception as exc:  # pragma: no cover - defensive
             _emit(
@@ -620,6 +649,9 @@ def start_origin_mcp_bridge(
         "max_tasks": max_tasks,
         "background": background,
         "auth_enabled": auth_enabled,
+        "generation": generation,
+        "lease_id": lease_id,
+        "origin_pid": os.getpid(),
     }
     _notify(
         "Bridge is running inside Origin.",
@@ -631,6 +663,9 @@ def start_origin_mcp_bridge(
             "background": background,
             "running": True,
             "auth_enabled": auth_enabled,
+            "generation": generation,
+            "lease_id": lease_id,
+            "origin_pid": os.getpid(),
             "handshake_path": str(handshake_path) if handshake_path else None,
             "install_phase": "running",
             "last_successful_start": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

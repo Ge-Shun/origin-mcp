@@ -35,6 +35,13 @@ _BRIDGE_GUIDANCE: dict[str, RecoveryGuidance] = {
             "Match ORIGIN_MCP_BRIDGE_TOKEN to the active handshake, then run `origin-mcp doctor`.",
         ),
     ),
+    "origin_bridge_generation_mismatch": RecoveryGuidance(
+        True,
+        (
+            "Reload the active bridge handshake and reconnect the MCP client.",
+            "Confirm only one Origin process listens on the configured bridge port.",
+        ),
+    ),
     "invalid_bridge_config": RecoveryGuidance(
         True,
         (

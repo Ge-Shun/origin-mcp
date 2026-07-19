@@ -5,6 +5,7 @@ import importlib
 import ipaddress
 import json
 import os
+import socket
 import socketserver
 import threading
 import time
@@ -13,7 +14,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from . import __version__
 from ._bridge_dispatch import TASKABLE_METHODS, call_client_method, call_origin_method
@@ -169,8 +170,14 @@ class _OriginBridgeServerState(_StateBase):
         token: str | None = None,
         client: OriginClient | None = None,
         max_tasks: int = DEFAULT_MAX_TASKS,
+        generation: str | None = None,
+        lease_id: str | None = None,
+        origin_pid: int | None = None,
     ) -> None:
         self.token = token
+        self.generation = generation
+        self.lease_id = lease_id
+        self.origin_pid = os.getpid() if origin_pid is None else int(origin_pid)
         self.client = client or OriginClient()
         self.tasks = BridgeTaskManager(
             self.client,
@@ -180,6 +187,16 @@ class _OriginBridgeServerState(_StateBase):
         self.max_tasks = max(1, max_tasks)
         self.shutdown_requested = threading.Event()
         self.request_replay = _RequestReplayCache()
+
+    def server_bind(self) -> None:
+        tcp_server = cast(socketserver.TCPServer, self)
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            tcp_server.socket.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_EXCLUSIVEADDRUSE,
+                1,
+            )
+        socketserver.TCPServer.server_bind(tcp_server)
 
     def request_shutdown(self) -> None:
         self.shutdown_requested.set()
@@ -210,7 +227,7 @@ class _OriginBridgeServerState(_StateBase):
 
 
 class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
+    allow_reuse_address = False
     daemon_threads = True
     persistent_connections = True
 
@@ -220,14 +237,24 @@ class OriginBridgeServer(_OriginBridgeServerState, socketserver.ThreadingTCPServ
         token: str | None = None,
         client: OriginClient | None = None,
         max_tasks: int = DEFAULT_MAX_TASKS,
+        generation: str | None = None,
+        lease_id: str | None = None,
+        origin_pid: int | None = None,
     ) -> None:
         validate_bridge_host(server_address[0])
         super().__init__(server_address, OriginBridgeHandler)
-        self._init_bridge_state(token=token, client=client, max_tasks=max_tasks)
+        self._init_bridge_state(
+            token=token,
+            client=client,
+            max_tasks=max_tasks,
+            generation=generation,
+            lease_id=lease_id,
+            origin_pid=origin_pid,
+        )
 
 
 class OriginEmbeddedBridgeServer(_OriginBridgeServerState, socketserver.TCPServer):
-    allow_reuse_address = True
+    allow_reuse_address = False
     # The embedded server is polled cooperatively from Origin's UI thread via
     # handle_request(); each handler invocation must service one request and
     # return so the message pump keeps running.
@@ -242,10 +269,20 @@ class OriginEmbeddedBridgeServer(_OriginBridgeServerState, socketserver.TCPServe
         token: str | None = None,
         client: OriginClient | None = None,
         max_tasks: int = DEFAULT_MAX_TASKS,
+        generation: str | None = None,
+        lease_id: str | None = None,
+        origin_pid: int | None = None,
     ) -> None:
         validate_bridge_host(server_address[0])
         super().__init__(server_address, OriginBridgeHandler)
-        self._init_bridge_state(token=token, client=client, max_tasks=max_tasks)
+        self._init_bridge_state(
+            token=token,
+            client=client,
+            max_tasks=max_tasks,
+            generation=generation,
+            lease_id=lease_id,
+            origin_pid=origin_pid,
+        )
 
 
 class OriginBridgeHandler(socketserver.StreamRequestHandler):
@@ -317,6 +354,26 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                     "Invalid Origin bridge token.",
                     error_code="origin_bridge_unauthorized",
                 )
+        supplied_generation = request.get("generation")
+        if (
+            self.server.generation
+            and supplied_generation
+            and not hmac.compare_digest(str(supplied_generation), self.server.generation)
+        ):
+            raise OriginOperationError(
+                "Origin bridge generation changed; refresh the bridge handshake.",
+                error_code="origin_bridge_generation_mismatch",
+            )
+        supplied_lease_id = request.get("lease_id")
+        if (
+            self.server.lease_id
+            and supplied_lease_id
+            and not hmac.compare_digest(str(supplied_lease_id), self.server.lease_id)
+        ):
+            raise OriginOperationError(
+                "Origin bridge lease changed; refresh the bridge handshake.",
+                error_code="origin_bridge_generation_mismatch",
+            )
         method = request.get("method")
         params = request.get("params") or {}
         if not isinstance(method, str) or not method:
@@ -331,6 +388,9 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             return {
                 "bridge": "origin-mcp-bridge",
                 "version": __version__,
+                "generation": self.server.generation,
+                "lease_id": self.server.lease_id,
+                "origin_pid": self.server.origin_pid,
                 "runtime": python_runtime_profile().as_dict(),
                 "taskable_methods": sorted(TASKABLE_METHODS),
                 "max_tasks": self.server.max_tasks,
@@ -401,11 +461,13 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
         release_origin = bool(params.get("release_origin", True))
         close_origin = bool(params.get("close_origin", False))
         external = self._bridge_is_external_origin()
+        embedded = not self.server.tasks_use_worker_thread
         result: dict[str, Any] = {
             "shutdown_requested": True,
             "release_origin": release_origin,
             "close_origin": close_origin,
             "external_origin": external,
+            "embedded_origin": embedded,
         }
         if release_origin:
             # In external mode the bridge drives a SEPARATE spawned Origin holding
@@ -415,6 +477,11 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             # Opt out of the external auto-close with ORIGIN_MCP_KEEP_EXTERNAL=1.
             close_spawned = close_origin or (external and not _keep_external_origin())
             release_method = "force_quit" if close_spawned else "detach"
+            if embedded and not close_origin:
+                result["origin_release"] = {"preserved": True, "closed": False}
+                result["origin_release_method"] = "embedded_noop"
+                self.server.request_shutdown()
+                return result
             release = getattr(self.server.client, release_method, None)
             if callable(release):
                 try:
