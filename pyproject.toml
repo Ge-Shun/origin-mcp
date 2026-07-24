@@ -47,7 +47,7 @@ dev = [
   "pytest-cov>=5.0",
   # Keep CI and pre-commit on the same formatter release. Formatter output can
   # change between Ruff versions even when lint rules do not.
-  "ruff==0.15.22",
+  "ruff==0.16.0",
   "mypy>=1.8",
 ]
 
