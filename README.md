@@ -1,5 +1,7 @@
 # origin-mcp
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2FGe-Shun%2Forigin-mcp.svg)](https://mcptoplist.com/server/glama%2FGe-Shun%2Forigin-mcp)
+
 ![origin-mcp cover](docs/assets/github-readme-cover.png)
 
 [![PyPI version](https://img.shields.io/pypi/v/origin-mcp)](https://pypi.org/project/origin-mcp/)
