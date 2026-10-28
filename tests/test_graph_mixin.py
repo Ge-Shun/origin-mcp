@@ -308,6 +308,87 @@ def test_export_graph_refuses_existing(fake_client: OriginClient, tmp_path: Path
         fake_client.export_graph(path=out, graph_name="G1", overwrite=False)
 
 
+@pytest.mark.parametrize("save_result", ["", False])
+@pytest.mark.parametrize("existing", [False, True])
+def test_export_graph_rejects_failure_return_even_with_stale_file(
+    fake_client: OriginClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    save_result: str | bool,
+    existing: bool,
+) -> None:
+    page = fake_client.op.add_graph("G1")
+    monkeypatch.setattr(page, "save_fig", lambda *_args, **_kwargs: save_result)
+    out = tmp_path / "g.png"
+    if existing:
+        out.write_bytes(b"stale export")
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.export_graph(out, graph_name="G1")
+
+    assert excinfo.value.error_code == "graph_export_failed"
+
+
+@pytest.mark.parametrize("mode", ["save_fig", "legacy_save_fig", "labtalk"])
+@pytest.mark.parametrize("empty_file", [False, True])
+def test_export_graph_requires_nonempty_output(
+    fake_client: OriginClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    empty_file: bool,
+) -> None:
+    page = fake_client.op.add_graph("G1")
+    out = tmp_path / "g.png"
+
+    def write_output() -> None:
+        if empty_file:
+            out.write_bytes(b"")
+
+    if mode == "labtalk":
+        monkeypatch.setattr(fake_client, "_find_or_active_graph", lambda _name: object())
+        monkeypatch.setattr(fake_client, "_suppress_graph_title_text", lambda **_kwargs: None)
+        monkeypatch.setattr(
+            fake_client, "run_labtalk", lambda _script: write_output() or {"result": True}
+        )
+    elif mode == "legacy_save_fig":
+        monkeypatch.setattr(page, "save_fig", lambda _path: write_output())
+    else:
+        monkeypatch.setattr(page, "save_fig", lambda *_args, **_kwargs: write_output())
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.export_graph(out, graph_name="G1")
+
+    assert excinfo.value.error_code == "graph_export_failed"
+
+
+def test_export_graph_rejects_failed_labtalk_with_existing_file(
+    fake_client: OriginClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "g.png"
+    out.write_bytes(b"stale export")
+    monkeypatch.setattr(fake_client, "_find_or_active_graph", lambda _name: object())
+    monkeypatch.setattr(fake_client, "_suppress_graph_title_text", lambda **_kwargs: None)
+    monkeypatch.setattr(fake_client, "run_labtalk", lambda _script: {"result": False})
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.export_graph(out, graph_name="G1")
+
+    assert excinfo.value.error_code == "graph_export_failed"
+
+
+def test_export_all_graphs_rejects_failed_export(
+    fake_client: OriginClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = fake_client.op.add_graph("G1")
+    monkeypatch.setattr(page, "save_fig", lambda *_args, **_kwargs: "")
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.export_all_graphs(tmp_path)
+
+    assert excinfo.value.error_code == "graph_export_failed"
+
+
 def test_export_all_graphs_writes_files(fake_client: OriginClient, tmp_path: Path) -> None:
     fake_client.op.add_graph("Alpha")
     fake_client.op.add_graph("Beta")

@@ -17,7 +17,12 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
 from . import __version__
-from ._bridge_dispatch import TASKABLE_METHODS, call_client_method, call_origin_method
+from ._bridge_dispatch import (
+    TASKABLE_METHODS,
+    _origin_call_guard,
+    call_client_method,
+    call_origin_method,
+)
 from ._bridge_protocol import error_code, json_safe, serialize_bridge_value
 from ._bridge_tasks import DEFAULT_MAX_TASKS, BridgeTaskManager
 from .errors import OriginOperationError
@@ -185,7 +190,9 @@ class _OriginBridgeServerState(_StateBase):
             use_worker_thread=self.tasks_use_worker_thread,
         )
         self.max_tasks = max(1, max_tasks)
+        self.stopping_requested = threading.Event()
         self.shutdown_requested = threading.Event()
+        self._shutdown_result: dict[str, Any] | None = None
         self.request_replay = _RequestReplayCache()
 
     def server_bind(self) -> None:
@@ -198,7 +205,12 @@ class _OriginBridgeServerState(_StateBase):
             )
         socketserver.TCPServer.server_bind(tcp_server)
 
+    def begin_shutdown(self) -> None:
+        self.tasks.stop()
+        self.stopping_requested.set()
+
     def request_shutdown(self) -> None:
+        self.begin_shutdown()
         self.shutdown_requested.set()
 
     def shutdown(self) -> None:
@@ -416,16 +428,22 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             return self.server.tasks.list_tasks(limit=int(params.get("limit", 20)))
         if method == "shutdown":
             return self._shutdown_bridge(params)
-        if method == "call_client":
-            client_method = str(params.get("method") or "")
-            args = params.get("args") or []
-            kwargs = params.get("kwargs") or {}
-            if not isinstance(args, list) or not isinstance(kwargs, dict):
-                raise OriginOperationError("Bridge client call args/kwargs are invalid.")
-            value = call_client_method(self.server.client, client_method, args, kwargs)
-            return {"value": serialize_bridge_value(value)}
-        if method in TASKABLE_METHODS:
-            return call_origin_method(self.server.client, method, params)
+        if method == "call_client" or method in TASKABLE_METHODS:
+            with _origin_call_guard(self.server.client):
+                if self.server.stopping_requested.is_set():
+                    raise OriginOperationError(
+                        "Origin bridge is shutting down; Origin calls are no longer accepted.",
+                        error_code="origin_bridge_shutting_down",
+                    )
+                if method == "call_client":
+                    client_method = str(params.get("method") or "")
+                    args = params.get("args") or []
+                    kwargs = params.get("kwargs") or {}
+                    if not isinstance(args, list) or not isinstance(kwargs, dict):
+                        raise OriginOperationError("Bridge client call args/kwargs are invalid.")
+                    value = call_client_method(self.server.client, client_method, args, kwargs)
+                    return {"value": serialize_bridge_value(value)}
+                return call_origin_method(self.server.client, method, params)
         raise OriginOperationError(
             f"Unsupported bridge method: {method}",
             error_code="unsupported_bridge_method",
@@ -466,6 +484,20 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
         return callable(getattr(po, "Exit", None))
 
     def _shutdown_bridge(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.server.begin_shutdown()
+        # Stop accepting work before waiting; release only after the active
+        # Origin operation has completed under the same lock as normal calls.
+        # Keep the serving loop alive until release is done, since its exit can
+        # terminate the process while daemon handlers are still running.
+        try:
+            with _origin_call_guard(self.server.client):
+                if self.server._shutdown_result is None:
+                    self.server._shutdown_result = self._release_origin(params)
+                return self.server._shutdown_result
+        finally:
+            self.server.request_shutdown()
+
+    def _release_origin(self, params: dict[str, Any]) -> dict[str, Any]:
         release_origin = bool(params.get("release_origin", True))
         close_origin = bool(params.get("close_origin", False))
         external = self._bridge_is_external_origin()
@@ -490,7 +522,6 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
             if embedded and not close_origin and not attached_host:
                 result["origin_release"] = {"preserved": True, "closed": False}
                 result["origin_release_method"] = "embedded_noop"
-                self.server.request_shutdown()
                 return result
             release = getattr(self.server.client, release_method, None)
             if callable(release):
@@ -509,7 +540,6 @@ class OriginBridgeHandler(socketserver.StreamRequestHandler):
                     "error_code": "origin_release_unavailable",
                     "error_type": "AttributeError",
                 }
-        self.server.request_shutdown()
         return result
 
     @staticmethod

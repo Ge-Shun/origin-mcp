@@ -41,7 +41,9 @@ def read_table(
         "nrows": nrows,
         "na_values": na_values,
     }
-    read_kwargs = {key: value for key, value in read_kwargs.items() if value is not None}
+    read_kwargs = {
+        key: value for key, value in read_kwargs.items() if value is not None or key == "header"
+    }
     if suffix == ".tsv":
         return pd.read_csv(path, sep=delimiter or "\t", **read_kwargs)
     if suffix in {".txt", ".dat"}:

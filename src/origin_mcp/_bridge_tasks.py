@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ._bridge_dispatch import TASKABLE_METHODS, call_origin_method
+from ._bridge_dispatch import TASKABLE_METHODS, _origin_call_guard, call_origin_method
 from ._bridge_protocol import error_code, json_safe
 from .errors import OriginOperationError
 from .origin_client import OriginClient
@@ -75,8 +75,9 @@ class BridgeTaskManager:
         self._client = client
         self._max_tasks = max(1, max_tasks)
         self._tasks: dict[str, BridgeTask] = {}
-        self._queue: queue.Queue[str] = queue.Queue()
+        self._queue: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
+        self._stopping = False
         # The threaded bridge runs Origin calls off a dedicated worker thread.
         # The embedded cooperative bridge must keep originpro on Origin's UI
         # thread, so it owns no worker and drains the queue via ``pump_pending``
@@ -97,10 +98,28 @@ class BridgeTaskManager:
             )
         task = BridgeTask(task_id=str(uuid.uuid4()), method=method, params=params)
         with self._lock:
+            if self._stopping:
+                raise OriginOperationError(
+                    "Origin bridge is shutting down; new tasks are not accepted.",
+                    error_code="origin_bridge_shutting_down",
+                )
             self._make_room_locked()
             self._tasks[task.task_id] = task
-        self._queue.put(task.task_id)
+            self._queue.put(task.task_id)
         return {"task": task.as_dict(include_result=False)}
+
+    def stop(self) -> None:
+        """Reject new tasks, cancel queued work, and let the active call finish."""
+
+        with self._lock:
+            if self._stopping:
+                return
+            self._stopping = True
+            for task in self._tasks.values():
+                if task.status == "queued":
+                    self._cancel_queued_task(task, "Task cancelled because the bridge is stopping.")
+            if self._use_worker_thread:
+                self._queue.put(None)
 
     def status(
         self,
@@ -135,19 +154,7 @@ class BridgeTaskManager:
                 )
             was_queued = task.status == "queued"
             if task.status == "queued":
-                task.status = "cancelled"
-                task.cancel_requested = True
-                task.finished_at = time.time()
-                task.updated_at = task.finished_at
-                task.progress = task.progress if task.progress is not None else 0.0
-                task.current_step = "Cancelled before start"
-                task.logs.append(
-                    {
-                        "time": task.finished_at,
-                        "level": "info",
-                        "message": "Task cancelled before it started.",
-                    }
-                )
+                self._cancel_queued_task(task, "Task cancelled before it started.")
                 changed = True
             elif task.status in TERMINAL_TASK_STATUSES:
                 changed = False
@@ -172,6 +179,16 @@ class BridgeTaskManager:
                 "task": task.as_dict(),
             }
 
+    @staticmethod
+    def _cancel_queued_task(task: BridgeTask, message: str) -> None:
+        task.status = "cancelled"
+        task.cancel_requested = True
+        task.finished_at = time.time()
+        task.updated_at = task.finished_at
+        task.progress = task.progress if task.progress is not None else 0.0
+        task.current_step = "Cancelled before start"
+        task.logs.append({"time": task.finished_at, "level": "info", "message": message})
+
     def list_tasks(self, limit: int = 20) -> dict[str, Any]:
         if limit < 1:
             raise OriginOperationError("Task list limit must be at least 1.")
@@ -187,6 +204,8 @@ class BridgeTaskManager:
         while True:
             task_id = self._queue.get()
             try:
+                if task_id is None:
+                    return
                 self._run_one(task_id)
             finally:
                 self._queue.task_done()
@@ -208,6 +227,8 @@ class BridgeTaskManager:
             except queue.Empty:
                 break
             try:
+                if task_id is None:
+                    break
                 self._run_one(task_id)
             finally:
                 self._queue.task_done()
@@ -215,20 +236,23 @@ class BridgeTaskManager:
         return executed
 
     def _run_one(self, task_id: str) -> None:
-        task = self._start_task(task_id)
-        if task is None:
-            return
-        try:
-            result = call_origin_method(
-                self._client,
-                task.method,
-                task.params,
-                progress=self._progress_callback(task_id),
-            )
-        except Exception as exc:
-            self._finish_task(task_id, error=exc)
-        else:
-            self._finish_task(task_id, result=result)
+        # A task waiting for Origin's lock must remain queued so shutdown can
+        # cancel it before releasing the automation connection.
+        with _origin_call_guard(self._client):
+            task = self._start_task(task_id)
+            if task is None:
+                return
+            try:
+                result = call_origin_method(
+                    self._client,
+                    task.method,
+                    task.params,
+                    progress=self._progress_callback(task_id),
+                )
+            except Exception as exc:
+                self._finish_task(task_id, error=exc)
+            else:
+                self._finish_task(task_id, result=result)
 
     def _start_task(self, task_id: str) -> BridgeTask | None:
         with self._lock:

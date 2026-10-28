@@ -172,6 +172,21 @@ def test_read_table_csv(tmp_path: Path) -> None:
     assert df["value"].tolist() == [1, 2]
 
 
+@pytest.mark.parametrize(
+    "suffix,delimiter", [("csv", ","), ("tsv", "\t"), ("txt", ";"), ("dat", ";")]
+)
+def test_read_table_without_header_preserves_first_row(
+    tmp_path: Path, suffix: str, delimiter: str
+) -> None:
+    path = tmp_path / f"data.{suffix}"
+    path.write_text(f"1{delimiter}10\n2{delimiter}20\n", encoding="utf-8")
+
+    df = OriginClient._read_table(path, header=None, delimiter=delimiter)
+
+    assert list(df.columns) == [0, 1]
+    assert df.values.tolist() == [[1, 10], [2, 20]]
+
+
 def test_coerce_x_datetime_converts_only_strict_iso_values() -> None:
     client = OriginClient()
     temporal = pd.DataFrame({"when": ["2026-01-01", "2026-01-02"], "value": [1, 2]})
@@ -1435,10 +1450,17 @@ def test_export_graph_falls_back_to_labtalk_without_save_fig(
     path = tmp_path / "graph.png"
     scripts = []
     monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: object())
+
+    def run_labtalk(script: str) -> dict[str, Any]:
+        scripts.append(script)
+        if "expGraph" in script:
+            path.write_bytes(_one_by_one_png())
+        return {"result": True}
+
     monkeypatch.setattr(
         client,
         "run_labtalk",
-        lambda script: scripts.append(script) or {"result": True},
+        run_labtalk,
     )
 
     result = client.export_graph(path, graph_name="Graph 1")
@@ -1461,11 +1483,17 @@ def test_export_graph_by_name_uses_labtalk_when_target_lookup_fails(
     def fail_lookup(_name: str | None) -> object:
         raise OriginOperationError("Graph object is not available")
 
+    def run_labtalk(script: str) -> dict[str, Any]:
+        scripts.append(script)
+        if "expGraph" in script:
+            path.write_bytes(_one_by_one_png())
+        return {"result": True}
+
     monkeypatch.setattr(client, "_find_or_active_graph", fail_lookup)
     monkeypatch.setattr(
         client,
         "run_labtalk",
-        lambda script: scripts.append(script) or {"result": True},
+        run_labtalk,
     )
 
     result = client.export_graph(path, graph_name="Graph 1")

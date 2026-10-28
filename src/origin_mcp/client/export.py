@@ -44,10 +44,9 @@ class _ExportMixin(_OriginClientBase):
             path = output_dir / f"{self._safe_filename(graph_name)}.{file_type.lstrip('.')}"
             if path.exists() and not overwrite:
                 continue
-            if hasattr(graph, "save_fig"):
-                graph.save_fig(str(path), type=file_type, replace=overwrite, width=width)
-            else:
-                self.export_graph(path, graph=graph, overwrite=overwrite)
+            self.export_graph(
+                path, graph_name=graph_name, graph=graph, overwrite=overwrite, width=width
+            )
             exported.append(str(path))
         return {"count": len(exported), "paths": exported}
 
@@ -78,39 +77,59 @@ class _ExportMixin(_OriginClientBase):
         elif target is not None:
             self._suppress_graph_title_text(graph=target, graph_name=None, title=None)
 
+        fallback_error: str | None = None
         if target is not None and hasattr(target, "save_fig"):
             try:
-                target.save_fig(
-                    str(path),
-                    type=path.suffix.lower().lstrip(".") or "png",
-                    replace=overwrite,
-                    width=width,
-                )
-                return {"path": str(path), "method": "originpro.save_fig"}
-            except TypeError:
-                target.save_fig(str(path))
-                return {"path": str(path), "method": "originpro.save_fig"}
+                try:
+                    saved = target.save_fig(
+                        str(path),
+                        type=path.suffix.lower().lstrip(".") or "png",
+                        replace=overwrite,
+                        width=width,
+                    )
+                except TypeError:
+                    saved = target.save_fig(str(path))
             except Exception as exc:
-                fallback = self._export_graph_labtalk(path, graph_name, width=width)
-                result = self.run_labtalk(fallback)
-                if result.get("result") is False:
+                fallback_error = f"{type(exc).__name__}: {exc}"
+            else:
+                if saved is False or saved == "":
                     raise OriginOperationError(
-                        f"Origin graph export failed via save_fig and expGraph: {exc}",
+                        f"Origin save_fig did not export the graph: {path}",
                         error_code="graph_export_failed",
-                    ) from exc
-                return {
-                    "path": str(path),
-                    "method": "labtalk.expGraph",
-                    "fallback_error": f"{type(exc).__name__}: {exc}",
-                }
+                    )
+                self._verify_graph_export(path)
+                return {"path": str(path), "method": "originpro.save_fig"}
 
-        self.run_labtalk(self._export_graph_labtalk(path, graph_name, width=width))
+        exported = self.run_labtalk(self._export_graph_labtalk(path, graph_name, width=width))
+        if exported.get("result") is False:
+            raise OriginOperationError(
+                f"Origin expGraph did not export the graph: {path}",
+                error_code="graph_export_failed",
+            )
+        self._verify_graph_export(path)
         result = {"path": str(path), "method": "labtalk.expGraph"}
+        if fallback_error is not None:
+            result["fallback_error"] = fallback_error
         if target_lookup_error is not None:
             result["target_lookup_error"] = (
                 f"{type(target_lookup_error).__name__}: {target_lookup_error}"
             )
         return result
+
+    @staticmethod
+    def _verify_graph_export(path: Path) -> None:
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return
+        except OSError as exc:
+            raise OriginOperationError(
+                f"Could not verify the exported graph: {path}: {exc}",
+                error_code="graph_export_failed",
+            ) from exc
+        raise OriginOperationError(
+            f"Origin did not produce a nonempty graph export: {path}",
+            error_code="graph_export_failed",
+        )
 
     def _export_graph_labtalk(
         self,

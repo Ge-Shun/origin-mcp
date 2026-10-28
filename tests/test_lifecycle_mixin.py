@@ -76,6 +76,19 @@ def test_save_project_uses_originpro_save(fake_client: OriginClient, tmp_path: P
     assert any(name == "save" for name, _ in fake_client.op.calls)
 
 
+def test_save_project_rejects_false_result(
+    fake_client: OriginClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "unsaved.opju"
+    monkeypatch.setattr(fake_client.op, "save", lambda _path: False)
+
+    with pytest.raises(OriginOperationError) as excinfo:
+        fake_client.save_project(target)
+
+    assert excinfo.value.error_code == "project_save_failed"
+    assert not target.exists()
+
+
 def test_quit_clears_state(fake_client: OriginClient) -> None:
     result = fake_client.quit()
 

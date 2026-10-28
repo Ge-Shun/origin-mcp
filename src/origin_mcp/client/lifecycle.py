@@ -111,7 +111,7 @@ class _LifecycleMixin(_OriginClientBase):
         fallback_error: str | None = None
         if hasattr(op, "save"):
             try:
-                op.save(str(path))
+                saved = op.save(str(path))
             except Exception as exc:
                 fallback_error = f"{type(exc).__name__}: {exc}"
                 method = "labtalk.pe_save"
@@ -122,6 +122,12 @@ class _LifecycleMixin(_OriginClientBase):
                         f"{fallback_error}",
                         error_code="project_save_failed",
                     ) from exc
+            else:
+                if saved is False:
+                    raise OriginOperationError(
+                        f"Origin project save failed: {path}",
+                        error_code="project_save_failed",
+                    )
         else:
             method = "labtalk.pe_save"
             result = self.run_labtalk(f'pe_save fname:="{self._escape_labtalk(str(path))}";')
