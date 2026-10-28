@@ -20,7 +20,9 @@ Python version mismatches.
 3. Open or paste `addon.py`, or run it by path:
 
 ```python
-import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
+import runpy
+
+runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
 Replace `C:\path\to\origin-mcp` with the local checkout path.

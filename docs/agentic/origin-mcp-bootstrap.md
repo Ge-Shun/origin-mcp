@@ -167,7 +167,9 @@ For manual startup or troubleshooting, in Origin/OriginPro:
 2. Run the checkout addon by path:
 
 ```python
-import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
+import runpy
+
+runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
 Replace `C:\path\to\origin-mcp\addon.py` with the real checkout path.
@@ -179,8 +181,12 @@ automatically. If the user does not want the addon to run `pip install`, set
 `ORIGIN_MCP_INSTALL_MISSING=0` before `runpy.run_path`:
 
 ```python
-import os; os.environ["ORIGIN_MCP_INSTALL_MISSING"] = "0"
-import runpy; runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
+import os
+
+os.environ["ORIGIN_MCP_INSTALL_MISSING"] = "0"
+import runpy
+
+runpy.run_path(r"C:\path\to\origin-mcp\addon.py", run_name="__main__")
 ```
 
 Expected result:
@@ -196,6 +202,7 @@ Origin Python console immediately before `runpy.run_path`:
 
 ```python
 import os
+
 os.environ["ORIGIN_MCP_BRIDGE_HOST"] = "127.0.0.1"
 os.environ["ORIGIN_MCP_BRIDGE_PORT"] = "47631"
 os.environ["ORIGIN_MCP_BRIDGE_TOKEN"] = "replace-with-a-local-secret"

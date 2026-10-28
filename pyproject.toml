@@ -25,7 +25,8 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-  "mcp>=1.8.0",
+  # The server uses the v1 FastMCP API; v2 requires a separate migration.
+  "mcp>=1.8.0,<2",
   "pydantic>=2.0",
   "pandas>=2.0",
   "openpyxl>=3.1",
@@ -119,6 +120,7 @@ disable_error_code = [
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 norecursedirs = [
   ".git",
   ".pytest_cache",
