@@ -520,6 +520,10 @@ def test_smart_column_labels_compact_single_series_and_reserves_top_space() -> N
     assert decision_value(defaults, "annotations", "data_labels", "layer_formats") == [
         {"number_format": "decimal", "decimal_places": 1}
     ]
+    assert decision_value(defaults, "annotations", "data_labels", "font_size") == 8
+    assert defaults["annotations"]["data_labels"]["font_size"]["reason"] == (
+        "quiet_annotation_typography"
+    )
     assert decision_value(defaults, "canvas", "top_margin") == 0.1
 
 
@@ -561,7 +565,12 @@ def test_smart_scatter_labels_small_sets_or_only_extrema() -> None:
     )
 
     assert decision_value(small, "annotations", "data_labels", "scope") == "all"
+    assert decision_value(small, "annotations", "data_labels", "font_size") == 8
+    assert small["annotations"]["data_labels"]["font_size"]["reason"] == (
+        "quiet_annotation_typography"
+    )
     assert decision_value(moderate, "annotations", "data_labels", "scope") == "extrema"
+    assert decision_value(moderate, "annotations", "data_labels", "font_size") == 8
     assert decision_value(dense, "annotations", "data_labels", "show") is False
 
 

@@ -378,6 +378,7 @@ class _TablePlotMixin(_OriginClientBase):
         visual_defaults["applied"] = self._apply_smart_visual_defaults(
             graph_name=actual_graph_name,
             defaults=visual_defaults,
+            mark_layer_indexes=(0, 1),
         )
         visual_defaults["applied"]["dual_y_titles"] = self._sync_dual_y_axis_titles(
             graph_name=actual_graph_name,
@@ -1165,6 +1166,7 @@ class _TablePlotMixin(_OriginClientBase):
         *,
         graph_name: str,
         defaults: dict[str, Any],
+        mark_layer_indexes: tuple[int, ...] = (0,),
     ) -> dict[str, Any]:
         """Apply resolved low-risk cross-chart rules to an Origin graph."""
 
@@ -1341,15 +1343,25 @@ class _TablePlotMixin(_OriginClientBase):
         symbol_size = decision_value(defaults, "marks", "symbol_size")
         transparency = decision_value(defaults, "marks", "transparency")
         if line_width is not None or symbol_size is not None or transparency is not None:
-            try:
-                mark_result = self.set_plot_style(
-                    graph_name=graph_name,
-                    line_width=line_width,
-                    symbol_size=symbol_size,
-                    transparency=transparency,
-                )
-            except OriginMcpError as exc:
-                mark_result = {"warning": str(exc)}
+            mark_layer_results: list[dict[str, Any]] = []
+            for layer_index in mark_layer_indexes:
+                try:
+                    style_kwargs: dict[str, Any] = {
+                        "graph_name": graph_name,
+                        "line_width": line_width,
+                        "symbol_size": symbol_size,
+                        "transparency": transparency,
+                    }
+                    if layer_index != 0 or len(mark_layer_indexes) > 1:
+                        style_kwargs["layer_index"] = layer_index
+                    mark_layer_results.append(self.set_plot_style(**style_kwargs))
+                except OriginMcpError as exc:
+                    mark_layer_results.append({"layer_index": layer_index, "warning": str(exc)})
+            mark_result = (
+                mark_layer_results[0]
+                if len(mark_layer_results) == 1
+                else {"layers": mark_layer_results}
+            )
 
         legend_result = None
         if decision_value(defaults, "legend", "show"):

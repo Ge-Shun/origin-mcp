@@ -4112,6 +4112,7 @@ def test_plot_dual_y_infers_separate_concise_axis_titles(
     scripts = []
     monkeypatch.setattr(client, "_new_sheet", lambda **_kwargs: worksheet)
     monkeypatch.setattr(client, "_new_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr(client, "_find_or_active_graph", lambda _name: graph)
     monkeypatch.setattr(client, "_rescale", lambda _layer: None)
     monkeypatch.setattr(
         client,
@@ -4132,6 +4133,8 @@ def test_plot_dual_y_infers_separate_concise_axis_titles(
     assert right.axis("y").title == "Pressure (kPa)"
     assert left.group_calls == 0
     assert right.group_calls == 0
+    assert [plot.line_width for plot in left.plot_list()] == [2.5, 2.5]
+    assert [plot.line_width for plot in right.plot_list()] == [2.5, 2.5]
     assert graph_ref.visual_defaults is not None
     assert graph_ref.visual_defaults["axes"]["y2_title"]["value"] == "Pressure (kPa)"
     assert graph_ref.visual_defaults["legend"]["series_labels"]["value"] == [

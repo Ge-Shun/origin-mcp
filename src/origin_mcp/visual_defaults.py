@@ -20,7 +20,8 @@ from .nature_style_profiles import resolve_nature_style_profile
 from .text_format import humanize_field_name, infer_axis_title, infer_series_labels
 
 DEFAULT_HEATMAP_COLORMAP = "viridis"
-DEFAULT_SMART_ANNOTATION_FONT_SIZE = 20
+DEFAULT_SMART_ENDPOINT_LABEL_FONT_SIZE = 20
+DEFAULT_SMART_MARK_LABEL_FONT_SIZE = 8
 DEFAULT_SMART_LINE_WIDTH = 2.5
 
 _ISO_DATETIME_PATTERN = re.compile(
@@ -298,20 +299,21 @@ def resolve_visual_defaults(
         y2_margin,
         temporal_endpoint_margin,
     )
+    if style_mode == "nature":
+        annotation_font_size = resolve_nature_style_profile("screen").annotation_font_size
+        annotation_font_reason = "nature_annotation_typography"
+    elif context.chart_type == "line":
+        annotation_font_size = DEFAULT_SMART_ENDPOINT_LABEL_FONT_SIZE
+        annotation_font_reason = "match_axis_tick_typography"
+    else:
+        annotation_font_size = DEFAULT_SMART_MARK_LABEL_FONT_SIZE
+        annotation_font_reason = "quiet_annotation_typography"
     data_labels = _data_label_defaults(
         context,
         y_min=y_min,
         y_max=y_max,
-        font_size=(
-            resolve_nature_style_profile("screen").annotation_font_size
-            if style_mode == "nature"
-            else DEFAULT_SMART_ANNOTATION_FONT_SIZE
-        ),
-        font_reason=(
-            "nature_annotation_typography"
-            if style_mode == "nature"
-            else "match_axis_tick_typography"
-        ),
+        font_size=annotation_font_size,
+        font_reason=annotation_font_reason,
         layer_series_counts=[
             len(y_names_actual) or context.series_count,
             *([len(y2_names_actual)] if y2_names_actual else []),
